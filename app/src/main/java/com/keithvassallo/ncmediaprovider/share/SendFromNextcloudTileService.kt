@@ -15,7 +15,8 @@ class SendFromNextcloudTileService : TileService() {
     }
 
     override fun onClick() {
-        val intent = Intent(this, SendFromNextcloudActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val intent = Intent(this, SendFromNextcloudActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         startActivityAndCollapse(PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE))
     }
 }

@@ -40,6 +40,7 @@
         <!-- "Send from Nextcloud" (PLAN 4.7): opens the system picker, then the share sheet. -->
         <activity
             android:name=".share.SendFromNextcloudActivity"
+            android:autoRemoveFromRecents="true"
             android:excludeFromRecents="true"
             android:exported="false"
             android:label="@string/send_shortcut_short"

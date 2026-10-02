@@ -24,7 +24,12 @@ class NcMediaProviderApp : Application() {
             .setShortLabel(getString(R.string.send_shortcut_short))
             .setLongLabel(getString(R.string.send_shortcut_long))
             .setIcon(IconCompat.createWithResource(this, R.drawable.ic_shortcut_send))
-            .setIntent(Intent(this, SendFromNextcloudActivity::class.java).setAction(Intent.ACTION_VIEW))
+            // A clean task each time, whatever an earlier send left behind.
+            .setIntent(
+                Intent(this, SendFromNextcloudActivity::class.java)
+                    .setAction(Intent.ACTION_VIEW)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+            )
             .build()
         runCatching { ShortcutManagerCompat.setDynamicShortcuts(this, listOf(shortcut)) }
     }

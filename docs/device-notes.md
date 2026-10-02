@@ -235,6 +235,25 @@ After Keith reselected the provider, MediaProvider rebuilt its copy of the libra
 
 A `MY_PACKAGE_REPLACED` receiver declared with `exported="false"` still receives the broadcast. The first test failed: a sync that ran 2 s after the install saw the provider deselected and recorded the user as having deselected it, before the reselect job ran. A deselection seen after an update no longer counts as the user's choice. On the second run the job found the provider deselected and, without Shizuku, posted the notification.
 
+### Exit test: a fresh install (GrapheneOS, 2026-10-02)
+
+The debug app was uninstalled and the new build installed with nothing hard-coded. Uninstalling switched the picker back to Google Photos; the allow-list overrides survived it, so only the selection was needed.
+
+| Step | Result |
+|---|---|
+| Sign in | About 15 s from Continue to the folder picker: `ACCESS_LOCAL_NETWORK` asked for first, then the server's login page in the browser (Vanadium), then the app picked up the grant. |
+| Folders and first import | 16,896 images from 2 folders in 24 s in the foreground (68 s as a background job before); the 24 photos also on the phone matched straight after. |
+| Picker | MediaProvider rebuilt from the new collection with no errors. |
+| Photo keyboard | Messenger accepts `image/png`, `image/gif`, `image/jpeg` and `image/webp`; a JPEG went in within 574 ms and Messenger took it. |
+| Send from Nextcloud | Two bugs, both fixed, then Element X twice and Reddit once, each receiving the original (3.9 and 4.0 MB). |
+
+Send from Nextcloud's two bugs:
+
+- **The share failed silently.** The picker grants read access to the activity that receives its result, and Android revokes it when that activity finishes. The share sheet starts the chosen app on the sender's behalf, after the sender had already finished: `SecurityException: UID … does not have permission to content://media/picker/…`. The activity now stays, invisibly, until the share sheet returns.
+- **The next send reopened Element.** The chosen app's share screen ran in the sender's task, which outlived the share, and the shortcut brought that task back. The chosen app now gets its own task, and the shortcut and tile start a cleared one.
+
+The picker downloads the originals of the selected items before returning (`SelectedMediaPreloader`, 475 ms for 4 MB), so the receiving app reads them from the cache in 4 to 9 ms.
+
 ## Photo keyboard prototype (GrapheneOS, 2026-10-02)
 
 A keyboard showing the 30 newest Nextcloud photos, inserting the tapped one through the keyboard content API (branch `proto/photo-keyboard`, debug builds only). Tested in Messenger, whose own photo grid never sees a cloud provider:
