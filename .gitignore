@@ -4,7 +4,7 @@ keystore.properties
 *.jks
 *.keystore
 # Captures from real servers (may contain private file names, paths and metadata)
-local/
+/local/
 
 # Gradle and Android Studio
 .gradle/
