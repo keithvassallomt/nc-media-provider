@@ -37,6 +37,29 @@
             </intent-filter>
         </activity>
 
+        <!-- "Send from Nextcloud" (PLAN 4.7): opens the system picker, then the share sheet. -->
+        <activity
+            android:name=".share.SendFromNextcloudActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:label="@string/send_shortcut_short"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <service
+            android:name=".share.SendFromNextcloudTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_send"
+            android:label="@string/send_shortcut_short"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.TOGGLEABLE_TILE"
+                android:value="false" />
+        </service>
+
         <activity
             android:name=".ui.SignInActivity"
             android:exported="false"

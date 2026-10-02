@@ -35,6 +35,7 @@ import com.keithvassallo.ncmediaprovider.data.LibraryRepository
 import com.keithvassallo.ncmediaprovider.data.LibrarySyncWorker
 import com.keithvassallo.ncmediaprovider.data.SyncProgress
 import com.keithvassallo.ncmediaprovider.databinding.ActivitySetupBinding
+import com.keithvassallo.ncmediaprovider.share.SendFromNextcloudActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -151,6 +152,7 @@ class SetupActivity : AppCompatActivity() {
         binding.signInButton.setOnClickListener { startActivity(Intent(this, SignInActivity::class.java)) }
         binding.foldersButton.setOnClickListener { startActivity(Intent(this, FolderPickerActivity::class.java)) }
         binding.signOutButton.setOnClickListener { confirmSignOut() }
+        binding.sendButton.setOnClickListener { startActivity(Intent(this, SendFromNextcloudActivity::class.java)) }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 repository.syncJobs().collect(::showSyncJobs)
