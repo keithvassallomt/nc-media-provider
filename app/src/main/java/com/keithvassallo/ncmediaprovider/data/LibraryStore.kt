@@ -39,6 +39,8 @@ class LibraryStore(
 
     fun videosWithoutDuration(limit: Int): List<MediaItem> = dao.videosWithoutDuration(limit)
 
+    fun countTakenSince(since: Long): Int = dao.countTakenSince(since)
+
     /**
      * Stores durations read from the files (PLAN 5.3), negative for files that couldn't be read,
      * under the next generation so the picker picks them up. Rows that changed meanwhile are left.

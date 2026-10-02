@@ -21,6 +21,16 @@ class MediaDiskCache(context: Context) {
     fun peek(area: Area, key: String): File? =
         File(File(root, area.directory), key.sha256()).takeIf { it.isUsable() }?.touchForLru()
 
+    /** Whether [key] is cached, without counting it as used. */
+    fun contains(area: Area, key: String): Boolean = File(File(root, area.directory), key.sha256()).isUsable()
+
+    /** Remembers that the server has nothing for [key], so the pre-cache doesn't ask again (PLAN 5.6). */
+    fun markMissing(area: Area, key: String) {
+        File(File(root, area.directory).apply { mkdirs() }, key.sha256() + MISSING_SUFFIX).writeBytes(ByteArray(1))
+    }
+
+    fun isMarkedMissing(area: Area, key: String): Boolean = File(File(root, area.directory), key.sha256() + MISSING_SUFFIX).exists()
+
     fun getOrDownload(
         area: Area,
         key: String,
@@ -65,13 +75,17 @@ class MediaDiskCache(context: Context) {
     fun stats(): CacheStats = CacheStats(
         previews = areaStats(Area.PREVIEW),
         originals = areaStats(Area.ORIGINAL),
+        precached = areaStats(Area.PRECACHE),
     )
+
+    /** Bytes in [area], one stat per file: call off the main thread. */
+    fun usedBytes(area: Area): Long = areaStats(area).usedBytes
 
     private fun areaStats(area: Area): CacheAreaStats {
         val usedBytes = File(root, area.directory)
             .listFiles()
             ?.asSequence()
-            ?.filter { it.isFile && !it.name.endsWith(".part") }
+            ?.filter { it.isFile && !it.name.endsWith(".part") && !it.name.endsWith(MISSING_SUFFIX) }
             ?.sumOf { file -> runCatching { file.length() }.getOrDefault(0L) }
             ?: 0L
         return CacheAreaStats(usedBytes = usedBytes, maximumBytes = area.maximumBytes)
@@ -95,7 +109,7 @@ class MediaDiskCache(context: Context) {
     }
 
     private fun prune(directory: File, maximumBytes: Long, keep: File) {
-        val files = directory.listFiles()?.filter { it.isFile && !it.name.endsWith(".part") }.orEmpty()
+        val files = directory.listFiles()?.filter { it.isFile && !it.name.endsWith(".part") && !it.name.endsWith(MISSING_SUFFIX) }.orEmpty()
         var total = files.sumOf(File::length)
         if (total <= maximumBytes) return
         files.sortedBy(File::lastModified).forEach { file ->
@@ -118,16 +132,21 @@ class MediaDiskCache(context: Context) {
     enum class Area(val directory: String, val maximumBytes: Long) {
         PREVIEW("previews", 256L * 1024L * 1024L),
         ORIGINAL("originals", 2L * 1024L * 1024L * 1024L),
+
+        /** Thumbnails fetched ahead of time (PLAN 5.6), apart from the on-demand ones. */
+        PRECACHE("precache", 1024L * 1024L * 1024L),
     }
 
     private companion object {
         const val PRUNE_INTERVAL_DIVISOR = 16L
+        const val MISSING_SUFFIX = ".none"
     }
 }
 
 data class CacheStats(
     val previews: CacheAreaStats,
     val originals: CacheAreaStats,
+    val precached: CacheAreaStats,
 )
 
 data class CacheAreaStats(

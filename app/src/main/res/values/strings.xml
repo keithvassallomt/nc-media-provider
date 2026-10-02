@@ -84,6 +84,15 @@
     <string name="streaming_channel">Sending from Nextcloud</string>
     <string name="streaming_title">Sending from Nextcloud</string>
     <string name="streaming_text">An app is reading a video from your Nextcloud.</string>
+    <string name="precache_title">Thumbnails ahead of time</string>
+    <string name="precache_explanation">Downloads your library’s thumbnails over Wi-Fi in the background, so the picker and Send from Nextcloud show them at once instead of one by one.</string>
+    <string name="precache_switch">Download thumbnails in advance</string>
+    <string name="precache_all">Everything</string>
+    <string name="precache_year">12 months</string>
+    <string name="precache_quarter">3 months</string>
+    <string name="precache_estimate">About %1$s for %2$d photos and videos, on Wi-Fi only. Up to %3$s is kept.</string>
+    <string name="precache_ready">Ready: %1$d of %2$d.</string>
+    <string name="precache_running">Downloading: %1$d of %2$d ready.</string>
     <string name="notify_channel">Account and setup</string>
     <string name="notify_sign_in_title">Sign in to Nextcloud again</string>
     <string name="notify_sign_in_text">Your server refused NC Media Provider’s app password, so your photos have stopped updating. Tap to sign in again.</string>

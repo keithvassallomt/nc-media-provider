@@ -52,6 +52,24 @@ class LibrarySettings(context: Context) {
         get() = preferences.getLong(KEY_SELECTED_SEEN, 0L)
         set(value) = preferences.edit { putLong(KEY_SELECTED_SEEN, value) }
 
+    /** Download thumbnails ahead of time (PLAN 5.6). */
+    var precacheEnabled: Boolean
+        get() = preferences.getBoolean(KEY_PRECACHE, false)
+        set(value) = preferences.edit { putBoolean(KEY_PRECACHE, value) }
+
+    /** How far back the pre-cache goes, in months; 0 for everything. */
+    var precacheMonths: Int
+        get() = preferences.getInt(KEY_PRECACHE_MONTHS, 0)
+        set(value) = preferences.edit { putInt(KEY_PRECACHE_MONTHS, value) }
+
+    /** The last pre-cache run's result, "ready of total", for the setup screen. */
+    var precacheReady: Pair<Int, Int>
+        get() = preferences.getInt(KEY_PRECACHE_READY, 0) to preferences.getInt(KEY_PRECACHE_TOTAL, 0)
+        set(value) = preferences.edit {
+            putInt(KEY_PRECACHE_READY, value.first)
+            putInt(KEY_PRECACHE_TOTAL, value.second)
+        }
+
     /** Why the last sync failed, for the diagnostics (PLAN 4.6); null after a sync succeeds. */
     var lastSyncError: String?
         get() = preferences.getString(KEY_LAST_SYNC_ERROR, null)
@@ -63,6 +81,10 @@ class LibrarySettings(context: Context) {
         private const val KEY_FOLDERS = "folders"
         private const val KEY_RESPECT_NO_MEDIA = "respect_no_media"
         private const val KEY_LAST_SYNC_ERROR = "last_sync_error"
+        private const val KEY_PRECACHE = "precache"
+        private const val KEY_PRECACHE_MONTHS = "precache_months"
+        private const val KEY_PRECACHE_READY = "precache_ready"
+        private const val KEY_PRECACHE_TOTAL = "precache_total"
         private const val KEY_WAS_SELECTED = "was_selected_provider"
         private const val KEY_SELECTED_SEEN = "selected_seen_millis"
 

@@ -35,6 +35,8 @@ import com.keithvassallo.ncmediaprovider.activation.IActivationService
 import com.keithvassallo.ncmediaprovider.data.CredentialStore
 import com.keithvassallo.ncmediaprovider.data.LibraryRepository
 import com.keithvassallo.ncmediaprovider.data.LibrarySyncWorker
+import com.keithvassallo.ncmediaprovider.data.MediaDiskCache
+import com.keithvassallo.ncmediaprovider.data.ThumbnailPrecacheWorker
 import com.keithvassallo.ncmediaprovider.data.SyncProgress
 import com.keithvassallo.ncmediaprovider.databinding.ActivitySetupBinding
 import com.keithvassallo.ncmediaprovider.share.SendFromNextcloudActivity
@@ -156,6 +158,7 @@ class SetupActivity : AppCompatActivity() {
         binding.signOutButton.setOnClickListener { confirmSignOut() }
         binding.sendButton.setOnClickListener { startActivity(Intent(this, SendFromNextcloudActivity::class.java)) }
         binding.keyboardSettingsButton.setOnClickListener { startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) }
+        setUpPrecache()
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 repository.syncJobs().collect(::showSyncJobs)
@@ -237,6 +240,59 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private fun folderList(): String = repository.folders().joinToString(", ")
+
+    /** The thumbnail pre-cache (PLAN 5.6): on or off, how far back, its estimate and progress. */
+    private fun setUpPrecache() {
+        binding.precacheSwitch.isChecked = repository.precacheEnabled
+        binding.precacheRange.check(
+            when (repository.precacheMonths) {
+                12 -> R.id.precacheYear
+                3 -> R.id.precacheQuarter
+                else -> R.id.precacheAll
+            },
+        )
+        binding.precacheSwitch.setOnCheckedChangeListener { _, _ -> savePrecache() }
+        binding.precacheRange.addOnButtonCheckedListener { _, _, checked -> if (checked) savePrecache() }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                repository.precacheJobs().collect { jobs ->
+                    val running = jobs.firstOrNull { it.state == WorkInfo.State.RUNNING }
+                    val ready = running?.progress?.getInt(ThumbnailPrecacheWorker.KEY_READY, -1) ?: -1
+                    val total = running?.progress?.getInt(ThumbnailPrecacheWorker.KEY_TOTAL, -1) ?: -1
+                    showPrecacheStatus(if (ready >= 0 && total > 0) ready to total else null)
+                }
+            }
+        }
+    }
+
+    private fun precacheMonths(): Int = when (binding.precacheRange.checkedButtonId) {
+        R.id.precacheYear -> 12
+        R.id.precacheQuarter -> 3
+        else -> 0
+    }
+
+    private fun savePrecache() {
+        repository.setPrecache(binding.precacheSwitch.isChecked, precacheMonths())
+        lifecycleScope.launch { showPrecacheStatus(null) }
+    }
+
+    private suspend fun showPrecacheStatus(running: Pair<Int, Int>?) {
+        val months = precacheMonths()
+        binding.precacheRange.visibility = if (binding.precacheSwitch.isChecked) View.VISIBLE else View.GONE
+        val (count, bytes) = withContext(Dispatchers.IO) { runCatching { repository.precacheEstimate(months) }.getOrDefault(0 to 0L) }
+        val estimate = getString(
+            R.string.precache_estimate,
+            Formatter.formatShortFileSize(this, bytes),
+            count,
+            Formatter.formatShortFileSize(this, MediaDiskCache.Area.PRECACHE.maximumBytes),
+        )
+        val progress = when {
+            !binding.precacheSwitch.isChecked -> null
+            running != null -> getString(R.string.precache_running, running.first, running.second)
+            else -> repository.precacheReady().takeIf { it.second > 0 }?.let { getString(R.string.precache_ready, it.first, it.second) }
+        }
+        binding.precacheStatus.text = listOfNotNull(estimate, progress).joinToString(" ")
+    }
 
     /** Whether the photo keyboard (PLAN 4.8) is turned on in Android's keyboard settings. */
     private fun updateKeyboardUi() {

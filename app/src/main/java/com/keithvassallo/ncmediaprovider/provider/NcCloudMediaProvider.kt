@@ -198,6 +198,10 @@ class NcCloudMediaProvider : CloudMediaProvider() {
             CloudMediaProviderContract.EXTRA_PREVIEW_THUMBNAIL,
             false,
         ) ?: false
+        // Which sizes the picker asks for decides what the thumbnail pre-cache keeps (PLAN 5.6).
+        if (REQUESTED_PREVIEW_SIZES.add("${size.x}x${size.y}/$thumbnailOnly")) {
+            Log.i(TAG, "onOpenPreview size ${size.x}x${size.y}, thumbnail=$thumbnailOnly")
+        }
         return try {
             repository.openPreview(mediaId, size, thumbnailOnly, cancellationSignal)
         } catch (error: Exception) {
@@ -312,6 +316,8 @@ class NcCloudMediaProvider : CloudMediaProvider() {
     private data class CollectionVersion(val id: String, val generation: Long)
 
     private companion object {
+        private val REQUESTED_PREVIEW_SIZES = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
         const val TAG = "NcCloudMediaProvider"
         // Cursors travel through a CursorWindow in shared memory, so wide pages are cheap.
         const val DEFAULT_PAGE_SIZE = 500
