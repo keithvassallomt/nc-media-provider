@@ -1,6 +1,6 @@
 # nc-media-provider: project plan
 
-**Status (2026-10-02):** planning agreed, no code written. Next up is Phase 0.
+**Status (2026-10-02):** planning agreed, no code written. Phase 0.1 is done: activation needs no root on either test phone (see [docs/device-notes.md](docs/device-notes.md)). Next up are 0.2 and 0.3.
 
 Progress is tracked in [GitHub issues](https://github.com/keithvassallomt/nc-media-provider/issues): one issue per phase, with each numbered sub-task below as a sub-issue.
 
@@ -44,7 +44,7 @@ It must work whichever gallery the user prefers (Nextcloud Photos, Memories or a
 - **No root, ever.** Activation uses only shell-level privileges: `adb shell`, or Shizuku over wireless debugging. If either test phone turns out to need root, the project stops. Never propose root, Magisk or similar workarounds.
 - **Any Nextcloud server.** The app is for public release. Features are detected at login and the app degrades gracefully when a server lacks them. Keith's server is one test target, not the design target.
 - **MIT, with clean GPL hygiene.** The provider shell comes from 9dc/immich-media-picker (MIT). Dreaming-Codes/immich-cloud-media and 9dc/immich-cloud-media are GPL: study their designs, never copy their code.
-- **Google Photos stays selectable.** Activation appends our package to the existing allow-list. It never replaces the list.
+- **Google Photos stays selectable.** Where Google Photos is a cloud provider, activation writes an allow-list that still includes it.
 - **No "Nextcloud" in the name.** Nextcloud's [trademark guidelines](https://nextcloud.com/trademarks/) forbid the mark in an app's name, and for store distribution say plainly that "Nextcloud" can't be used in the app's name. "X for Nextcloud" isn't allowed either. A free, non-commercial project may say it is compatible with Nextcloud, so the store description can say it works with Nextcloud.
 
 ## Decisions
@@ -59,7 +59,7 @@ It must work whichever gallery the user prefers (Nextcloud Photos, Memories or a
 | Toolchain | Same as the base: minSdk 34, compile and target SDK 36, or 37 if that SDK is stable (settled in Phase 0.3) |
 | Library source of truth | Core Nextcloud WebDAV SEARCH. Memories only enriches. |
 | Library scope | Folders the user picks, pre-filled from Memories' `timeline_path` when detected, plus common folders such as `/Photos` and `/InstantUpload` |
-| Test devices | Pixel (stock Android) and GrapheneOS, both on Android 17 |
+| Test devices | Pixel 11 Pro on stock Android 17, and Pixel 10 Pro Fold on GrapheneOS (Android 17). The stock phone is a family member's daily phone: read-only by default, writes only with consent, always restored afterwards. |
 | Nextcloud versions | Official support for the releases still maintained upstream (32 to 35 as of 2026-10). Older servers run with reduced features. |
 
 Keith's own server runs both Photos and Memories and holds about 20,000 items. Keith is its admin, so features can be switched on there for full-feature testing. His Pixel auto-uploads to it, so most recent photos exist both on the phone and on the server.
@@ -126,10 +126,15 @@ We therefore keep a local snapshot database that gives each row a sync generatio
 
 ### Activation
 
-- Two flags matter: `allowed_cloud_providers` and `cloud_media_feature_enabled`. Set both in both namespaces, `mediaprovider` and `storage_native_boot`. Which namespace is read depends on the phone's MediaProvider module version, not its Android version. Then reboot and select the provider in the picker's cloud settings.
-- No root is needed. The plain `adb shell` user can write both flags. Android 16 and later lock down which flags adb can change, but both of ours are still writable in the Android 17 source. Shizuku uses the same adb-level permission, started through wireless debugging.
-- Only one cloud provider can be active at a time. The base repo's commands replace the allow-list, which removes Google Photos. We append instead.
-- Restoring the original state is `device_config clear_override` on both namespaces, which hands control back to Google's own setting.
+- Two flags matter: `allowed_cloud_providers` and `cloud_media_feature_enabled`. Set them in both namespaces, `mediaprovider` and `storage_native_boot`, then select the provider in the picker's cloud settings.
+- No root is needed, confirmed on both test phones (Phase 0.1). The plain `adb shell` user can write both flags with `device_config override`. Shizuku uses the same adb-level permission, started through wireless debugging.
+- On both phones (MediaProvider module 37), a `mediaprovider` override applies immediately. A `storage_native_boot` override does not apply while the phone is running, and is presumably read at boot. Writing both covers either case.
+- The flag's current value is not a reliable base to append to. On the stock Pixel, `mediaprovider/allowed_cloud_providers` holds a server-set *authority* (`com.google.android.apps.photos.cloudpicker`) that MediaProvider ignores, while the effective list (`[com.google.android.apps.photos]`) comes from the Pixel overlay's default. Activation must write an explicit list of package names.
+- Defaults differ by OS. Stock Pixel: cloud media is on and Google Photos is allowed and active. GrapheneOS: cloud media is off and the allow-list is empty, so Google Photos isn't a cloud source at all. There, `cloud_media_feature_enabled=true` is also needed, and the picker's cloud settings screen (`PhotoPickerSettingsActivity`) only becomes enabled after a reboot.
+- Only one cloud provider can be active at a time. The base repo's commands replace the allow-list, which removes Google Photos.
+- Restoring the original state is `device_config clear_override` for each overridden flag, which hands control back to the server and overlay defaults.
+- The `media_provider` shell tool is not available on either phone. Read cloud picker state with `dumpsys activity provider <MediaProvider package>/com.android.providers.media.MediaProvider`: the package is `com.google.android.providers.media.module` on stock Pixels and `com.android.providers.media.module` on AOSP builds such as GrapheneOS.
+- The picker UI also differs. The stock Pixel uses the newer picker (`com.google.android.photopicker`). GrapheneOS uses the older picker built into MediaProvider.
 
 ## Supporting any Nextcloud server
 
@@ -171,7 +176,7 @@ Each phase ends with an exit test. On-device exit tests are run by Keith, with t
 
 **0.1 No-root activation check (Keith, on device).** This is a strict go/no-go. It proves that a sideloaded provider can be activated on both phones without root, so any later failure is clearly our code and not the platform.
 
-- First record the current flag values in both namespaces and the output of `media_provider cloud-provider list --all`. These are needed to restore Google Photos later.
+- First record the current flag values in both namespaces and MediaProvider's cloud picker state from `dumpsys`. These are needed to restore the phone later.
 - Quickest test: [trajano/cloud-media-provider-proxy](https://github.com/trajano/cloud-media-provider-proxy) passes the Nextcloud Files app's documents through as a cloud provider. Use it only as a test tool, never as code. It has a bug that forces full resyncs, which doesn't matter here. If it has no prebuilt APK, skip it and fold this check into the Phase 1 exit test.
 - Pass, on both phones and without root: the provider appears in the picker's cloud settings, can be selected, and is still there after a reboot. Google Photos is still listed and selectable.
 
@@ -217,7 +222,7 @@ Server test matrix:
 - **`onOpenPreview`** calls `/core/preview?fileId=…&a=1&mode=cover&forceIcon=0` at 256 or 1024 px. When the picker asks for the full file instead of a thumbnail, it returns the original.
 - **`onOpenMedia`** downloads the file to the cache and returns it.
 
-**1.5 Activate and smoke test (Keith, on device).** Append the package to the allow-list in both namespaces, reboot, select the provider, force a sync with `media_provider cloud-provider sync-library`, and watch logcat.
+**1.5 Activate and smoke test (Keith, on device).** Write an explicit allow-list (Google Photos where present, plus our package) to both namespaces, and on GrapheneOS also enable cloud media and reboot. Select the provider in the picker's cloud settings, open the picker to start a sync, and check `dumpsys` and logcat. On the stock Pixel this also confirms a third-party provider appears in Google's picker, which Phase 0.1 couldn't test without an APK.
 
 **Exit:** the test folder's photos show in the picker on both phones, thumbnails load, and a photo attached in Messenger arrives as the original file. This is the go/no-go point for everything after.
 
@@ -294,9 +299,10 @@ Moved up to straight after the sync engine, because an auto-uploading phone has 
 **4.6 Activation screen,** adapted from the base repo:
 
 - whether the provider is allowed and whether it is active;
-- adb commands ready to copy, one per namespace, each reading the current allow-list value and appending our package;
-- one-tap activation through Shizuku, which does the same merge automatically;
-- restore commands (`clear_override` on both namespaces);
+- adb commands ready to copy that write an explicit allow-list (Google Photos when installed and the user wants to keep it, plus our package) to both namespaces, and on builds where cloud media is off, also enable it;
+- one-tap activation through Shizuku, which can read MediaProvider's effective list from `dumpsys` and write the same thing;
+- a reboot prompt where the picker's cloud settings screen isn't enabled yet (GrapheneOS);
+- restore commands (`clear_override` for each flag written);
 - buttons to open the picker's cloud settings and to test the picker;
 - diagnostics: item count, generation, last sync, last error, cache sizes.
 
@@ -324,7 +330,7 @@ Onboarding says plainly that only one cloud source can be active at a time, and 
 
 **5.3 Videos in the library.** Include videos in the SEARCH. Their thumbnails need the server's Movie preview provider. If it's missing, grab a frame on the phone from the streamed file and cache it.
 
-**5.4 Video playback in the picker.** A `CloudMediaSurfaceController` built on Media3 ExoPlayer streams the WebDAV file with the user's credentials. It handles the display surface, play and pause, mute and loop, and reports playback states to the picker. Dreaming-Codes' version shows how to map those states. Study it, don't copy it: it's GPL.
+**5.4 Video playback in the picker.** A `CloudMediaSurfaceController` built on Media3 ExoPlayer streams the WebDAV file with the user's credentials. It handles the display surface, play and pause, mute and loop, and reports playback states to the picker. Dreaming-Codes' version shows how to map those states. Study it, don't copy it: it's GPL. Test on both phones, since the stock Pixel uses the newer picker and GrapheneOS the older one built into MediaProvider.
 
 **5.5 Live photos.** Hide the hidden MOV half of each pair. Optionally, pair an image and a MOV with the same name in the same folder, for live photos uploaded by clients other than iOS.
 
@@ -375,13 +381,13 @@ Onboarding says plainly that only one cloud source can be active at a time, and 
 - GrapheneOS notes;
 - how to keep Google Photos selectable;
 - how to restore the original settings;
-- troubleshooting with logcat tags and the `media_provider` command-line tool;
+- troubleshooting with logcat tags and the MediaProvider `dumpsys` command;
 - MIT attribution to the base repo.
 
 **9.5 Bug reports.**
 
 - a diagnostics export with credentials removed;
-- an issue template asking for the device, Android version, MediaProvider module version, and the output of `media_provider cloud-provider info`.
+- an issue template asking for the device, Android version, MediaProvider module version, and the cloud picker lines from MediaProvider's `dumpsys`.
 
 **9.6 Upgrades.** Database migrations are tested. If a migration ever fails, the app rebuilds the library instead of silently losing state.
 
@@ -403,13 +409,13 @@ Onboarding says plainly that only one cloud source can be active at a time, and 
 - **Simulated server tests (OkHttp MockWebServer):** login failures, 429 back-off, and paging.
 - **Server matrix (Claude):** the throwaway containers from Phase 0.2.
 - **Devices:**
-  - Keith's Pixel and GrapheneOS phones are the main devices and run each phase's exit test.
+  - The stock Pixel 11 Pro and the GrapheneOS Pixel 10 Pro Fold are the main devices and run each phase's exit test.
   - Emulators for Android 14, 15 and 16 cover the different activation commands per version. Still to confirm: whether the emulator images include the cloud picker feature.
   - Samsung and other brands come from a public beta, using the structured bug-report template.
 
 ## Risks
 
-- **Activation could fail on one phone.** Reports from GrapheneOS on Android 17 say activation works. One Pixel 9 Pro on Android 17 using Shizuku still showed only Google Photos, and that was never resolved. Phase 0.1 exists to catch this.
+- **Activation on a stock Pixel is only partly proven.** Phase 0.1 showed that adb can change the allow-list on both phones without root, and that a user-installed provider becomes selectable on GrapheneOS. A third-party provider appearing in the stock Pixel's picker is still untested (Phase 1.5). One Pixel 9 Pro on Android 17 using Shizuku reportedly showed only Google Photos, and that was never resolved.
 - **Google could close the door.** A future Android or MediaProvider module update could remove these flags from what adb may write. Nothing in the app could work around that.
 - **Video previews may break** in the Android 17 picker until Phase 5.4 lands.
 - **HEIC and video thumbnails** depend on server settings (Phase 0.2, with fallbacks in Phase 5).
