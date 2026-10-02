@@ -1,6 +1,6 @@
 # nc-media-provider: project plan
 
-**Status (2026-10-02):** planning agreed, no code written. Phase 0.1 is done: activation needs no root on either test phone (see [docs/device-notes.md](docs/device-notes.md)). Next up are 0.2 and 0.3.
+**Status (2026-10-02):** planning agreed, no code written. Phase 0.1 is done: activation needs no root on either test phone (see [docs/device-notes.md](docs/device-notes.md)). Phase 0.3 is done (see [docs/base-repo-map.md](docs/base-repo-map.md)). Next up is 0.2.
 
 Progress is tracked in [GitHub issues](https://github.com/keithvassallomt/nc-media-provider/issues): one issue per phase, with each numbered sub-task below as a sub-issue.
 
@@ -56,11 +56,11 @@ It must work whichever gallery the user prefers (Nextcloud Photos, Memories or a
 | Provider authority | `${applicationId}.cloudmedia`, as in the base repo |
 | License | MIT, keeping the base repo's notice |
 | Base repo | [9dc/immich-media-picker](https://github.com/9dc/immich-media-picker), pinned at v0.4.2 |
-| Toolchain | Same as the base: minSdk 34, compile and target SDK 36, or 37 if that SDK is stable (settled in Phase 0.3) |
+| Toolchain | minSdk 34, compileSdk and targetSdk 37, AGP 9.3.1, Gradle 9.6.1, Kotlin 2.4.10 (AGP's built-in Kotlin), JVM bytecode target 17, Gradle daemon on JDK 21 or 25 (pinned in the repo), CI on JDK 21. Settled in Phase 0.3. |
 | Library source of truth | Core Nextcloud WebDAV SEARCH. Memories only enriches. |
 | Library scope | Folders the user picks, pre-filled from Memories' `timeline_path` when detected, plus common folders such as `/Photos` and `/InstantUpload` |
 | Test devices | Pixel 11 Pro on stock Android 17, and Pixel 10 Pro Fold on GrapheneOS (Android 17). The stock phone is a family member's daily phone: read-only by default, writes only with consent, always restored afterwards. |
-| Nextcloud versions | Official support for the releases still maintained upstream (32 to 35 as of 2026-10). Older servers run with reduced features. |
+| Nextcloud versions | Official support for the releases still maintained upstream (33 to 35 as of 2026-10; 32 reached end of life in September 2026). Older servers run with reduced features. |
 
 Keith's own server runs both Photos and Memories and holds about 20,000 items. Keith is its admin, so features can be switched on there for full-feature testing. His Pixel auto-uploads to it, so most recent photos exist both on the phone and on the server.
 
@@ -70,7 +70,7 @@ Keith's own server runs both Photos and Memories and holds about 20,000 items. K
 Android system photo picker
         │
         ▼
-CloudMediaProvider             kept from 9dc/immich-media-picker
+CloudMediaProvider             adapted from 9dc/immich-media-picker
         │
         ▼
 Repository + sync engine       new: Room snapshot, generations, deletion journal
@@ -80,7 +80,7 @@ Repository + sync engine       new: Room snapshot, generations, deletion journal
         └── Memories           dates, dimensions, video duration, live photos (optional)
 ```
 
-The Android-facing provider behaves as it does in the base repo. Only the backend changes.
+The picker-facing contract follows the base repo. The provider's internals are adapted: the base pages straight through to Immich on every query, while ours answers from the local database. See [docs/base-repo-map.md](docs/base-repo-map.md).
 
 ## Research findings
 
@@ -92,7 +92,7 @@ The Android-facing provider behaves as it does in the base repo. Only the backen
 - it reports which query arguments it handled, in the exact form the picker expects;
 - it tells the picker when the library changes, using the right system call;
 - it sends thumbnails or full files depending on what the picker asked for;
-- it keeps slow network calls from blocking the picker;
+- it keeps the network off `onGetMediaCollectionInfo` and bounds other network calls with timeouts (it has no local database, so media queries still go to the server);
 - it stores credentials in the Android Keystore.
 
 Dreaming-Codes' original is GPL, has had no maintainer since April, and gets several of these rules wrong.
@@ -190,25 +190,27 @@ On Keith's server, a short curl checklist:
 - Call Memories' `/api/describe` and `/api/config` to get its version and `timeline_path`.
 - Check whether Memories albums are simply Photos albums.
 - Check whether the video half of each live photo is marked `nc:hidden`.
-- Create an app password for the proof of concept, and save real responses as test fixtures.
+- Create an app password for the proof of concept and store it in the git-ignored `local.properties`.
+- Captures from Keith's server stay in the git-ignored `local/` folder, since they hold private file names, paths and metadata. Committed test fixtures come only from the container servers' synthetic library.
 
 Server test matrix:
 
-- Throwaway Nextcloud containers run the oldest and newest maintained releases.
+- Throwaway Nextcloud containers (Podman, rootless) run the oldest and newest maintained releases: 33 and 35 as of 2026-10.
 - Each release runs twice: once with default settings, and once with Photos, Memories, and HEIC and video previews all enabled.
 - Each gets the same test library: JPEG, HEIC, MP4, a live-photo pair, nested folders, and a folder shared from another user.
 - Keith's server stays the real-world check.
 
-**0.3 Map the base repo (Claude).** Pin v0.4.2 and decide what happens to each part:
+**0.3 Map the base repo (Claude).** Pin v0.4.2 and decide what happens to each part. Done: the file-by-file map is [docs/base-repo-map.md](docs/base-repo-map.md). v0.4.2 is the latest release and the pin must not be relaxed, since it is the release that added the sync-generation and change-notification behaviour we rely on.
 
-- **Keep:** the provider shell and its caller check, the network gate, the disk cache, the credential store, the local MediaStore index, the setup and diagnostics screen, and the Shizuku activation.
-- **Replace:** every Immich API, JSON, model and URL class.
-- **Drop for now:** people, smart search, and the API 36 additions.
-- **Toolchain:** settle compile and target SDK (36, or 37 if stable).
+- **Keep (12 files):** the network gate (`RemoteQueryGate`) and its test, the disk cache (`MediaDiskCache`), the Gradle wrapper and settings, the backup-exclusion and network-security configs, the launcher icon, `.gitignore` and `LICENSE`.
+- **Adapt (23 files):** the provider shell and its caller check, the credential store, the local MediaStore index, the setup and diagnostics screen, and the Shizuku activation.
+- **Replace (12 files):** every Immich API, JSON, model and URL class, plus `ImmichRepository` and `SyncStateStore`.
+- **Drop for now:** people, smart search and the API 36 additions. These are methods inside adapted files rather than whole files.
+- **Toolchain:** compileSdk and targetSdk 37 (see Decisions). The base builds here on AGP 9.3.1 and Gradle 9.6.1 with three build-file edits.
 
 ### Phase 1: Proof of concept
 
-**1.1 Skeleton.** Rename the package and strip out Immich. The manifest declares the provider exported, protected by the `MANAGE_CLOUD_MEDIA_PROVIDERS` permission, with the `CLOUD_MEDIA_PROVIDER` intent filter.
+**1.1 Skeleton.** Rename the package and strip out Immich. Move the build to the agreed toolchain. The manifest declares the provider exported, protected by the `MANAGE_CLOUD_MEDIA_PROVIDERS` permission, with the `CLOUD_MEDIA_PROVIDER` intent filter. Add the base's copyright line ("Copyright (c) 2026 Immich Media Picker contributors") to `LICENSE` as soon as any base code is copied in. Make sure no Keystore decryption happens inside `onGetMediaCollectionInfo`: the base decrypts there on a cold start.
 
 **1.2 Hard-coded auth.** Debug builds read the server URL, login name, user ID and app password from a git-ignored `local.properties`. HTTP Basic auth is attached only to requests to that server.
 
@@ -245,6 +247,7 @@ Server test matrix:
 
 - Each listing is compared with the database in one transaction. New or changed rows get the next generation, and missing fileIds go into the deletion journal at that generation. The generation only increases when something actually changed.
 - Page tokens name their own pass (`m:` for media, `d:` for deletions), fix the top generation for the whole sync, and carry an offset. The prefix matters because Android 17's picker can pass the last media token into the deletions query.
+- Keep journal rows long enough that a picker far behind still gets every deletion (the base keeps only 8 generations and silently loses older ones). Prune by age. If a picker asks from before the oldest kept row, change the collection ID to force a full resync.
 
 **2.4 Change detection.** Walking folder etags is the standard method, not a later upgrade, because other users may have 100,000 items or more.
 
@@ -274,7 +277,7 @@ Moved up to straight after the sync engine, because an auto-uploading phone has 
 
 **3.1 Local index.** Adapt the base repo's local MediaStore index. This needs permission to read the device's photos and videos.
 
-**3.2 Matching.** The Nextcloud Android app keeps the original file name when it auto-uploads, so a match on name and size covers most cases. For renamed uploads, the fallback is the same size plus a date taken within 2 seconds. The match goes into `media_store_uri`, which makes the picker hide the cloud copy. The URI must be well-formed (see 2.9).
+**3.2 Matching.** The Nextcloud Android app keeps the original file name when it auto-uploads, so a match on name and size covers most cases. For renamed uploads, the fallback is the same size plus a date taken within 2 seconds. The match goes into `media_store_uri`, which makes the picker hide the cloud copy. The URI must be well-formed (see 2.9). MediaProvider caches rows as sent, so a match found after a row went out must bump that row's generation.
 
 **3.3 Local delivery.** When a matched item is selected, `onOpenMedia` hands over the local file with no download.
 
@@ -284,7 +287,7 @@ Moved up to straight after the sync engine, because an auto-uploading phone has 
 
 **4.1 Login.** Nextcloud's Login Flow v2 opens in an in-app browser tab. The app polls every few seconds for up to 20 minutes, and the app name shows in Nextcloud's security settings. The login name may be an email, so the app then looks up the actual user ID, checks the server's features (see "Supporting any Nextcloud server") and detects Memories.
 
-**4.2 Credentials.** Stored with the base repo's Keystore encryption and excluded from backups. The app trusts system and user-installed certificates, for self-hosted servers.
+**4.2 Credentials.** Stored with the base repo's Keystore encryption and excluded from backups. The app trusts system and user-installed certificates, for self-hosted servers. Decide on plain HTTP: the base allows cleartext app-wide for LAN servers; ours should at most allow it for LAN addresses, with a warning.
 
 **4.3 Folder picker.** The user browses folders and selects several. The selection is pre-filled from Memories' `timeline_path` when available, plus common folders such as `/Photos` and `/InstantUpload`. End-to-end encrypted folders are excluded. Changing the selection warns that the library will be rebuilt.
 
@@ -300,7 +303,9 @@ Moved up to straight after the sync engine, because an auto-uploading phone has 
 
 - whether the provider is allowed and whether it is active;
 - adb commands ready to copy that write an explicit allow-list (Google Photos when installed and the user wants to keep it, plus our package) to both namespaces, and on builds where cloud media is off, also enable it;
-- one-tap activation through Shizuku, which can read MediaProvider's effective list from `dumpsys` and write the same thing;
+- one-tap activation through Shizuku, which can read MediaProvider's effective list from `dumpsys` and write the same thing, then verify the result through MediaProvider rather than `device_config get`;
+- a `<queries>` manifest entry so the app can detect whether Google Photos is installed;
+- no silent fallback to `device_config put` if `override` fails (the base does this), and no automatic reboot unless one is needed;
 - a reboot prompt where the picker's cloud settings screen isn't enabled yet (GrapheneOS);
 - restore commands (`clear_override` for each flag written);
 - buttons to open the picker's cloud settings and to test the picker;
@@ -326,7 +331,7 @@ Onboarding says plainly that only one cloud source can be active at a time, and 
 - For videos and large files, return a file handle whose reads become HTTP Range requests (`openProxyFileDescriptor`).
 - Reads are buffered 1 to 4 MiB ahead. The GPL fork makes one request per read, which is slow.
 - The size comes from the listing, and the etag is pinned so a file that changes mid-read fails cleanly.
-- Images keep the download-to-cache path.
+- Images keep the download-to-cache path. The originals cache is keyed by fileId and etag (the base keys by ID only, so an edited file is served stale) and gets a size cap the user can change (8.2).
 
 **5.3 Videos in the library.** Include videos in the SEARCH. Their thumbnails need the server's Movie preview provider. If it's missing, grab a frame on the phone from the streamed file and cache it.
 
@@ -416,6 +421,7 @@ Onboarding says plainly that only one cloud source can be active at a time, and 
 ## Risks
 
 - **Activation on a stock Pixel is only partly proven.** Phase 0.1 showed that adb can change the allow-list on both phones without root, and that a user-installed provider becomes selectable on GrapheneOS. A third-party provider appearing in the stock Pixel's picker is still untested (Phase 1.5). One Pixel 9 Pro on Android 17 using Shizuku reportedly showed only Google Photos, and that was never resolved.
+- **Local network permission.** API 37 adds `ACCESS_LOCAL_NETWORK`. If Android 17 enforces it for apps targeting 37, a Nextcloud server on a LAN address may need the permission granted during setup, since the provider makes requests in the background for the picker. Test against a LAN-only server in Phase 1.
 - **Google could close the door.** A future Android or MediaProvider module update could remove these flags from what adb may write. Nothing in the app could work around that.
 - **Video previews may break** in the Android 17 picker until Phase 5.4 lands.
 - **HEIC and video thumbnails** depend on server settings (Phase 0.2, with fallbacks in Phase 5).

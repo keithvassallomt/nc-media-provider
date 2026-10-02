@@ -1,0 +1,16 @@
+# Machine-specific settings and credentials
+local.properties
+# Captures from real servers (may contain private file names, paths and metadata)
+local/
+
+# Gradle and Android Studio
+.gradle/
+.kotlin/
+build/
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
