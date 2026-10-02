@@ -118,3 +118,52 @@ Unexplained: the server-set `mediaprovider` value (`...cloudpicker`) is ignored,
 Not covered here: a third-party provider actually appearing in this phone's picker. That is the Phase 1 exit test (#10).
 
 Current state: restored to baseline, no overrides set.
+
+## Phase 1.5 on-device test (GrapheneOS, 2026-10-02)
+
+Debug build of Phases 1.1 to 1.4 on the GrapheneOS phone, listing the Memories timeline folder of Keith's server.
+
+### Activation
+
+`device_config override` of `allowed_cloud_providers` to `com.google.android.apps.photos,com.keithvassallo.ncmediaprovider.debug` in both namespaces applied immediately: MediaProvider listed the provider in `allAvailableCloudProviders` with no reboot, and it could be selected next to Google Photos.
+
+### Local network protection blocks LAN servers
+
+The server's name resolves to a LAN address (192.168.96.0/24). Every connection from the app failed while the shell connected fine. Tested as the app's UID with `adb shell run-as <package> toybox nc -w 4 <host> <port>`:
+
+| Target | Before the permission | After |
+|---|---|---|
+| 1.1.1.1:443 (public) | reachable | reachable |
+| LAN router, port 80 | blocked | not retested |
+| LAN server, port 443 | blocked | reachable |
+
+App-ops showed `ACCESS_LOCAL_NETWORK: ignore` with a rejection at each attempt. Apps targeting API 37 need the runtime permission `android.permission.ACCESS_LOCAL_NETWORK` to reach private addresses. Declaring it and requesting it from the setup screen fixed it. `pm list permissions` does not show this permission; `dumpsys package permissions` does.
+
+### Background network restriction
+
+`dumpsys netpolicy` showed `blocked=APP_BACKGROUND` for the app's UID whenever its process was not in the foreground:
+
+- screen off, setup screen nominally on top: process state `TPSL` (top, sleeping), blocked;
+- when MediaProvider called the provider, the UID's firewall rule switched to allow within a millisecond, then back to blocked about 5 to 10 seconds after the call returned.
+
+A listing started on the app's own thread after `onGetMediaCollectionInfo` returned therefore timed out. Network work has to happen while MediaProvider is calling (the first `onQueryMedia` now waits for the listing, which works) or in a scheduled job.
+
+### App updates deselect the provider
+
+Reinstalling the debug APK (`adb install -r`) made MediaProvider log `Cloud provider changed successfully. Old: com.keithvassallo.ncmediaprovider.debug.cloudmedia. New: null`. Replacing the package briefly removes it, and the selection is not restored. Keith had to select the provider again from the picker's menu.
+
+### Listing and sync
+
+- 14,073 images listed in about 7 seconds once the network was allowed; MediaProvider then pulled all rows in 500-row pages in under 5 seconds.
+- Because the first sync started while generation 0 was advertised, MediaProvider immediately asked for changes since 0 and received the whole library again. Per-row generations (Phase 2) avoid this.
+- `Listing stopped early: a full page shared one modification time`: more than 1,000 files on this server share one modification second, so date-window paging alone can't list them all. The listing is incomplete until PLAN 2.2 handles this.
+
+### Thumbnails and originals
+
+- A cancelled thumbnail request (the picker cancels every tile scrolled off screen) surfaced as `IOException: Canceled`, which the back-off gate inherited from the base counted as "server unreachable". One cancellation blanked every thumbnail for 5 seconds, 302 failed tiles in 46 seconds of scrolling. Fixed: cancellations and missing previews no longer arm the back-off. Fast scrolling then kept loading.
+- The server itself answered 60 thumbnails, four at a time, in a median 0.09 s (slowest 5.1 s, generated on demand).
+- Picking a photo returned the original: `onOpenMedia` handed over 927,816 bytes in 271 ms, byte for byte the server's `image/heic` file.
+
+### Apps with their own photo grid
+
+Messenger's attach screen never called the provider. It holds full photo and video access and reads the phone's media database directly; cloud-provider photos are never in that database, only in the picker. Apps like that can't show a cloud library. WhatsApp offers the system picker behind its folder button, and it showed the Nextcloud library there.

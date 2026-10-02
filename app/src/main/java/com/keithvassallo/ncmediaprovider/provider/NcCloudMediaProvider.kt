@@ -77,6 +77,7 @@ class NcCloudMediaProvider : CloudMediaProvider() {
                 )
             }
         }
+        Log.d(TAG, "onGetMediaCollectionInfo -> ${collection.id} generation ${collection.generation}")
         // hasAccount reads plain preferences: this call has a 100 ms budget, so no Keystore here.
         if (repository.hasAccount) scheduleSyncCheck()
         return result
@@ -98,6 +99,7 @@ class NcCloudMediaProvider : CloudMediaProvider() {
         } else {
             Page(emptyList(), null)
         }
+        Log.d(TAG, "onQueryMedia since=$sinceGeneration token=$pageToken album=$albumId -> ${page.items.size} rows, next=${page.nextPageToken}")
         return mediaCursor(page, collection.generation).apply {
             this.extras = collectionExtras(collection.id, page.nextPageToken).apply {
                 putStringArrayList(
@@ -144,9 +146,13 @@ class NcCloudMediaProvider : CloudMediaProvider() {
     ): ParcelFileDescriptor {
         enforceSystemCaller()
         cancellationSignal?.throwIfCanceled()
+        val started = System.nanoTime()
         return try {
-            repository.openOriginal(mediaId, cancellationSignal)
+            repository.openOriginal(mediaId, cancellationSignal).also {
+                Log.i(TAG, "onOpenMedia $mediaId -> ${it.statSize} bytes in ${(System.nanoTime() - started) / 1_000_000} ms")
+            }
         } catch (error: Exception) {
+            Log.w(TAG, "onOpenMedia $mediaId failed: ${error.describe()}")
             if (error is FileNotFoundException) throw error
             throw FileNotFoundException("Unable to open media").apply { initCause(error) }
         }
@@ -168,6 +174,11 @@ class NcCloudMediaProvider : CloudMediaProvider() {
         return try {
             repository.openPreview(mediaId, size, thumbnailOnly, cancellationSignal)
         } catch (error: Exception) {
+            if (error is RemoteQueryDeferredException) {
+                Log.d(TAG, "onOpenPreview $mediaId deferred: ${error.message}")
+            } else {
+                Log.w(TAG, "onOpenPreview $mediaId (thumbnail=$thumbnailOnly) failed: ${error.describe()}")
+            }
             if (error is FileNotFoundException) throw error
             throw FileNotFoundException("Unable to open preview").apply { initCause(error) }
         }
@@ -256,6 +267,14 @@ class NcCloudMediaProvider : CloudMediaProvider() {
         if (permission != PackageManager.PERMISSION_GRANTED) {
             throw SecurityException("Only Android's system photo picker may access this provider")
         }
+    }
+
+    /** Class and message of the error and its root cause, for logcat. */
+    private fun Throwable.describe(): String {
+        var root: Throwable = this
+        while (root.cause != null && root.cause !== root) root = root.cause!!
+        val own = "${javaClass.simpleName}: ${message.orEmpty()}"
+        return if (root === this) own else "$own (cause ${root.javaClass.simpleName}: ${root.message.orEmpty()})"
     }
 
     private fun logProviderFailure(error: Throwable) {

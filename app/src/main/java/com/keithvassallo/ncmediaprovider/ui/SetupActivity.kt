@@ -106,6 +106,10 @@ class SetupActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) { repository.warmLocalMediaIndex() }
     }
 
+    private val localNetworkRequest = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { updateLocalNetworkUi() }
+
     private val pickerTest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -123,6 +127,7 @@ class SetupActivity : AppCompatActivity() {
                 ),
             )
         }
+        binding.grantLocalNetworkButton.setOnClickListener { localNetworkRequest.launch(ACCESS_LOCAL_NETWORK) }
         binding.copyCommandsButton.setOnClickListener { copyCommands() }
         binding.testPickerButton.setOnClickListener { openSystemPicker() }
         binding.pickerSettingsButton.setOnClickListener { openPickerSettings() }
@@ -142,6 +147,7 @@ class SetupActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateConnectionUi()
+        updateLocalNetworkUi()
         updateMediaPermissionUi()
         updateActivationUi()
         updateShizukuUi()
@@ -178,6 +184,12 @@ class SetupActivity : AppCompatActivity() {
             binding.connectionStatus.text =
                 getString(R.string.connection_ready, account.userId, account.baseUrl, repository.folder(), listed)
         }
+    }
+
+    private fun updateLocalNetworkUi() {
+        val granted = checkSelfPermission(ACCESS_LOCAL_NETWORK) == PackageManager.PERMISSION_GRANTED
+        binding.localNetworkStatus.setText(if (granted) R.string.local_network_granted else R.string.local_network_missing)
+        binding.grantLocalNetworkButton.visibility = if (granted) View.GONE else View.VISIBLE
     }
 
     private fun updateMediaPermissionUi() {
@@ -376,6 +388,7 @@ class SetupActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val ACCESS_LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
         private const val SHIZUKU_PERMISSION_REQUEST = 41
         private const val SHIZUKU_BIND_TIMEOUT_MS = 20_000L
         private const val SHIZUKU_PACKAGE_NAME = "moe.shizuku.privileged.api"

@@ -5,6 +5,7 @@ import android.content.res.AssetFileDescriptor
 import android.graphics.Point
 import android.net.Uri
 import android.os.CancellationSignal
+import android.os.OperationCanceledException
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.util.Log
@@ -18,6 +19,19 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+
+/**
+ * Whether a failed download means the server is unreachable, which arms the back-off that fails
+ * the next few previews fast. One missing preview or a cancelled request says nothing about the
+ * server, and treating them as failures blanked whole screens of thumbnails in Phase 1.5.
+ */
+internal fun isReachabilityFailure(error: Exception): Boolean = when (error) {
+    is NextcloudHttpException -> error.statusCode == 408 || error.statusCode == 429 || error.statusCode >= 500
+    is FileNotFoundException -> false
+    is OperationCanceledException -> false
+    is IOException -> error.message?.equals("Canceled", ignoreCase = true) != true
+    else -> false
+}
 
 /** Thrown instead of answering with an empty library, which MediaProvider would cache as real. */
 class LibraryNotReadyException : IllegalStateException("The library has not been listed yet")
@@ -100,9 +114,9 @@ class LibraryRepository private constructor(context: Context) {
      * Lists the library once per process. Returns true when the generation moved, which means the
      * picker must be told. Change detection while running arrives in Phase 2.
      */
-    fun pollChanges(): Boolean = synchronized(loadLock) {
+    fun pollChanges(ignoreRetryDelay: Boolean = false): Boolean = synchronized(loadLock) {
         if (snapshot != null || !hasAccount) return false
-        if (System.currentTimeMillis() - lastFailureMillis < LOAD_RETRY_DELAY_MS) return false
+        if (!ignoreRetryDelay && System.currentTimeMillis() - lastFailureMillis < LOAD_RETRY_DELAY_MS) return false
         val account = credentials.load() ?: return false
         val folder = settings.folder
         val files = try {
@@ -187,7 +201,20 @@ class LibraryRepository private constructor(context: Context) {
         val file = withSlot(previewSlots, PREVIEW_SLOT_WAIT_MS, "preview") {
             previewGate.query {
                 diskCache.getOrDownload(MediaDiskCache.Area.PREVIEW, key, cancellationSignal) { target ->
-                    client.downloadPreview(account, item.id, sizePx, target, cancellationSignal)
+                    try {
+                        client.downloadPreview(account, item.id, sizePx, target, cancellationSignal)
+                    } catch (error: NextcloudHttpException) {
+                        // The server has no preview for this file (HEIC or video without a server
+                        // provider, say): a blank tile, not a failure.
+                        if (error.statusCode == 404) throw FileNotFoundException("No server preview for ${item.id}")
+                        throw error
+                    } catch (error: IOException) {
+                        // OkHttp reports a cancelled call as IOException("Canceled"). The picker
+                        // cancels every tile scrolled off screen, so this must not look like a
+                        // dead server (Phase 1.5).
+                        if (cancellationSignal?.isCanceled == true) throw OperationCanceledException()
+                        throw error
+                    }
                 }
             }
         }
@@ -206,6 +233,11 @@ class LibraryRepository private constructor(context: Context) {
     /**
      * Picker calls can arrive in a fresh process before the first listing. Answering them as if the
      * library were empty would be cached by MediaProvider, so wait for the listing, then give up.
+     *
+     * Waiting here also matters for the network: Android 17 only lets this app's process use the
+     * network while it is in the foreground or MediaProvider is calling it. A listing started from
+     * a background thread after the call returns is cut off, so this forces an attempt while the
+     * caller is still waiting.
      */
     private fun awaitSnapshot(waitMillis: Long): LibrarySnapshot {
         snapshot?.let { return it }
@@ -213,7 +245,7 @@ class LibraryRepository private constructor(context: Context) {
         if (loadInFlight.compareAndSet(false, true)) {
             loadExecutor.execute {
                 try {
-                    if (pollChanges()) notifyPickerOfChanges()
+                    if (pollChanges(ignoreRetryDelay = true)) notifyPickerOfChanges()
                 } finally {
                     loadInFlight.set(false)
                 }
@@ -255,13 +287,6 @@ class LibraryRepository private constructor(context: Context) {
         } finally {
             slots.release()
         }
-    }
-
-    private fun isReachabilityFailure(error: Exception): Boolean = when (error) {
-        // A 404 is one missing preview (HEIC without a server provider, say), not a dead server.
-        is NextcloudHttpException -> error.statusCode == 408 || error.statusCode == 429 || error.statusCode >= 500
-        is IOException -> true
-        else -> false
     }
 
     private fun File.asAssetFileDescriptor() = AssetFileDescriptor(

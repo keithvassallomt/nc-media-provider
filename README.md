@@ -2,11 +2,11 @@
 
 Browse and attach photos from your Nextcloud server straight from Android's system photo picker.
 
-> **Status:** early planning. There is no app to install yet. See [PLAN.md](PLAN.md) for the roadmap and [issues](https://github.com/keithvassallomt/nc-media-provider/issues) for progress.
+> **Status:** early development. A proof of concept works on a test phone, but there is no app to install yet. See [PLAN.md](PLAN.md) for the roadmap and [issues](https://github.com/keithvassallomt/nc-media-provider/issues) for progress.
 
 ## What it does
 
-Android's system photo picker (the one Messenger, email clients and most modern apps open when you attach a photo) can show one cloud photo library next to the photos on your phone. Normally that's Google Photos.
+Android's system photo picker (the one many apps open when you attach a photo) can show one cloud photo library next to the photos on your phone. Normally that's Google Photos.
 
 nc-media-provider implements Android's `CloudMediaProvider` API so that your Nextcloud photo library can fill that slot instead:
 
@@ -14,6 +14,8 @@ nc-media-provider implements Android's `CloudMediaProvider` API so that your Nex
 - thumbnails are cached on the phone, and the full file is fetched only when you pick it;
 - your library is never mirrored to the phone;
 - photos that are already on the phone (for example from auto-upload) show up once, not twice.
+
+Apps with their own photo grid, such as Messenger, never open the system picker, so no cloud library can appear in them. Some, like WhatsApp, offer it behind a folder or "more" button. For the rest, the app will offer a "Send from Nextcloud" shortcut that picks through the system picker and shares the photo into them.
 
 It works with plain Nextcloud and doesn't depend on a particular gallery app. If [Memories](https://github.com/pulsejet/memories) is installed, the app uses it for better dates and video details.
 

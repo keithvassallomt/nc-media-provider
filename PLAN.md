@@ -1,15 +1,15 @@
 # nc-media-provider: project plan
 
-**Status (2026-10-02):** planning agreed, no code written. Phase 0.1 is done: activation needs no root on either test phone (see [docs/device-notes.md](docs/device-notes.md)). Phase 0.2 is done (see [docs/server-notes.md](docs/server-notes.md)), and so is 0.3 (see [docs/base-repo-map.md](docs/base-repo-map.md)). Phase 0 is complete. Phases 1.1 to 1.4 are done; next up is the on-device test, 1.5.
+**Status (2026-10-02):** planning agreed, no code written. Phase 0.1 is done: activation needs no root on either test phone (see [docs/device-notes.md](docs/device-notes.md)). Phase 0.2 is done (see [docs/server-notes.md](docs/server-notes.md)), and so is 0.3 (see [docs/base-repo-map.md](docs/base-repo-map.md)). Phase 0 is complete. Phases 1.1 to 1.4 are done. 1.5 passed on the GrapheneOS phone (see docs/device-notes.md); the stock Pixel run is still to do.
 
 Progress is tracked in [GitHub issues](https://github.com/keithvassallomt/nc-media-provider/issues): one issue per phase, with each numbered sub-task below as a sub-issue.
 
 ## Goal
 
-nc-media-provider is an Android app that implements Android's `CloudMediaProvider` API, so a user's Nextcloud photo library appears as the cloud source in the system photo picker. Any app that uses the modern picker (Messenger, email clients, social apps) can then attach photos and videos straight from Nextcloud.
+nc-media-provider is an Android app that implements Android's `CloudMediaProvider` API, so a user's Nextcloud photo library appears as the cloud source in the system photo picker. Any app that opens the system picker can then attach photos and videos straight from Nextcloud. Apps with their own photo grid, such as Messenger, read the phone's media database directly and never see a cloud provider (confirmed in Phase 1.5); for those, a "Send from Nextcloud" shortcut (4.7) picks through the system picker and shares into them.
 
 ```text
-Messenger
+An app that opens the system picker (WhatsApp's folder button, a browser upload, …)
    ↓
 Attach photo
    ↓
@@ -21,7 +21,7 @@ User browses remote photos
    ↓
 Selected item is fetched on demand
    ↓
-Messenger receives the media
+The app receives the original file
 ```
 
 The user should never need to download a photo first, browse Nextcloud through the generic file picker, keep a local copy of the whole library, or upload it to Google Photos.
@@ -133,6 +133,7 @@ We therefore keep a local snapshot database that gives each row a sync generatio
 - The flag's current value is not a reliable base to append to. On the stock Pixel, `mediaprovider/allowed_cloud_providers` holds a server-set *authority* (`com.google.android.apps.photos.cloudpicker`) that MediaProvider ignores, while the effective list (`[com.google.android.apps.photos]`) comes from the Pixel overlay's default. Activation must write an explicit list of package names.
 - Defaults differ by OS. Stock Pixel: cloud media is on and Google Photos is allowed and active. GrapheneOS: cloud media is off and the allow-list is empty, so Google Photos isn't a cloud source at all. There, `cloud_media_feature_enabled=true` is also needed, and the picker's cloud settings screen (`PhotoPickerSettingsActivity`) only becomes enabled after a reboot.
 - Only one cloud provider can be active at a time. The base repo's commands replace the allow-list, which removes Google Photos.
+- Updating the app deselects it: replacing the package briefly removes it, and MediaProvider resets the cloud provider to none without restoring it (seen in Phase 1.5). The app can't select itself.
 - Restoring the original state is `device_config clear_override` for each overridden flag, which hands control back to the server and overlay defaults.
 - The `media_provider` shell tool is not available on either phone. Read cloud picker state with `dumpsys activity provider <MediaProvider package>/com.android.providers.media.MediaProvider`: the package is `com.google.android.providers.media.module` on stock Pixels and `com.android.providers.media.module` on AOSP builds such as GrapheneOS.
 - The picker UI also differs. The stock Pixel uses the newer picker (`com.google.android.photopicker`). GrapheneOS uses the older picker built into MediaProvider.
@@ -227,7 +228,7 @@ Server test matrix:
 
 **1.5 Activate and smoke test (Keith, on device).** Write an explicit allow-list (Google Photos where present, plus our package) to both namespaces, and on GrapheneOS also enable cloud media and reboot. Select the provider in the picker's cloud settings, open the picker to start a sync, and check `dumpsys` and logcat. On the stock Pixel this also confirms a third-party provider appears in Google's picker, which Phase 0.1 couldn't test without an APK.
 
-**Exit:** the test folder's photos show in the picker on both phones, thumbnails load, and a photo attached in Messenger arrives as the original file. This is the go/no-go point for everything after.
+**Exit:** the test folder's photos show in the picker on both phones, thumbnails load, and a photo attached in an app that opens the system picker (WhatsApp's folder button, for example) arrives as the original file. This is the go/no-go point for everything after.
 
 ### Phase 2: Sync engine
 
@@ -240,7 +241,8 @@ Server test matrix:
 **2.2 Full listing.** Runs on the first import and in a weekly check.
 
 - One SEARCH request covers all selected folders (Nextcloud 30 and later). Older servers get one SEARCH per folder.
-- Paging uses date windows: each page asks for items modified at or before the last date seen, deduplicated by fileId.
+- Paging uses date windows: each page asks for items modified at or before the last date seen, deduplicated by fileId. Already in place from Phase 1.3.
+- **Must handle more than a page of files sharing one modification second.** Phase 1.5 hit this on Keith's server (over 1,000 files in one second), which stops the date-window listing early. Options to evaluate on the test servers: a second window on `nc:upload_time` or `nc:creation_time` within that second, or bounded offset paging inside a single-second window.
 - Pages hold 500 to 1000 items.
 - Drop hidden items, remove duplicates of files reachable through two mounts, and optionally respect `.nomedia` files. SEARCH over the home folder also returns files from folders other users share, from `.nomedia` folders and from outside the photo folders (confirmed in 0.2), so filtering by the selected folders is the app's job.
 
@@ -258,9 +260,11 @@ Server test matrix:
 
 **2.5 First import.** Runs as a background job that can resume after interruption and shows its progress in the app. It commits to the database every 2,000 or so items and notifies the picker each time, so photos appear within seconds rather than after the whole library is done.
 
+**2.5a Network only when allowed.** Android 17 cuts this app's network off whenever its process isn't in the foreground or being called by MediaProvider (Phase 1.5: the firewall rule flips back to blocked 5 to 10 seconds after a call returns). Listing and change checks must run inside MediaProvider's calls or as WorkManager jobs with a network constraint, never on a free thread after a call returns.
+
 **2.6 Triggers.**
 
-- `onGetMediaCollectionInfo` reads only the database, then schedules a background check at most every 30 seconds.
+- `onGetMediaCollectionInfo` reads only the database, then schedules a background check at most every 30 seconds. Per 2.5a, that check is a WorkManager job, not a plain thread.
 - A WorkManager job also checks every few hours, and there is a "Refresh now" button.
 - After any committed change, the picker is notified if we are the active provider.
 
@@ -286,7 +290,7 @@ Moved up to straight after the sync engine, because an auto-uploading phone has 
 
 ### Phase 4: Accounts, settings and activation
 
-**4.1 Login.** Nextcloud's Login Flow v2 opens in an in-app browser tab. The app polls every few seconds for up to 20 minutes, and the app name shows in Nextcloud's security settings. The login name may be an email, so the app then looks up the actual user ID, checks the server's features (see "Supporting any Nextcloud server") and detects Memories.
+**4.1 Login.** Nextcloud's Login Flow v2 opens in an in-app browser tab. The app polls every few seconds for up to 20 minutes, and the app name shows in Nextcloud's security settings. The login name may be an email, so the app then looks up the actual user ID, checks the server's features (see "Supporting any Nextcloud server") and detects Memories. If the server resolves to a private address, request `ACCESS_LOCAL_NETWORK` with an explanation: without it Android 17 blocks the connection (Phase 1.5).
 
 **4.2 Credentials.** Stored with the base repo's Keystore encryption and excluded from backups. The app trusts system and user-installed certificates, for self-hosted servers. Decide on plain HTTP: the base allows cleartext app-wide for LAN servers; ours should at most allow it for LAN addresses, with a warning.
 
@@ -308,11 +312,14 @@ Moved up to straight after the sync engine, because an auto-uploading phone has 
 - a `<queries>` manifest entry so the app can detect whether Google Photos is installed;
 - no silent fallback to `device_config put` if `override` fails (the base does this), and no automatic reboot unless one is needed;
 - a reboot prompt where the picker's cloud settings screen isn't enabled yet (GrapheneOS);
+- after an app update (`MY_PACKAGE_REPLACED`), a notification if the app was the selected cloud provider and no longer is, linking to the picker's cloud settings. Check whether the shell (and so Shizuku) can re-select it, for example through MediaProvider's `set_cloud_provider` call;
 - restore commands (`clear_override` for each flag written);
 - buttons to open the picker's cloud settings and to test the picker;
 - diagnostics: item count, generation, last sync, last error, cache sizes.
 
 Onboarding says plainly that only one cloud source can be active at a time, and that users switch between Google Photos and this app in the picker's cloud settings.
+
+**4.7 "Send from Nextcloud" shortcut.** Apps with their own photo grid, such as Messenger, never open the system picker, so cloud photos can't appear in them (Phase 1.5). A launcher shortcut and a Quick Settings tile open the system picker (`PickVisualMedia`), then hand the picked photos to the Android share sheet (`ACTION_SEND` or `ACTION_SEND_MULTIPLE`), so they can go to any app that accepts shares. Forward the picker's read grant with the share intent if Android allows it; otherwise copy the picked files into the cache and share them through a `FileProvider`. Check that the receiving app gets the original, not a preview.
 
 **Exit:** a fresh install gets to a working picker with nothing hard-coded.
 
@@ -422,7 +429,9 @@ Onboarding says plainly that only one cloud source can be active at a time, and 
 ## Risks
 
 - **Activation on a stock Pixel is only partly proven.** Phase 0.1 showed that adb can change the allow-list on both phones without root, and that a user-installed provider becomes selectable on GrapheneOS. A third-party provider appearing in the stock Pixel's picker is still untested (Phase 1.5). One Pixel 9 Pro on Android 17 using Shizuku reportedly showed only Google Photos, and that was never resolved.
-- **Local network permission.** API 37 adds `ACCESS_LOCAL_NETWORK`. If Android 17 enforces it for apps targeting 37, a Nextcloud server on a LAN address may need the permission granted during setup, since the provider makes requests in the background for the picker. Test against a LAN-only server in Phase 1.
+- **Local network permission.** Confirmed in Phase 1.5: Android 17 blocks apps targeting 37 from LAN addresses unless they hold the runtime permission `ACCESS_LOCAL_NETWORK`. The app now declares and requests it; 4.1 must make the request part of sign-in.
+- **Background network restriction.** Confirmed in Phase 1.5: no network outside the foreground or MediaProvider's calls (2.5a).
+- **Updates deselect the provider.** Every app update switches the picker back to no cloud provider (4.6).
 - **Google could close the door.** A future Android or MediaProvider module update could remove these flags from what adb may write. Nothing in the app could work around that.
 - **Video previews may break** in the Android 17 picker until Phase 5.4 lands.
 - **HEIC and video thumbnails** depend on server settings (Phase 0.2, with fallbacks in Phase 5).

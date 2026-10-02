@@ -10,6 +10,9 @@
         <item quantity="other">%d images listed</item>
     </plurals>
     <string name="library_not_listed">Not listed yet. Open the picker to start.</string>
+    <string name="local_network_granted">Local network access allowed</string>
+    <string name="local_network_missing">Local network access not allowed. A server on your home network can’t be reached without it.</string>
+    <string name="grant_local_network">Allow local network access</string>
     <string name="local_title">Prefer local originals</string>
     <string name="local_explanation">Allow full photo and video access so files already on this phone are handed over directly instead of being downloaded again.</string>
     <string name="grant_media_access">Grant media access</string>
