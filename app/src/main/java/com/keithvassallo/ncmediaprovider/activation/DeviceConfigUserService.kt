@@ -13,30 +13,41 @@ class DeviceConfigUserService() : IActivationService.Stub() {
     constructor(@Suppress("UNUSED_PARAMETER") context: Context) : this()
 
     /**
-     * Writes the flags as local overrides. There is deliberately no fallback to `put`: a `put`
-     * value can be overwritten by the server sync, and `clear_override` would not undo it.
+     * Writes the allow-list and feature flag as local overrides, starting from MediaProvider's
+     * effective list so other providers stay allowed, then checks the result through MediaProvider
+     * itself rather than `device_config get` (PLAN 4.6). There is deliberately no fallback to
+     * `put`: a `put` value can be overwritten by the server sync, and `clear_override` would not
+     * undo it.
      */
-    override fun activate(): String {
-        val settings = CloudProviderActivation.settings(BuildConfig.APPLICATION_ID)
-        applyAndVerify(settings, "override")?.let { failure ->
+    override fun activate(keepGooglePhotos: Boolean): String {
+        val packageName = BuildConfig.APPLICATION_ID
+        val before = readPickerState()
+        val allowList = CloudProviderActivation.allowList(packageName, keepGooglePhotos, before?.allowedPackages.orEmpty())
+        apply(CloudProviderActivation.settings(allowList), "override")?.let { failure ->
             throw RemoteException("DeviceConfig activation failed: $failure")
         }
-        return "override"
+        // MediaProvider picks up DeviceConfig changes through a listener, so give it a moment.
+        repeat(VERIFY_ATTEMPTS) {
+            val state = readPickerState()
+            if (state != null && packageName in state.allowedPackages) {
+                return if (state.cloudMediaEnabled) RESULT_ACTIVE else RESULT_RESTART
+            }
+            Thread.sleep(VERIFY_INTERVAL_MS)
+        }
+        throw RemoteException("MediaProvider doesn't list this app as allowed after the change")
     }
 
-    private fun applyAndVerify(
-        settings: List<DeviceConfigSetting>,
-        operation: String,
-    ): String? {
-        apply(settings, operation)?.let { return it }
-        settings.forEach { setting ->
-            val result = runDeviceConfig("get", setting.namespace, setting.key)
-            val actual = result.output.lineSequence().lastOrNull()?.trim().orEmpty()
-            if (!result.successful || actual != setting.value) {
-                return "could not verify ${setting.namespace}/${setting.key}"
-            }
-        }
-        return null
+    /** `content call ... set_cloud_provider`, which the shell may make, then a check that it took. */
+    override fun selectProvider(): Boolean {
+        val packageName = BuildConfig.APPLICATION_ID
+        val set = run(CONTENT_BINARY, *CloudProviderActivation.selectArguments(packageName).toTypedArray())
+        if (!set.successful || !set.output.contains("set_cloud_provider_result=true")) return false
+        val check = run(CONTENT_BINARY, "call", "--uri", "content://media", "--method", "get_cloud_provider")
+        return check.output.contains("=${CloudProviderActivation.authority(packageName)}")
+    }
+
+    private fun readPickerState(): PickerState? = CloudProviderActivation.MEDIA_PROVIDER_COMPONENTS.firstNotNullOfOrNull { component ->
+        CloudProviderActivation.parsePickerState(run(DUMPSYS_BINARY, "activity", "provider", component).output)
     }
 
     override fun destroy() {
@@ -59,9 +70,11 @@ class DeviceConfigUserService() : IActivationService.Stub() {
         return null
     }
 
-    private fun runDeviceConfig(vararg arguments: String): CommandResult {
+    private fun runDeviceConfig(vararg arguments: String): CommandResult = run(DEVICE_CONFIG_BINARY, *arguments)
+
+    private fun run(binary: String, vararg arguments: String): CommandResult {
         val process = try {
-            ProcessBuilder(listOf(DEVICE_CONFIG_BINARY, *arguments))
+            ProcessBuilder(listOf(binary, *arguments))
                 .redirectErrorStream(true)
                 .start()
         } catch (error: Exception) {
@@ -85,6 +98,13 @@ class DeviceConfigUserService() : IActivationService.Stub() {
 
     companion object {
         private const val DEVICE_CONFIG_BINARY = "/system/bin/device_config"
+        private const val CONTENT_BINARY = "/system/bin/content"
+        private const val DUMPSYS_BINARY = "/system/bin/dumpsys"
+        private const val VERIFY_ATTEMPTS = 10
+        private const val VERIFY_INTERVAL_MS = 300L
+
+        const val RESULT_ACTIVE = "active"
+        const val RESULT_RESTART = "restart"
         private const val COMMAND_TIMEOUT_SECONDS = 10L
     }
 }

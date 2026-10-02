@@ -99,6 +99,52 @@ class LibraryRepository private constructor(context: Context) {
 
     fun lastSyncError(): String? = settings.lastSyncError
 
+    val wasSelectedProvider: Boolean get() = settings.wasSelectedProvider
+
+    /** Whether MediaProvider has this app selected as the picker's cloud source right now. */
+    fun isSelectedProvider(): Boolean = runCatching {
+        MediaStore.isCurrentCloudMediaProviderAuthority(appContext.contentResolver, "${appContext.packageName}.cloudmedia")
+    }.getOrDefault(false)
+
+    /**
+     * Records whether this app is selected (PLAN 4.6). Being deselected only counts as the user's
+     * choice if the app hasn't been updated since it was last seen selected: an update deselects it
+     * too, and a sync that runs straight after one must not erase what the reselect job
+     * needs to know. Writes at most every few minutes, since every picker query calls this.
+     */
+    fun noteSelectedProvider(selected: Boolean) {
+        val now = System.currentTimeMillis()
+        if (selected) {
+            if (!settings.wasSelectedProvider) settings.wasSelectedProvider = true
+            if (now - settings.selectedSeenMillis > SELECTED_SEEN_RESOLUTION_MS) settings.selectedSeenMillis = now
+        } else if (settings.wasSelectedProvider) {
+            val updated = runCatching { appContext.packageManager.getPackageInfo(appContext.packageName, 0).lastUpdateTime }.getOrDefault(0L)
+            if (updated < settings.selectedSeenMillis) settings.wasSelectedProvider = false
+        }
+    }
+
+    /** What the diagnostics show (PLAN 4.6). Call off the main thread. */
+    fun diagnostics(): Diagnostics {
+        val state = if (hasAccount) store.state() else null
+        return Diagnostics(
+            items = if (hasAccount) store.mediaCount() else 0,
+            generation = state?.generation ?: 0L,
+            matched = if (hasAccount) store.matchedCount() else 0,
+            lastCheckMillis = state?.lastCheckMillis ?: 0L,
+            lastError = settings.lastSyncError,
+            cache = diskCache.stats(),
+        )
+    }
+
+    data class Diagnostics(
+        val items: Int,
+        val generation: Long,
+        val matched: Int,
+        val lastCheckMillis: Long,
+        val lastError: String?,
+        val cache: CacheStats,
+    )
+
     // Signing in (PLAN 4.1) and choosing folders (PLAN 4.3). Network calls: run them off the main thread.
 
     fun serverStatus(baseUrl: String): ServerStatus = client.serverStatus(baseUrl)
@@ -699,6 +745,7 @@ class LibraryRepository private constructor(context: Context) {
 
         private const val IMPORT_BATCH = 2_000
         private const val LOCAL_MATCH_DELAY_MS = 5_000L
+        private const val SELECTED_SEEN_RESOLUTION_MS = 5L * 60L * 1_000L
 
         /** Images only until video arrives in Phase 5. */
         private const val MIME_PREFIX = "image/"

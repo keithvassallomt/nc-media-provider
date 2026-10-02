@@ -101,6 +101,9 @@ interface LibraryDao {
     @Query("SELECT id, mediaStoreUri FROM media WHERE mediaStoreUri IS NOT NULL")
     fun localMatches(): List<LocalMatch>
 
+    @Query("SELECT COUNT(*) FROM media WHERE mediaStoreUri IS NOT NULL")
+    fun matchedCount(): Int
+
     @Query("SELECT * FROM folder")
     fun folders(): List<FolderEtag>
 

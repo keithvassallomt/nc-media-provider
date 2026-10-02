@@ -83,6 +83,8 @@ class NcCloudMediaProvider : CloudMediaProvider() {
 
     override fun onQueryMedia(extras: Bundle): Cursor {
         enforceSystemCaller()
+        // Only the selected provider is asked for media; an update will deselect it (PLAN 4.6).
+        repository.noteSelectedProvider(true)
         val albumId = extras.getString(CloudMediaProviderContract.EXTRA_ALBUM_ID)
         val pageSize = extras.pageSize(DEFAULT_PAGE_SIZE)
         val pageToken = extras.getString(CloudMediaProviderContract.EXTRA_PAGE_TOKEN)

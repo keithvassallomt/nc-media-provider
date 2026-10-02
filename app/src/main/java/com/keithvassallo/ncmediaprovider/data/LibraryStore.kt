@@ -30,6 +30,9 @@ class LibraryStore(
 
     fun mediaCount(): Int = dao.mediaCount()
 
+    /** Rows with a copy on the phone (PLAN 3.2). */
+    fun matchedCount(): Int = dao.matchedCount()
+
     fun media(id: String): MediaItem? = dao.media(id)
 
     /**

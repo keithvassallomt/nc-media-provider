@@ -26,7 +26,9 @@ import androidx.work.WorkInfo
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.keithvassallo.ncmediaprovider.BuildConfig
 import com.keithvassallo.ncmediaprovider.R
+import com.keithvassallo.ncmediaprovider.activation.CloudProviderActivation
 import com.keithvassallo.ncmediaprovider.activation.DeviceConfigUserService
+import com.keithvassallo.ncmediaprovider.activation.ShizukuSession
 import com.keithvassallo.ncmediaprovider.activation.IActivationService
 import com.keithvassallo.ncmediaprovider.data.CredentialStore
 import com.keithvassallo.ncmediaprovider.data.LibraryRepository
@@ -47,16 +49,7 @@ class SetupActivity : AppCompatActivity() {
     private var shizukuAttempt = 0
     private var syncWasRunning = false
 
-    private val shizukuUserServiceArgs by lazy {
-        Shizuku.UserServiceArgs(
-            ComponentName(BuildConfig.APPLICATION_ID, DeviceConfigUserService::class.java.name),
-        )
-            .daemon(false)
-            .tag("nc-media-provider-activation")
-            .processNameSuffix("activation")
-            .debuggable(BuildConfig.DEBUG)
-            .version(BuildConfig.VERSION_CODE)
-    }
+    private val shizukuUserServiceArgs get() = ShizukuSession.userServiceArgs
 
     private val shizukuBinderReceivedListener = Shizuku.OnBinderReceivedListener {
         updateShizukuUi()
@@ -90,8 +83,12 @@ class SetupActivity : AppCompatActivity() {
             }
             val activationService = IActivationService.Stub.asInterface(service)
             lifecycleScope.launch {
+                val keepGooglePhotos = keepGooglePhotos()
                 val result = runCatching {
-                    withContext(Dispatchers.IO) { activationService.activate() }
+                    withContext(Dispatchers.IO) {
+                        val state = activationService.activate(keepGooglePhotos)
+                        if (state == DeviceConfigUserService.RESULT_ACTIVE && activationService.selectProvider()) RESULT_SELECTED else state
+                    }
                 }
                 finishShizukuActivation(result)
             }
@@ -126,8 +123,17 @@ class SetupActivity : AppCompatActivity() {
         binding = ActivitySetupBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        binding.adbCommands.text = ActivationCommands.enable(BuildConfig.APPLICATION_ID)
         binding.restoreCommands.text = ActivationCommands.restore(BuildConfig.APPLICATION_ID)
+        val googlePhotosInstalled = runCatching {
+            packageManager.getPackageInfo(CloudProviderActivation.GOOGLE_PHOTOS_PACKAGE, 0)
+        }.isSuccess
+        binding.keepGooglePhotosSwitch.visibility = if (googlePhotosInstalled) View.VISIBLE else View.GONE
+        binding.keepGooglePhotosSwitch.isChecked = keepGooglePhotos()
+        binding.keepGooglePhotosSwitch.setOnCheckedChangeListener { _, checked ->
+            getSharedPreferences(UI_PREFERENCES, MODE_PRIVATE).edit { putBoolean(KEY_KEEP_GOOGLE_PHOTOS, checked) }
+            showAdbCommands()
+        }
+        showAdbCommands()
         binding.grantMediaButton.setOnClickListener {
             permissionRequest.launch(
                 arrayOf(
@@ -329,6 +335,18 @@ class SetupActivity : AppCompatActivity() {
                 else -> R.string.activation_status_inactive
             },
         )
+        if (repository.hasAccount) repository.noteSelectedProvider(current)
+    }
+
+    /**
+     * Keep Google Photos on the allow-list: on unless the user turns it off, and only offered when
+     * it is installed (PLAN 4.6).
+     */
+    private fun keepGooglePhotos(): Boolean = binding.keepGooglePhotosSwitch.visibility == View.VISIBLE &&
+        getSharedPreferences(UI_PREFERENCES, MODE_PRIVATE).getBoolean(KEY_KEEP_GOOGLE_PHOTOS, true)
+
+    private fun showAdbCommands() {
+        binding.adbCommands.text = ActivationCommands.enable(BuildConfig.APPLICATION_ID, keepGooglePhotos())
     }
 
     private fun openPickerSettings() {
@@ -404,13 +422,25 @@ class SetupActivity : AppCompatActivity() {
         }
         updateActivationUi()
         updateShizukuUi()
-        result.onSuccess {
-            MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.shizuku_activation_saved)
-                .setMessage(R.string.shizuku_activation_saved_message)
-                .setNegativeButton(android.R.string.ok, null)
-                .setPositiveButton(R.string.open_picker_settings) { _, _ -> openPickerSettings() }
-                .show()
+        result.onSuccess { outcome ->
+            when (outcome) {
+                RESULT_SELECTED -> MaterialAlertDialogBuilder(this)
+                    .setTitle(R.string.shizuku_activation_saved)
+                    .setMessage(R.string.shizuku_activation_selected_message)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show()
+                DeviceConfigUserService.RESULT_RESTART -> MaterialAlertDialogBuilder(this)
+                    .setTitle(R.string.shizuku_activation_restart_title)
+                    .setMessage(R.string.shizuku_activation_restart_message)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show()
+                else -> MaterialAlertDialogBuilder(this)
+                    .setTitle(R.string.shizuku_activation_saved)
+                    .setMessage(R.string.shizuku_activation_saved_message)
+                    .setNegativeButton(android.R.string.ok, null)
+                    .setPositiveButton(R.string.open_picker_settings) { _, _ -> openPickerSettings() }
+                    .show()
+            }
         }.onFailure(::showShizukuFailure)
     }
 
@@ -474,16 +504,28 @@ class SetupActivity : AppCompatActivity() {
         binding.shizukuStatus.text = getString(R.string.shizuku_activation_failed, detail)
     }
 
+    /** Diagnostics (PLAN 4.6): the library, the last sync and the caches. */
     private fun updateCacheUi() {
         binding.cacheSummary.setText(R.string.cache_loading)
         lifecycleScope.launch {
-            val stats = withContext(Dispatchers.IO) { repository.cacheStats() }
+            val diagnostics = withContext(Dispatchers.IO) { repository.diagnostics() }
+            val size = { bytes: Long -> Formatter.formatFileSize(this@SetupActivity, bytes) }
+            val lastCheck = if (diagnostics.lastCheckMillis == 0L) {
+                getString(R.string.diagnostics_never)
+            } else {
+                DateUtils.getRelativeTimeSpanString(diagnostics.lastCheckMillis, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
+            }
             binding.cacheSummary.text = getString(
-                R.string.cache_summary,
-                Formatter.formatFileSize(this@SetupActivity, stats.previews.usedBytes),
-                Formatter.formatFileSize(this@SetupActivity, stats.previews.maximumBytes),
-                Formatter.formatFileSize(this@SetupActivity, stats.originals.usedBytes),
-                Formatter.formatFileSize(this@SetupActivity, stats.originals.maximumBytes),
+                R.string.diagnostics_summary,
+                diagnostics.items,
+                diagnostics.generation,
+                diagnostics.matched,
+                lastCheck,
+                diagnostics.lastError ?: getString(R.string.diagnostics_no_error),
+                size(diagnostics.cache.previews.usedBytes),
+                size(diagnostics.cache.previews.maximumBytes),
+                size(diagnostics.cache.originals.usedBytes),
+                size(diagnostics.cache.originals.maximumBytes),
             )
         }
     }
@@ -504,6 +546,8 @@ class SetupActivity : AppCompatActivity() {
     companion object {
         private const val ACCESS_LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
         private const val UI_PREFERENCES = "ui"
+        private const val KEY_KEEP_GOOGLE_PHOTOS = "keep_google_photos"
+        private const val RESULT_SELECTED = "selected"
         private const val KEY_ASKED_NOTIFICATIONS = "asked_notifications"
         private const val SHIZUKU_PERMISSION_REQUEST = 41
         private const val SHIZUKU_BIND_TIMEOUT_MS = 20_000L

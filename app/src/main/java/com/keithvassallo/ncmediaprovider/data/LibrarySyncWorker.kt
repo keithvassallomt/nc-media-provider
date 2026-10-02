@@ -30,6 +30,7 @@ class LibrarySyncWorker(context: Context, parameters: WorkerParameters) : Worker
             repository.checkRemoteWipe()
         } else {
             repository.syncNow(inputData.getBoolean(KEY_FULL, false)) { setProgressAsync(it.toData()) }
+            repository.noteSelectedProvider(repository.isSelectedProvider())
         }
         Result.success()
     } catch (error: SignInRequiredException) {

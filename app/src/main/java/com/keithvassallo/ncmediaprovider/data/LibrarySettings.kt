@@ -39,6 +39,19 @@ class LibrarySettings(context: Context) {
         get() = preferences.getBoolean(KEY_RESPECT_NO_MEDIA, true)
         set(value) = preferences.edit { putBoolean(KEY_RESPECT_NO_MEDIA, value) }
 
+    /**
+     * Whether this app was the picker's selected cloud provider when last seen, so an update that
+     * deselects it can select it again (PLAN 4.6).
+     */
+    var wasSelectedProvider: Boolean
+        get() = preferences.getBoolean(KEY_WAS_SELECTED, false)
+        set(value) = preferences.edit { putBoolean(KEY_WAS_SELECTED, value) }
+
+    /** When this app was last seen selected; see [LibraryRepository.noteSelectedProvider]. */
+    var selectedSeenMillis: Long
+        get() = preferences.getLong(KEY_SELECTED_SEEN, 0L)
+        set(value) = preferences.edit { putLong(KEY_SELECTED_SEEN, value) }
+
     /** Why the last sync failed, for the diagnostics (PLAN 4.6); null after a sync succeeds. */
     var lastSyncError: String?
         get() = preferences.getString(KEY_LAST_SYNC_ERROR, null)
@@ -50,6 +63,8 @@ class LibrarySettings(context: Context) {
         private const val KEY_FOLDERS = "folders"
         private const val KEY_RESPECT_NO_MEDIA = "respect_no_media"
         private const val KEY_LAST_SYNC_ERROR = "last_sync_error"
+        private const val KEY_WAS_SELECTED = "was_selected_provider"
+        private const val KEY_SELECTED_SEEN = "selected_seen_millis"
 
         /** Nextcloud refuses control characters in file names, so no folder path holds one. */
         private const val FOLDER_SEPARATOR = '\n'

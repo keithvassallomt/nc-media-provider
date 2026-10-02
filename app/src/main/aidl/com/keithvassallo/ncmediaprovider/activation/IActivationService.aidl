@@ -2,5 +2,11 @@ package com.keithvassallo.ncmediaprovider.activation;
 
 interface IActivationService {
     void destroy() = 16777114;
-    String activate() = 1;
+
+    // Returns "active" when MediaProvider applied it, or "restart" when the phone reads the
+    // cloud media flag only at startup (GrapheneOS).
+    String activate(boolean keepGooglePhotos) = 1;
+
+    // Selects this app as the picker's cloud source; true when MediaProvider confirms it.
+    boolean selectProvider() = 2;
 }

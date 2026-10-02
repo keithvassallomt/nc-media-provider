@@ -46,6 +46,15 @@
             android:name=".ui.FolderPickerActivity"
             android:exported="false" />
 
+        <!-- Reselects the provider after an update deselects it (PLAN 4.6). -->
+        <receiver
+            android:name=".activation.PackageReplacedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name=".provider.NcCloudMediaProvider"
             android:authorities="${applicationId}.cloudmedia"
