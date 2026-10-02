@@ -1,0 +1,5 @@
+# Tools to generate the synthetic test library (make_library.sh).
+FROM docker.io/library/debian:trixie-slim
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends imagemagick libheif-examples libheif-plugin-x265 ffmpeg libimage-exiftool-perl uuid-runtime \
+ && rm -rf /var/lib/apt/lists/*
