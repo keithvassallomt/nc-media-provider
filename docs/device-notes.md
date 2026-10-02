@@ -254,6 +254,12 @@ Send from Nextcloud's two bugs:
 
 The picker downloads the originals of the selected items before returning (`SelectedMediaPreloader`, 475 ms for 4 MB), so the receiving app reads them from the cache in 4 to 9 ms.
 
+### Sign-out and a revoked app password (GrapheneOS, 2026-10-02)
+
+- **Sign-out** revoked the app password and cleared the phone; the picker showed only the phone's photos. Signed out, the provider first still reported an account name ("Not set up"), so the picker announced "photos from Not set up"; it now reports no account, which is the picker's state for "set up an account".
+- **Revoking the app in Nextcloud's "Devices & sessions"**: the next sync's first request was refused (one 401, after about 5 s), the app stopped all requests and cancelled its syncs, the remote-wipe check ran in its own job and found no wipe, and the "Sign in to Nextcloud again" notification appeared. Signing in again as the same user resumed with a change check, without reimporting.
+- **Vanadium wedged twice**, once after each sign-in: neither the sign-in tab nor the full browser would load the server (blank page) while a laptop could, and only a force stop of Vanadium fixed it. The app made no failed requests that could have triggered Nextcloud's throttling. Both times the user left the sign-in tab by going home rather than closing it. Worth checking with other browsers (PLAN 8).
+
 ## Photo keyboard prototype (GrapheneOS, 2026-10-02)
 
 A keyboard showing the 30 newest Nextcloud photos, inserting the tapped one through the keyboard content API (branch `proto/photo-keyboard`, debug builds only). Tested in Messenger, whose own photo grid never sees a cloud provider:

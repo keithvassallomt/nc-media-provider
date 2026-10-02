@@ -288,7 +288,8 @@ class LibraryRepository private constructor(context: Context) {
     /** Call off the main thread. */
     fun itemCount(): Int = if (hasAccount) store.mediaCount() else 0
 
-    fun accountName(): String = credentials.account()?.displayName ?: "Not set up"
+    /** "user@host" for the picker's cloud settings; null when signed out. */
+    fun accountName(): String? = credentials.account()?.displayName
 
     /** When the last sync finished, or 0. Call off the main thread. */
     fun lastCheckMillis(): Long = if (hasAccount) store.state().lastCheckMillis else 0L

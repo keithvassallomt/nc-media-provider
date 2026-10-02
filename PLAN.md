@@ -1,6 +1,6 @@
 # nc-media-provider: project plan
 
-**Status (2026-10-02):** Phase 0 is complete: activation needs no root on either test phone (see [docs/device-notes.md](docs/device-notes.md)), the server matrix is in [docs/server-notes.md](docs/server-notes.md), and the base repo map is in [docs/base-repo-map.md](docs/base-repo-map.md). Phase 1 is done except the 1.5 run on the stock Pixel. Phase 2 is built and its exit test passed on the GrapheneOS phone (see the device notes). Phase 3 passed its exit test. Phase 4 passed its exit test on the GrapheneOS phone (a fresh install signed in and reached a working picker); only 4.4's failure handling is still to be seen on a phone.
+**Status (2026-10-02):** Phase 0 is complete: activation needs no root on either test phone (see [docs/device-notes.md](docs/device-notes.md)), the server matrix is in [docs/server-notes.md](docs/server-notes.md), and the base repo map is in [docs/base-repo-map.md](docs/base-repo-map.md). Phase 1 is done except the 1.5 run on the stock Pixel. Phase 2 is built and its exit test passed on the GrapheneOS phone (see the device notes). Phase 3 passed its exit test. Phase 4 passed its exit test on the GrapheneOS phone (a fresh install signed in and reached a working picker), and sign-out and a revoked app password behaved as designed there too. Phase 5 is next.
 
 Progress is tracked in [GitHub issues](https://github.com/keithvassallomt/nc-media-provider/issues): one issue per phase, with each numbered sub-task below as a sub-issue.
 
@@ -399,6 +399,8 @@ Onboarding says plainly that only one cloud source can be active at a time, and 
 **8.1 Offline.** Collection info and queries come from the database, thumbnails from the cache, and opening a file fails quickly instead of hanging. This also stops Android 17 from deselecting the provider after repeated failures.
 
 **8.2 Background tuning.** WorkManager constraints, cache size settings, and a "Clear cache" button.
+
+**8.3 Browser check.** Vanadium twice stopped loading the server after a sign-in through the app's browser tab, until it was force-stopped (see docs/device-notes.md). Check the sign-in with Chrome and Firefox, and whether a sign-in tab left open is what wedges it.
 
 ### Phase 9: Release
 

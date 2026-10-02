@@ -64,10 +64,12 @@ class NcCloudMediaProvider : CloudMediaProvider() {
                 CloudMediaProviderContract.MediaCollectionInfo.LAST_MEDIA_SYNC_GENERATION,
                 collection.generation,
             )
-            putString(
-                CloudMediaProviderContract.MediaCollectionInfo.ACCOUNT_NAME,
-                repository.accountName(),
-            )
+            // Signed out, there is no account to name. Without one the picker offers to set an
+            // account up through the intent below; a placeholder name made it announce
+            // "photos from Not set up" (Phase 4 sign-out test).
+            repository.accountName()?.let {
+                putString(CloudMediaProviderContract.MediaCollectionInfo.ACCOUNT_NAME, it)
+            }
             if (launchIntent != null) {
                 putParcelable(
                     CloudMediaProviderContract.MediaCollectionInfo.ACCOUNT_CONFIGURATION_INTENT,
