@@ -1,6 +1,6 @@
 # nc-media-provider: project plan
 
-**Status (2026-10-02):** planning agreed, no code written. Phase 0.1 is done: activation needs no root on either test phone (see [docs/device-notes.md](docs/device-notes.md)). Phase 0.2 is done (see [docs/server-notes.md](docs/server-notes.md)), and so is 0.3 (see [docs/base-repo-map.md](docs/base-repo-map.md)). Phase 0 is complete. Phases 1.1 to 1.4 are done. 1.5 passed on the GrapheneOS phone (see docs/device-notes.md); the stock Pixel run is still to do.
+**Status (2026-10-02):** planning agreed, no code written. Phase 0.1 is done: activation needs no root on either test phone (see [docs/device-notes.md](docs/device-notes.md)). Phase 0.2 is done (see [docs/server-notes.md](docs/server-notes.md)), and so is 0.3 (see [docs/base-repo-map.md](docs/base-repo-map.md)). Phase 0 is complete. Phases 1.1 to 1.4 are done. 1.5 passed on the GrapheneOS phone (see docs/device-notes.md); the stock Pixel run is still to do. Phase 2 is largely built (see the notes on each sub-task); its exit test on a phone is next.
 
 Progress is tracked in [GitHub issues](https://github.com/keithvassallomt/nc-media-provider/issues): one issue per phase, with each numbered sub-task below as a sub-issue.
 
@@ -232,7 +232,7 @@ Server test matrix:
 
 ### Phase 2: Sync engine
 
-**2.1 Room database.**
+**2.1 Room database.** Done (schema v2): each media row carries its folder and the generation it last changed in; the sync state holds a random instance ID that is part of the collection ID, so a lost database gives a new collection instead of a generation going backwards; a `folder` table holds etags for 2.4.
 
 - **Media table:** fileId, href, etag, MIME, size, modification time, date taken, dimensions, duration, favorite, live-photo partner, source folder, and the generation it last changed in.
 - **Deletion journal:** fileId and generation.
@@ -246,33 +246,33 @@ Server test matrix:
 - Pages hold 500 to 1000 items.
 - Drop hidden items, remove duplicates of files reachable through two mounts, and optionally respect `.nomedia` files. SEARCH over the home folder also returns files from folders other users share, from `.nomedia` folders and from outside the photo folders (confirmed in 0.2), so filtering by the selected folders is the app's job.
 
-**2.3 Turn changes into generations.**
+**2.3 Turn changes into generations.** Done: a listing is diffed against the stored rows and committed in one transaction under the next generation, only when something changed. Tokens are keyset positions `m:<top>:<generation>:<id>`. Journal rows are pruned after 180 days behind a floor; a picker behind the floor gets a new collection ID. Tested end to end on SQLite under Robolectric.
 
 - Each listing is compared with the database in one transaction. New or changed rows get the next generation, and missing fileIds go into the deletion journal at that generation. The generation only increases when something actually changed.
 - Page tokens name their own pass (`m:` for media, `d:` for deletions), fix the top generation for the whole sync, and carry an offset. The prefix matters because Android 17's picker can pass the last media token into the deletions query.
 - Keep journal rows long enough that a picker far behind still gets every deletion (the base keeps only 8 generations and silently loses older ones). Prune by age. If a picker asks from before the oldest kept row, change the collection ID to force a full resync.
 
-**2.4 Change detection.** Walking folder etags is the standard method, not a later upgrade, because other users may have 100,000 items or more.
+**2.4 Change detection.** Done, more cheaply than below: one PROPFIND reads the root's etag; if it moved, one SEARCH returns every folder's etag (rather than descending folder by folder), and only folders whose etag changed are re-listed one level deep. A file gone from one changed folder but present in another is a move. Favouriting changes no etag, so favourites have their own SEARCH. On Keith's phone an unchanged library checks in 0.8 s; a full background listing takes over a minute. Walking folder etags is the standard method, not a later upgrade, because other users may have 100,000 items or more.
 
 - Ask each selected folder for its etag with a Depth 0 PROPFIND. Nextcloud updates a folder's etag whenever anything below it changes, including inside mounts.
 - If nothing changed, stop. Otherwise descend only into subfolders whose etag changed, as the desktop client does, re-list those, and compare as in 2.3.
 - The weekly full listing catches external-storage changes that etags miss.
 
-**2.5 First import.** Runs as a background job that can resume after interruption and shows its progress in the app. It commits to the database every 2,000 or so items and notifies the picker each time, so photos appear within seconds rather than after the whole library is done.
+**2.5 First import.** Mostly done: a WorkManager job commits every 2,000 files and notifies the picker each time (68 s for Keith's 16,896 images in the background). An interrupted import keeps what it committed and the next run skips it as unchanged. Still to do: progress in the app. Runs as a background job that can resume after interruption and shows its progress in the app. It commits to the database every 2,000 or so items and notifies the picker each time, so photos appear within seconds rather than after the whole library is done.
 
-**2.5a Network only when allowed.** Android 17 cuts this app's network off whenever its process isn't in the foreground or being called by MediaProvider (Phase 1.5: the firewall rule flips back to blocked 5 to 10 seconds after a call returns). Listing and change checks must run inside MediaProvider's calls or as WorkManager jobs with a network constraint, never on a free thread after a call returns.
+**2.5a Network only when allowed.** Done and confirmed on the GrapheneOS phone: the WorkManager job keeps network access with the screen off and the app in the background. Android 17 cuts this app's network off whenever its process isn't in the foreground or being called by MediaProvider (Phase 1.5: the firewall rule flips back to blocked 5 to 10 seconds after a call returns). Listing and change checks must run inside MediaProvider's calls or as WorkManager jobs with a network constraint, never on a free thread after a call returns.
 
-**2.6 Triggers.**
+**2.6 Triggers.** Mostly done: `onGetMediaCollectionInfo` asks for an expedited job at most every 30 s, a periodic job runs every 6 hours, and every committed change notifies the picker. Still to do: the "Refresh now" button.
 
 - `onGetMediaCollectionInfo` reads only the database, then schedules a background check at most every 30 seconds. Per 2.5a, that check is a WorkManager job, not a plain thread.
 - A WorkManager job also checks every few hours, and there is a "Refresh now" button.
 - After any committed change, the picker is notified if we are the active provider.
 
-**2.7 When the collection ID changes.** Only when the folder set or account changes, the database is lost, or the user asks for a rebuild. A new ID empties the picker's cloud tab while it rebuilds.
+**2.7 When the collection ID changes.** Done: server, user and folder set (a change resets the library), the database instance, and the epoch. Only when the folder set or account changes, the database is lost, or the user asks for a rebuild. A new ID empties the picker's cloud tab while it rebuilds.
 
 **2.8 Fields.** Date taken comes from Nextcloud's photo metadata, falling back to the modification time. On real servers many files have no metadata yet, so the fallback is the common path. Dimensions come from `metadata-photos-size`, which is already in display orientation; HEIC files only get it from Nextcloud 35. Core Nextcloud has no video duration, so videos report 0, which the picker accepts.
 
-**2.9 Safety net.** One component builds every row returned to the picker and checks it against the picker's rules: a date taken, size above 0, an image or video MIME type, valid type and duration values, and a well-formed `media_store_uri`. Rows that fail are dropped and logged. Unit tests cover it.
+**2.9 Safety net.** Done: `PickerRowCheck` drops and logs bad rows before they reach the cursor. One component builds every row returned to the picker and checks it against the picker's rules: a date taken, size above 0, an image or video MIME type, valid type and duration values, and a well-formed `media_store_uri`. Rows that fail are dropped and logged. Unit tests cover it.
 
 **Exit:** when a file is added, deleted, moved or edited on the server, the change reaches the picker without logcat showing a full reset.
 
