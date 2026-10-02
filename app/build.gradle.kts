@@ -1,6 +1,25 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
 }
+
+// Debug builds sign in with the server details in the git-ignored local.properties (PLAN 1.2).
+// The app password ends up inside the debug APK, so debug builds must never leave Keith's devices.
+// Release builds and CI (no local.properties) get empty values and no account.
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val debugAccount = listOf(
+    "NC_DEBUG_URL" to "nextcloud.url",
+    "NC_DEBUG_LOGIN" to "nextcloud.login",
+    "NC_DEBUG_USER_ID" to "nextcloud.userId",
+    "NC_DEBUG_APP_PASSWORD" to "nextcloud.appPassword",
+    "NC_DEBUG_FOLDER" to "nextcloud.folder",
+)
+
+fun String.asBuildConfigString() = "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
 val releaseKeystorePath = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull
 val releaseKeystorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull
@@ -30,6 +49,8 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        debugAccount.forEach { (field, _) -> buildConfigField("String", field, "\"\"") }
     }
 
     signingConfigs {
@@ -47,6 +68,9 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            debugAccount.forEach { (field, key) ->
+                buildConfigField("String", field, localProperties.getProperty(key, "").trim().asBuildConfigString())
+            }
         }
         release {
             signingConfig = signingConfigs.findByName("release")

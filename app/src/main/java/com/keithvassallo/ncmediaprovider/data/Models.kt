@@ -3,9 +3,13 @@ package com.keithvassallo.ncmediaprovider.data
 /** One photo or video in the user's Nextcloud library, keyed by its Nextcloud file ID. */
 data class MediaItem(
     val id: String,
+    /** Percent-encoded WebDAV path, as the server returned it. */
+    val href: String,
+    val etag: String,
     val fileName: String,
     val mimeType: String,
     val sizeBytes: Long,
+    val lastModifiedMillis: Long,
     val dateTakenMillis: Long,
     val durationMillis: Long = 0L,
     val width: Int = 0,

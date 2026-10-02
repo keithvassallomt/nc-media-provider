@@ -16,6 +16,7 @@ import android.os.Process
 import android.provider.CloudMediaProvider
 import android.provider.CloudMediaProviderContract
 import android.util.Log
+import com.keithvassallo.ncmediaprovider.data.LibraryNotReadyException
 import com.keithvassallo.ncmediaprovider.data.LibraryRepository
 import com.keithvassallo.ncmediaprovider.data.MediaItem
 import com.keithvassallo.ncmediaprovider.data.Page
@@ -41,7 +42,11 @@ class NcCloudMediaProvider : CloudMediaProvider() {
         SYNC_EXECUTOR.execute {
             runCatching {
                 val repository = LibraryRepository.get(context)
-                if (repository.hasAccount) repository.warmLocalMediaIndex()
+                if (repository.hasAccount) {
+                    repository.warmLocalMediaIndex()
+                    // List the library straight away rather than at the picker's first request.
+                    if (repository.pollChanges()) repository.notifyPickerOfChanges()
+                }
             }
         }
         return true
@@ -175,19 +180,19 @@ class NcCloudMediaProvider : CloudMediaProvider() {
                 addRow(
                     arrayOf<Any?>(
                         item.id,
-                        item.mimeType,
                         item.dateTakenMillis,
                         generation,
+                        item.mimeType,
+                        standardMimeExtension(item.mimeType),
                         item.sizeBytes,
+                        localUri?.toString(),
                         item.durationMillis.takeIf { it > 0L },
                         if (item.isFavorite) 1 else 0,
                         item.width.takeIf { it > 0 },
                         item.height.takeIf { it > 0 },
                         // Nextcloud previews arrive already rotated, with EXIF stripped, and its
                         // reported sizes are in display orientation (PLAN 0.2), so nothing to rotate.
-                        null,
-                        standardMimeExtension(item.mimeType),
-                        localUri?.toString(),
+                        0,
                     ),
                 )
             }
@@ -195,7 +200,11 @@ class NcCloudMediaProvider : CloudMediaProvider() {
 
     private fun safelyQuery(block: () -> Page<MediaItem>): Page<MediaItem> {
         if (!repository.hasAccount) return Page(emptyList(), null)
-        return runCatching(block).onFailure(::logProviderFailure).getOrDefault(Page(emptyList(), null))
+        return runCatching(block).onFailure { error ->
+            // An empty answer would be cached as the real library, so let this sync fail instead.
+            if (error is LibraryNotReadyException) throw error
+            logProviderFailure(error)
+        }.getOrDefault(Page(emptyList(), null))
     }
 
     private fun collectionExtras(collectionId: String, nextPageToken: String? = null): Bundle = Bundle().apply {
@@ -272,19 +281,21 @@ class NcCloudMediaProvider : CloudMediaProvider() {
         /** Keeps a burst of picker callbacks from queueing one sync pass behind another. */
         val SYNC_IN_FLIGHT = AtomicBoolean(false)
 
+        // Intended to match the order AOSP's own test providers use (PLAN 1.4). Unverified, and the
+        // picker is expected to read columns by name, so this is a precaution, not a requirement.
         val MEDIA_PROJECTION = arrayOf(
             CloudMediaProviderContract.MediaColumns.ID,
-            CloudMediaProviderContract.MediaColumns.MIME_TYPE,
             CloudMediaProviderContract.MediaColumns.DATE_TAKEN_MILLIS,
             CloudMediaProviderContract.MediaColumns.SYNC_GENERATION,
+            CloudMediaProviderContract.MediaColumns.MIME_TYPE,
+            CloudMediaProviderContract.MediaColumns.STANDARD_MIME_TYPE_EXTENSION,
             CloudMediaProviderContract.MediaColumns.SIZE_BYTES,
+            CloudMediaProviderContract.MediaColumns.MEDIA_STORE_URI,
             CloudMediaProviderContract.MediaColumns.DURATION_MILLIS,
             CloudMediaProviderContract.MediaColumns.IS_FAVORITE,
             CloudMediaProviderContract.MediaColumns.WIDTH,
             CloudMediaProviderContract.MediaColumns.HEIGHT,
             CloudMediaProviderContract.MediaColumns.ORIENTATION,
-            CloudMediaProviderContract.MediaColumns.STANDARD_MIME_TYPE_EXTENSION,
-            CloudMediaProviderContract.MediaColumns.MEDIA_STORE_URI,
         )
 
         val ALBUM_PROJECTION = arrayOf(

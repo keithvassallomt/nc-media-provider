@@ -1,6 +1,6 @@
 # nc-media-provider: project plan
 
-**Status (2026-10-02):** planning agreed, no code written. Phase 0.1 is done: activation needs no root on either test phone (see [docs/device-notes.md](docs/device-notes.md)). Phase 0.2 is done (see [docs/server-notes.md](docs/server-notes.md)), and so is 0.3 (see [docs/base-repo-map.md](docs/base-repo-map.md)). Phase 0 is complete. Phase 1.1 (the renamed skeleton) is done; next up is 1.2.
+**Status (2026-10-02):** planning agreed, no code written. Phase 0.1 is done: activation needs no root on either test phone (see [docs/device-notes.md](docs/device-notes.md)). Phase 0.2 is done (see [docs/server-notes.md](docs/server-notes.md)), and so is 0.3 (see [docs/base-repo-map.md](docs/base-repo-map.md)). Phase 0 is complete. Phases 1.1 to 1.4 are done; next up is the on-device test, 1.5.
 
 Progress is tracked in [GitHub issues](https://github.com/keithvassallomt/nc-media-provider/issues): one issue per phase, with each numbered sub-task below as a sub-issue.
 
@@ -213,11 +213,11 @@ Server test matrix:
 
 **1.1 Skeleton.** Done: the app builds on the agreed toolchain, the provider registers and answers with an empty library, and activation already writes an explicit allow-list that keeps Google Photos, with restore commands and no `put` fallback or forced reboot. Plain HTTP is off until 4.2. Rename the package and strip out Immich. Move the build to the agreed toolchain. The manifest declares the provider exported, protected by the `MANAGE_CLOUD_MEDIA_PROVIDERS` permission, with the `CLOUD_MEDIA_PROVIDER` intent filter. Add the base's copyright line ("Copyright (c) 2026 Immich Media Picker contributors") to `LICENSE` as soon as any base code is copied in. Make sure no Keystore decryption happens inside `onGetMediaCollectionInfo`: the base decrypts there on a cold start.
 
-**1.2 Hard-coded auth.** Debug builds read the server URL, login name, user ID and app password from a git-ignored `local.properties`. HTTP Basic auth is attached only to requests to that server.
+**1.2 Hard-coded auth.** Done: the debug build signs in on first start and stores the account in the Keystore; `nextcloud.userId` defaults to the login and `nextcloud.folder` sets the one library folder. Debug builds read the server URL, login name, user ID and app password from a git-ignored `local.properties`. HTTP Basic auth is attached only to requests to that server.
 
-**1.3 Minimal client.** One WebDAV SEARCH over one test folder, images only, held in memory. Each item records fileId, href, etag, MIME type, size, modification time, date taken, dimensions, favorite and hidden.
+**1.3 Minimal client.** Done, with date-window paging from 2.2 already in place. The SEARCH scope must be the raw folder path (a percent-encoded one gives 404). Parser tests run on the Phase 0.2 fixtures, and `NextcloudClientIntegrationTest` runs against a live server when `NC_TEST_URL` is set (passes on Nextcloud 33 and 35). One WebDAV SEARCH over one test folder, images only, held in memory. Each item records fileId, href, etag, MIME type, size, modification time, date taken, dimensions, favorite and hidden.
 
-**1.4 Connect it to the picker.**
+**1.4 Connect it to the picker.** Done, with two changes from the text below. The generation is persisted with a fingerprint of the listing, because an in-memory counter restarts at 0 after process death and MediaProvider would read that as going backwards. Picker calls that arrive before the first listing wait for it (queries up to 60 s, previews 2 s) instead of answering with an empty library, which MediaProvider would cache.
 
 - **Collection info** comes from memory. The collection ID is a hash of server, user, folder and an "epoch" counter that is increased to force a full rebuild.
 - **Loading** happens in the background when the provider starts. When it finishes, the generation goes from 0 to 1 and the picker is notified, so the real change path is exercised from day one.
