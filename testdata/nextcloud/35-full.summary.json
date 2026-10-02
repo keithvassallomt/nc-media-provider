@@ -1,0 +1,218 @@
+{
+ "status": {
+  "version": "35.0.1.1",
+  "versionstring": "35.0.1",
+  "maintenance": false,
+  "installed": true
+ },
+ "capabilities": {
+  "dav": {
+   "chunking": "1.0",
+   "public_shares_chunking": true,
+   "search_supports_creation_time": true,
+   "search_supports_upload_time": true,
+   "search_supports_last_activity": true,
+   "bulkupload": "1.0",
+   "absence-supported": true,
+   "absence-replacement": true
+  },
+  "has_files": true,
+  "memories": false
+ },
+ "user_id_differs_from_login": false,
+ "serverinfo": {
+  "http": 401
+ },
+ "samples": {
+  "jpeg": {
+   "http": 207,
+   "seconds": 0.24,
+   "found": 1,
+   "props_present": [
+    "creation_time",
+    "favorite",
+    "fileid",
+    "getcontentlength",
+    "getcontenttype",
+    "getetag",
+    "getlastmodified",
+    "has-preview",
+    "hidden",
+    "metadata-blurhash",
+    "metadata-photos-exif",
+    "metadata-photos-original_date_time",
+    "metadata-photos-size",
+    "upload_time"
+   ],
+   "hidden": "false",
+   "preview": {
+    "http": 200,
+    "type": "image/jpeg",
+    "bytes": 2978,
+    "seconds": 0.22
+   }
+  },
+  "heic": {
+   "http": 207,
+   "seconds": 0.19,
+   "found": 1,
+   "props_present": [
+    "creation_time",
+    "favorite",
+    "fileid",
+    "getcontentlength",
+    "getcontenttype",
+    "getetag",
+    "getlastmodified",
+    "has-preview",
+    "hidden",
+    "metadata-blurhash",
+    "metadata-photos-original_date_time",
+    "metadata-photos-size",
+    "upload_time"
+   ],
+   "hidden": "false",
+   "preview": {
+    "http": 200,
+    "type": "image/jpeg",
+    "bytes": 2382,
+    "seconds": 0.2
+   }
+  },
+  "mp4": {
+   "http": 207,
+   "seconds": 0.19,
+   "found": 1,
+   "props_present": [
+    "creation_time",
+    "favorite",
+    "fileid",
+    "getcontentlength",
+    "getcontenttype",
+    "getetag",
+    "getlastmodified",
+    "has-preview",
+    "hidden",
+    "metadata-photos-original_date_time",
+    "upload_time"
+   ],
+   "hidden": "false",
+   "preview": {
+    "http": 200,
+    "type": "image/jpeg",
+    "bytes": 9565,
+    "seconds": 1.36
+   }
+  },
+  "mov": {
+   "http": 207,
+   "seconds": 0.22,
+   "found": 1,
+   "props_present": [
+    "creation_time",
+    "favorite",
+    "fileid",
+    "getcontentlength",
+    "getcontenttype",
+    "getetag",
+    "getlastmodified",
+    "has-preview",
+    "hidden",
+    "metadata-photos-original_date_time",
+    "upload_time"
+   ],
+   "hidden": "false",
+   "preview": {
+    "http": 200,
+    "type": "image/jpeg",
+    "bytes": 8757,
+    "seconds": 1.07
+   },
+   "live_photo_halves": 0,
+   "live_photo_halves_hidden": 0
+  }
+ },
+ "memories": {
+  "describe_http": 200,
+  "version": "9.0.1",
+  "timeline_path_set": true,
+  "config_keys": [
+   "album_list_sort",
+   "albums_enabled",
+   "dedup_identical",
+   "enable_top_memories",
+   "facerecognition_enabled",
+   "facerecognition_installed",
+   "folders_path",
+   "high_res_cond_default",
+   "language",
+   "livephoto_autoplay",
+   "livephoto_loop",
+   "locale",
+   "map_tile_server_url",
+   "map_tile_servers",
+   "onthisday_day_range",
+   "onthisday_photos_per_year",
+   "places_gis",
+   "places_search_url",
+   "preview_generator_enabled",
+   "recognize_enabled",
+   "recognize_installed",
+   "show_hidden_albums",
+   "show_hidden_folders",
+   "show_owner_name_timeline",
+   "sidebar_filepath",
+   "slideshow_duration",
+   "sort_album_month",
+   "sort_folder_month",
+   "stack_raw_files",
+   "systemtags_enabled",
+   "timeline_path",
+   "version",
+   "video_default_quality",
+   "video_loop",
+   "vod_disable"
+  ],
+  "albums": {
+   "http": 200,
+   "count": 1
+  }
+ },
+ "coverage": {
+  "jpeg": {
+   "http": 207,
+   "items": 8,
+   "seconds": 0.19,
+   "photos-original_date_time": 8,
+   "photos-size": 8,
+   "photos-exif": 5,
+   "date_differs_from_mtime": 5,
+   "date_equals_mtime": 3
+  },
+  "heic": {
+   "http": 207,
+   "items": 2,
+   "seconds": 0.21,
+   "photos-original_date_time": 2,
+   "photos-size": 2,
+   "date_equals_mtime": 2
+  },
+  "mp4": {
+   "http": 207,
+   "items": 1,
+   "seconds": 0.19,
+   "photos-original_date_time": 1,
+   "date_equals_mtime": 1
+  }
+ },
+ "photos_albums": {
+  "albums": {
+   "http": 207,
+   "count": 1
+  },
+  "sharedalbums": {
+   "http": 207,
+   "count": 0
+  }
+ }
+}

@@ -1,0 +1,29 @@
+{
+ "method": "GET",
+ "path": "/index.php/core/preview?fileId=106&x=256&y=256&a=1&mode=cover&forceIcon=0",
+ "status": 200,
+ "seconds": 1.11,
+ "headers": {
+  "Date": "Fri, 02 Oct 2026 11:37:34 GMT",
+  "Server": "Apache/2.4.68 (Debian)",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "SAMEORIGIN",
+  "X-Permitted-Cross-Domain-Policies": "none",
+  "X-Robots-Tag": "noindex, nofollow",
+  "Referrer-Policy": "no-referrer",
+  "X-Powered-By": "PHP/8.4.26",
+  "Set-Cookie": "oci9lh45wr94=596a2bb182f48c148c03079327177643; path=/; HttpOnly; SameSite=Lax",
+  "Content-Security-Policy": "default-src 'none';base-uri 'none';manifest-src 'self';frame-ancestors 'none'",
+  "X-Request-Id": "huKaD7rAwb0FPHrdWAZN",
+  "Cache-Control": "private, max-age=86400, immutable",
+  "Feature-Policy": "autoplay 'none';camera 'none';fullscreen 'none';geolocation 'none';microphone 'none';payment 'none'",
+  "Last-Modified": "Fri, 02 Oct 2026 11:37:35 GMT",
+  "ETag": "\"da3681361398bcb516e13eaf074c9230\"",
+  "X-User-Id": "alice",
+  "Content-Disposition": "inline; filename=\"341-256.jpg\"",
+  "Expires": "Sat, 03 Oct 2026 11:37:35 GMT",
+  "Content-Length": "8757",
+  "Connection": "close",
+  "Content-Type": "image/jpeg"
+ }
+}

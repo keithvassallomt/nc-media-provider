@@ -1,0 +1,7 @@
+# Nextcloud with what the "full features" variant needs: ffmpeg for video previews and
+# Memories (ffprobe), perl for Memories' bundled exiftool.
+ARG NC_VERSION
+FROM docker.io/library/nextcloud:${NC_VERSION}-apache
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg perl \
+ && rm -rf /var/lib/apt/lists/*

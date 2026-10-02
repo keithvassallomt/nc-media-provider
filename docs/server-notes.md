@@ -32,10 +32,30 @@ The 500 most recently modified files of each type (all 142 MP4s). "Real date" me
 What this means for the app:
 
 - **Expect partial metadata on real servers.** 390 of the 500 newest JPEGs had no metadata at all, so the server's metadata job is behind or never ran on them. Falling back to the modification time (2.8) is the normal case, not an edge case. An admin can fill the gaps with `occ files:scan --all --generate-metadata`.
-- **Core's HEIC "date taken" is always the modification time,** never the EXIF date, and HEIC files get no dimensions. Without Memories (Phase 6), HEIC ordering depends on the uploading client preserving the modification time.
+- **Core never reads a HEIC's EXIF date.** Its "date taken" comes from a date in the file name if there is one, otherwise the modification time (see the container tests below). iPhone-style names (`IMG_1234.HEIC`) carry no date, which is why every HEIC here matches its modification time. Older HEICs here also have no dimensions. Without Memories (Phase 6), HEIC ordering depends on the uploading client preserving the modification time.
 - **Dimensions are often missing.** Width and height come only from `metadata-photos-size`, which was present on 110 of 1,142 sampled items.
 - **No live photos.** This library comes from a Pixel, which embeds motion in the JPEG instead of pairing it with a MOV. Live-photo handling (5.5) has to be checked against the test library on the container servers.
 
 ## Container servers (test matrix)
 
-Not yet built. Plan: Nextcloud 33 and 35, each with default settings and with Photos, Memories, and HEIC and video previews enabled, all loaded with the same synthetic library. Fixtures committed to the repo come only from these servers.
+Built and probed 2026-10-02 with [tools/testserver/](../tools/testserver/). Each server runs rootless in Podman on 127.0.0.1, gets the synthetic library from `tools/testserver/library` uploaded over WebDAV with fixed modification times (as a phone client would), plus a folder shared by a second user, a Photos album and a favourite. Probe output is committed under [testdata/nextcloud/](../testdata/nextcloud/) as fixtures.
+
+| | 33 default | 33 full | 35 default | 35 full |
+|---|---|---|---|---|
+| Version | 33.0.9 | 33.0.9 | 35.0.1 | 35.0.1 |
+| SEARCH by creation, upload and last-activity time | yes | yes | yes | yes |
+| Previews: JPEG / HEIC / MP4 / MOV | 200 / 404 / 404 / 404 | all 200 | 200 / 404 / 404 / 404 | all 200 |
+| HEIC dimensions (`metadata-photos-size`) | no | no | yes | yes |
+| Memories | absent (404) | 8.1.0 | absent (404) | 9.0.1 |
+| Memories albums (`/api/clusters/albums`) | n/a | 1, same as Photos | n/a | 1, same as Photos |
+| Photos albums | 1 own | 1 own | 1 own | 1 own |
+
+"Full" means the HEIC and Movie preview providers enabled, ffmpeg installed and Memories installed and indexed. "Default" is the stock image.
+
+Findings that hold on every server:
+
+- **Dates.** JPEG EXIF dates are read. HEIC and video dates come from the file name when it contains one, otherwise the modification time. Tested with copies named `PXL_20190102_030405123.mp4`, `VID_20190102_030405.mp4` and `IMG_20190102_030405.heic` uploaded with a 2024 modification time: all three got 2019-01-02 03:04:05, interpreted in the server's timezone. A video's own creation-time metadata is ignored, even with ffmpeg installed.
+- **Orientation (PLAN 5.1).** For a JPEG stored as 1200×800 with EXIF orientation 6, `metadata-photos-size` reports 800×1200 (display orientation) and `/core/preview` returns a portrait image (683×1024 at 1024 px) with no EXIF. Server previews are already rotated, so the provider should report orientation 0 and use those dimensions. Still to check on a device: the picker's full-size preview path, which gets the original file with its EXIF tag.
+- **Search scope.** SEARCH over the user's home includes files in folders shared by other users, files in folders containing `.nomedia`, and files outside the photo folders. The app has to filter by its selected folders and handle `.nomedia` itself (2.2).
+- **Live photos.** The synthetic HEIC + MOV pair (same base name, `ContentIdentifier` on the MOV only) was not detected: no `metadata-files-live-photo`, and the MOV is not hidden. Apple links the pair through maker notes that can't be synthesised, so checking 5.5 needs a real iPhone live photo with a licence that allows committing it.
+- **Default servers can't make HEIC or video previews,** confirming the fallbacks in "Supporting any Nextcloud server".

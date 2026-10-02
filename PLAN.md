@@ -1,6 +1,6 @@
 # nc-media-provider: project plan
 
-**Status (2026-10-02):** planning agreed, no code written. Phase 0.1 is done: activation needs no root on either test phone (see [docs/device-notes.md](docs/device-notes.md)). Phase 0.3 is done (see [docs/base-repo-map.md](docs/base-repo-map.md)). Next up is 0.2.
+**Status (2026-10-02):** planning agreed, no code written. Phase 0.1 is done: activation needs no root on either test phone (see [docs/device-notes.md](docs/device-notes.md)). Phase 0.2 is done (see [docs/server-notes.md](docs/server-notes.md)), and so is 0.3 (see [docs/base-repo-map.md](docs/base-repo-map.md)). Phase 0 is complete. Next up is Phase 1.
 
 Progress is tracked in [GitHub issues](https://github.com/keithvassallomt/nc-media-provider/issues): one issue per phase, with each numbered sub-task below as a sub-issue.
 
@@ -122,7 +122,8 @@ We therefore keep a local snapshot database that gives each row a sync generatio
 ### Server defaults
 
 - HEIC and video previews are off until enabled. They need imagick with HEIC support, and ffmpeg.
-- Core Nextcloud only reads EXIF dates from JPEG and WebP. HEIC dates fall back to the filename or the modification time. Memories fixes this.
+- Core Nextcloud only reads EXIF dates from JPEG and WebP. HEIC and video dates come from a date in the file name (`PXL_`, `VID_`, `IMG_yyyymmdd_hhmmss`, read in the server's timezone), otherwise the modification time. A video's own creation time is ignored. Memories fixes this. Confirmed on Nextcloud 33 and 35 in Phase 0.2.
+- Real servers often lack metadata entirely: 390 of the 500 newest JPEGs on Keith's server had none, so fallbacks are the common path, not an edge case.
 
 ### Activation
 
@@ -180,7 +181,7 @@ Each phase ends with an exit test. On-device exit tests are run by Keith, with t
 - Quickest test: [trajano/cloud-media-provider-proxy](https://github.com/trajano/cloud-media-provider-proxy) passes the Nextcloud Files app's documents through as a cloud provider. Use it only as a test tool, never as code. It has a bug that forces full resyncs, which doesn't matter here. If it has no prebuilt APK, skip it and fold this check into the Phase 1 exit test.
 - Pass, on both phones and without root: the provider appears in the picker's cloud settings, can be selected, and is still there after a reboot. Google Photos is still listed and selectable.
 
-**0.2 Server probe and test matrix (Claude).** Results go in `docs/server-notes.md`.
+**0.2 Server probe and test matrix (Claude).** Done: results are in [docs/server-notes.md](docs/server-notes.md). The probe is `tools/probe_server.py`, the test servers come from `tools/testserver/up.sh <33|35> <default|full>`, and their fixtures are in `testdata/nextcloud/`.
 
 On Keith's server, a short curl checklist:
 
@@ -241,7 +242,7 @@ Server test matrix:
 - One SEARCH request covers all selected folders (Nextcloud 30 and later). Older servers get one SEARCH per folder.
 - Paging uses date windows: each page asks for items modified at or before the last date seen, deduplicated by fileId.
 - Pages hold 500 to 1000 items.
-- Drop hidden items, remove duplicates of files reachable through two mounts, and optionally respect `.nomedia` files.
+- Drop hidden items, remove duplicates of files reachable through two mounts, and optionally respect `.nomedia` files. SEARCH over the home folder also returns files from folders other users share, from `.nomedia` folders and from outside the photo folders (confirmed in 0.2), so filtering by the selected folders is the app's job.
 
 **2.3 Turn changes into generations.**
 
@@ -265,7 +266,7 @@ Server test matrix:
 
 **2.7 When the collection ID changes.** Only when the folder set or account changes, the database is lost, or the user asks for a rebuild. A new ID empties the picker's cloud tab while it rebuilds.
 
-**2.8 Fields.** Date taken comes from Nextcloud's photo metadata, falling back to the modification time. Dimensions come from the same metadata. Core Nextcloud has no video duration, so videos report 0, which the picker accepts.
+**2.8 Fields.** Date taken comes from Nextcloud's photo metadata, falling back to the modification time. On real servers many files have no metadata yet, so the fallback is the common path. Dimensions come from `metadata-photos-size`, which is already in display orientation; HEIC files only get it from Nextcloud 35. Core Nextcloud has no video duration, so videos report 0, which the picker accepts.
 
 **2.9 Safety net.** One component builds every row returned to the picker and checks it against the picker's rules: a date taken, size above 0, an image or video MIME type, valid type and duration values, and a well-formed `media_store_uri`. Rows that fail are dropped and logged. Unit tests cover it.
 
@@ -324,7 +325,7 @@ Onboarding says plainly that only one cloud source can be active at a time, and 
 - Cancel the download when the picker cancels.
 - Cache about 256 MiB on disk, keyed by fileId, etag and size.
 - When HEIC previews are off, read the HEIC's built-in thumbnail through small Range requests and cache it. Any other 404 shows a blank tile.
-- Check orientation: Nextcloud thumbnails come already rotated, so the orientation column may need to be 0 to avoid rotating twice.
+- Orientation: Phase 0.2 confirmed that Nextcloud previews are already rotated and carry no EXIF, and that `metadata-photos-size` is in display orientation. Report orientation 0. Check on a device that the picker's full-size preview, which gets the original file with its EXIF tag, isn't rotated twice.
 
 **5.2 Streaming large files.**
 
@@ -337,7 +338,7 @@ Onboarding says plainly that only one cloud source can be active at a time, and 
 
 **5.4 Video playback in the picker.** A `CloudMediaSurfaceController` built on Media3 ExoPlayer streams the WebDAV file with the user's credentials. It handles the display surface, play and pause, mute and loop, and reports playback states to the picker. Dreaming-Codes' version shows how to map those states. Study it, don't copy it: it's GPL. Test on both phones, since the stock Pixel uses the newer picker and GrapheneOS the older one built into MediaProvider.
 
-**5.5 Live photos.** Hide the hidden MOV half of each pair. Optionally, pair an image and a MOV with the same name in the same folder, for live photos uploaded by clients other than iOS.
+**5.5 Live photos.** Hide the hidden MOV half of each pair. Optionally, pair an image and a MOV with the same name in the same folder, for live photos uploaded by clients other than iOS. Testing needs a real iPhone live photo with a licence that allows committing it: neither Nextcloud 33 nor 35 detected the synthetic pair in Phase 0.2.
 
 **Exit:** large videos browse, play in the picker preview, and attach to an app within the 3-minute limit.
 
@@ -412,7 +413,7 @@ Onboarding says plainly that only one cloud source can be active at a time, and 
 
 - **Unit tests (Claude):** building SEARCH requests and parsing responses using the saved fixtures, the snapshot comparison and generation logic, page tokens, the 2.9 safety net, and Memories parsing.
 - **Simulated server tests (OkHttp MockWebServer):** login failures, 429 back-off, and paging.
-- **Server matrix (Claude):** the throwaway containers from Phase 0.2.
+- **Server matrix (Claude):** the throwaway containers from Phase 0.2 (`tools/testserver/up.sh`).
 - **Devices:**
   - The stock Pixel 11 Pro and the GrapheneOS Pixel 10 Pro Fold are the main devices and run each phase's exit test.
   - Emulators for Android 14, 15 and 16 cover the different activation commands per version. Still to confirm: whether the emulator images include the cloud picker feature.
@@ -430,7 +431,7 @@ Onboarding says plainly that only one cloud source can be active at a time, and 
 - **Research claims not yet verified:**
   - whether column order matters to the picker (Phase 1);
   - how big each read through the streamed file handle is (Phase 5.2);
-  - whether the orientation column causes double rotation (Phase 5.1);
+  - whether the picker's full-size preview path rotates twice (Phase 5.1; the server side was confirmed in 0.2);
   - how albums with photos outside the library behave (Phase 7.1).
 
 ## References

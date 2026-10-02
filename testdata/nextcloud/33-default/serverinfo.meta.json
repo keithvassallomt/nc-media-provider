@@ -1,0 +1,26 @@
+{
+ "method": "GET",
+ "path": "/ocs/v2.php/apps/serverinfo/api/v1/info?format=json",
+ "status": 401,
+ "seconds": 0.19,
+ "headers": {
+  "Date": "Fri, 02 Oct 2026 11:38:08 GMT",
+  "Server": "Apache/2.4.68 (Debian)",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "SAMEORIGIN",
+  "X-Permitted-Cross-Domain-Policies": "none",
+  "X-Robots-Tag": "noindex, nofollow",
+  "Referrer-Policy": "no-referrer",
+  "X-Powered-By": "PHP/8.4.26",
+  "Set-Cookie": "ocm3z22fx3fb=1a389c254710161edb4a91a0af85ad89; path=/; HttpOnly; SameSite=Lax",
+  "Content-Security-Policy": "default-src 'none';base-uri 'none';manifest-src 'self';frame-ancestors 'none'",
+  "X-Request-Id": "3dEjwxMQs8WOplVvOLyP",
+  "Cache-Control": "no-cache, no-store, must-revalidate",
+  "Feature-Policy": "autoplay 'none';camera 'none';fullscreen 'none';geolocation 'none';microphone 'none';payment 'none'",
+  "X-User-Id": "alice",
+  "X-Nextcloud-Bruteforce-Throttled": "200ms",
+  "Content-Length": "101",
+  "Connection": "close",
+  "Content-Type": "application/json; charset=utf-8"
+ }
+}

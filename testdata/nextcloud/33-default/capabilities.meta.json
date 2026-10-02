@@ -1,0 +1,26 @@
+{
+ "method": "GET",
+ "path": "/ocs/v2.php/cloud/capabilities?format=json",
+ "status": 200,
+ "seconds": 0.21,
+ "headers": {
+  "Date": "Fri, 02 Oct 2026 11:38:08 GMT",
+  "Server": "Apache/2.4.68 (Debian)",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "SAMEORIGIN",
+  "X-Permitted-Cross-Domain-Policies": "none",
+  "X-Robots-Tag": "noindex, nofollow",
+  "Referrer-Policy": "no-referrer",
+  "X-Powered-By": "PHP/8.4.26",
+  "Set-Cookie": "ocm3z22fx3fb=34f9f595ba7514652769555aaff12ed4; path=/; HttpOnly; SameSite=Lax",
+  "Content-Security-Policy": "default-src 'none';base-uri 'none';manifest-src 'self';frame-ancestors 'none'",
+  "X-Request-Id": "1zNoNn0Rv4np2TrBc3Eo",
+  "Cache-Control": "no-cache, no-store, must-revalidate",
+  "Feature-Policy": "autoplay 'none';camera 'none';fullscreen 'none';geolocation 'none';microphone 'none';payment 'none'",
+  "ETag": "\"7e1b0bb84b8c5a3aa3acc2d313881550\"",
+  "X-User-Id": "alice",
+  "Content-Length": "5345",
+  "Connection": "close",
+  "Content-Type": "application/json; charset=utf-8"
+ }
+}

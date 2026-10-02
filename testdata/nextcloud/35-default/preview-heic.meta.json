@@ -1,0 +1,25 @@
+{
+ "method": "GET",
+ "path": "/index.php/core/preview?fileId=105&x=256&y=256&a=1&mode=cover&forceIcon=0",
+ "status": 404,
+ "seconds": 0.15,
+ "headers": {
+  "Date": "Fri, 02 Oct 2026 11:34:35 GMT",
+  "Server": "Apache/2.4.68 (Debian)",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "SAMEORIGIN",
+  "X-Permitted-Cross-Domain-Policies": "none",
+  "X-Robots-Tag": "noindex, nofollow",
+  "Referrer-Policy": "no-referrer",
+  "X-Powered-By": "PHP/8.5.11",
+  "Set-Cookie": "oc7btr6gnu6p=d2236ae4a1d57c9946ed9813bc8bae21; path=/; HttpOnly; SameSite=Lax",
+  "Content-Security-Policy": "default-src 'none';base-uri 'none';manifest-src 'self';frame-ancestors 'none'",
+  "X-Request-Id": "CRuE8jAwcF6ORZBz0Jxi",
+  "Cache-Control": "no-cache, no-store, must-revalidate",
+  "Feature-Policy": "autoplay 'none';camera 'none';fullscreen 'none';geolocation 'none';microphone 'none';payment 'none'",
+  "X-User-Id": "alice",
+  "Content-Length": "2",
+  "Connection": "close",
+  "Content-Type": "application/json; charset=utf-8"
+ }
+}

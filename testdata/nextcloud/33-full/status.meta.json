@@ -1,0 +1,22 @@
+{
+ "method": "GET",
+ "path": "/status.php",
+ "status": 200,
+ "seconds": 0.03,
+ "headers": {
+  "Date": "Fri, 02 Oct 2026 11:37:30 GMT",
+  "Server": "Apache/2.4.68 (Debian)",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "SAMEORIGIN",
+  "X-Permitted-Cross-Domain-Policies": "none",
+  "X-Robots-Tag": "noindex, nofollow",
+  "Referrer-Policy": "no-referrer",
+  "X-Powered-By": "PHP/8.4.26",
+  "Content-Security-Policy": "default-src 'self'; script-src 'self' 'nonce-6KsuxxTi9qMfML3btN08LhNLh1/OKcCKdOZJEb/mDfk='; style-src 'self' 'unsafe-inline'; frame-src *; img-src * data: blob:; font-src 'self' data:; media-src *; connect-src *; object-src 'none'; base-uri 'self';",
+  "Set-Cookie": "nc_sameSiteCookielax=true; path=/; httponly;expires=Fri, 31-Dec-2100 23:59:59 GMT; SameSite=lax",
+  "Access-Control-Allow-Origin": "*",
+  "Content-Length": "170",
+  "Connection": "close",
+  "Content-Type": "application/json"
+ }
+}

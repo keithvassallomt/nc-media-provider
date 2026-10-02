@@ -1,0 +1,23 @@
+{
+ "method": "SEARCH",
+ "path": "/remote.php/dav/",
+ "status": 207,
+ "seconds": 0.19,
+ "headers": {
+  "Date": "Fri, 02 Oct 2026 11:38:34 GMT",
+  "Server": "Apache/2.4.68 (Debian)",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "SAMEORIGIN",
+  "X-Permitted-Cross-Domain-Policies": "none",
+  "X-Robots-Tag": "noindex, nofollow",
+  "Referrer-Policy": "no-referrer",
+  "X-Powered-By": "PHP/8.5.11",
+  "Set-Cookie": "oc03l1qq7g5h=6d5bff68f1ab2957851192767453c51b; path=/; HttpOnly; SameSite=Lax",
+  "Content-Security-Policy": "default-src 'none';",
+  "X-User-Id": "alice",
+  "X-Request-Id": "XEwk23dN7gXCFT9nqOLf",
+  "Content-Length": "1071",
+  "Connection": "close",
+  "Content-Type": "application/xml; charset=\"utf-8\""
+ }
+}

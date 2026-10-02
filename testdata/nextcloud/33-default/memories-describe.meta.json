@@ -1,0 +1,21 @@
+{
+ "method": "GET",
+ "path": "/index.php/apps/memories/api/describe",
+ "status": 404,
+ "seconds": 0.18,
+ "headers": {
+  "Date": "Fri, 02 Oct 2026 11:38:10 GMT",
+  "Server": "Apache/2.4.68 (Debian)",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "SAMEORIGIN",
+  "X-Permitted-Cross-Domain-Policies": "none",
+  "X-Robots-Tag": "noindex, nofollow",
+  "Referrer-Policy": "no-referrer",
+  "X-Powered-By": "PHP/8.4.26",
+  "Set-Cookie": "ocm3z22fx3fb=a18ffcf27817dd541ac7f7e221847fe5; path=/; HttpOnly; SameSite=Lax",
+  "Content-Security-Policy": "default-src 'self'; script-src 'self' 'nonce-xjf60ApkwbyLWZ4apf+OaWPYCeN0ZCB5YZXJ3b/6/tk='; style-src 'self' 'unsafe-inline'; frame-src *; img-src * data: blob:; font-src 'self' data:; media-src *; connect-src *; object-src 'none'; base-uri 'self';",
+  "Content-Length": "0",
+  "Connection": "close",
+  "Content-Type": "text/html; charset=UTF-8"
+ }
+}
