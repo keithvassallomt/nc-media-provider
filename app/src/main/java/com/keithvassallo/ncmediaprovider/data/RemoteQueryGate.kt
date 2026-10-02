@@ -5,14 +5,17 @@ import java.io.IOException
 /**
  * Keeps concurrent or repeatedly failing metadata requests from holding up the system picker.
  * Media downloads deliberately do not use this gate because they are explicit user actions.
+ * It backs off for [retryDelayMillis] after [failuresBeforeBackOff] failures in a row.
  */
 internal class RemoteQueryGate(
     private val retryDelayMillis: Long,
     private val shouldBackOff: (Exception) -> Boolean = { true },
     private val nowMillis: () -> Long = System::currentTimeMillis,
+    private val failuresBeforeBackOff: Int = 1,
 ) {
     private val lock = Any()
     private var retryAfterMillis = 0L
+    private var failuresInARow = 0
 
     fun <T> query(block: () -> T): T {
         synchronized(lock) {
@@ -24,18 +27,30 @@ internal class RemoteQueryGate(
 
         return try {
             block().also {
-                synchronized(lock) { retryAfterMillis = 0L }
+                synchronized(lock) {
+                    retryAfterMillis = 0L
+                    failuresInARow = 0
+                }
             }
         } catch (error: Exception) {
             if (shouldBackOff(error)) {
-                synchronized(lock) { retryAfterMillis = nowMillis() + retryDelayMillis }
+                synchronized(lock) {
+                    failuresInARow++
+                    if (failuresInARow >= failuresBeforeBackOff) {
+                        retryAfterMillis = nowMillis() + retryDelayMillis
+                        failuresInARow = 0
+                    }
+                }
             }
             throw error
         }
     }
 
     fun reset() {
-        synchronized(lock) { retryAfterMillis = 0L }
+        synchronized(lock) {
+            retryAfterMillis = 0L
+            failuresInARow = 0
+        }
     }
 }
 

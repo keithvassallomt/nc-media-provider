@@ -44,25 +44,25 @@ class NextcloudClient {
         .callTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    /** Lists every file under [folders] whose MIME type starts with [mimePrefix], newest first. */
+    /** Lists every file under [folders] whose MIME type starts with one of [mimePrefixes], newest first. */
     internal fun listMedia(
         account: NextcloudAccount,
         folders: List<String>,
-        mimePrefix: String,
+        mimePrefixes: List<String>,
         pageSize: Int = LIST_PAGE_SIZE,
         onBatch: (List<RemoteFile>) -> Unit = {},
     ): Listing = listByModifiedWindows(pageSize, onBatch) { filter, limit ->
-        search(account, folders, mimePrefix, filter, limit)
+        search(account, folders, mimePrefixes, filter, limit)
     }
 
     fun search(
         account: NextcloudAccount,
         folders: List<String>,
-        mimePrefix: String,
+        mimePrefixes: List<String>,
         modified: ModifiedFilter?,
         limit: Int,
     ): List<RemoteFile> {
-        val body = SearchRequest.body(account.userId, folders, mimePrefix, modified, limit)
+        val body = SearchRequest.body(account.userId, folders, mimePrefixes, modified, limit)
         val request = Request.Builder()
             .url(account.server().newBuilder().addPathSegments("remote.php/dav/").build())
             .method("SEARCH", body.toRequestBody(XML))
@@ -102,8 +102,8 @@ class NextcloudClient {
             .filter(DavEntry::isFolder)
 
     /** File IDs of the favourites below [folders]. */
-    fun favoriteIds(account: NextcloudAccount, folders: List<String>, mimePrefix: String): Set<String> =
-        davSearch(account, SearchRequest.favorites(account.userId, folders, mimePrefix)) { MultistatusParser.parseEntries(it) }
+    fun favoriteIds(account: NextcloudAccount, folders: List<String>, mimePrefixes: List<String>): Set<String> =
+        davSearch(account, SearchRequest.favorites(account.userId, folders, mimePrefixes)) { MultistatusParser.parseEntries(it) }
             .mapNotNullTo(HashSet(), DavEntry::fileId)
 
     /** The [SearchRequest.HIDING_MARKERS] files below [folders]. */
@@ -111,8 +111,8 @@ class NextcloudClient {
         davSearch(account, SearchRequest.markers(account.userId, folders)) { MultistatusParser.parseEntries(it) }
             .filterNot(DavEntry::isFolder)
 
-    /** The files directly inside one folder (a depth-1 PROPFIND), whose MIME type starts with [mimePrefix]. */
-    fun listDirectFiles(account: NextcloudAccount, folderHref: String, mimePrefix: String): List<RemoteFile> {
+    /** The files directly inside one folder (a depth-1 PROPFIND), whose MIME type starts with one of [mimePrefixes]. */
+    fun listDirectFiles(account: NextcloudAccount, folderHref: String, mimePrefixes: List<String>): List<RemoteFile> {
         val url = account.server().resolve(folderHref) ?: throw IOException("Unusable folder path from the server")
         val request = Request.Builder()
             .url(url)
@@ -120,7 +120,7 @@ class NextcloudClient {
             .header("Depth", "1")
         return execute(request, account, SEARCH_TIMEOUT_SECONDS).use { response ->
             if (response.code != 207) throw response.toException()
-            MultistatusParser.parse(response.body.byteStream()).filter { it.mimeType.startsWith(mimePrefix) }
+            MultistatusParser.parse(response.body.byteStream()).filter { file -> mimePrefixes.any(file.mimeType::startsWith) }
         }
     }
 
@@ -132,6 +132,26 @@ class NextcloudClient {
         return execute(request, account, SEARCH_TIMEOUT_SECONDS).use { response ->
             if (response.code != 207) throw response.toException()
             parse(response.body.byteStream())
+        }
+    }
+
+    /**
+     * [length] bytes of a file from [offset], for streaming (PLAN 5.2). [etag] pins the version: a
+     * file that changes while it is being read fails with 412 instead of mixing two versions.
+     */
+    fun fetchRange(account: NextcloudAccount, href: String, etag: String, offset: Long, length: Int): ByteArray {
+        val url = account.server().resolve(href) ?: throw IOException("Unusable file path from the server")
+        val request = Request.Builder()
+            .url(url)
+            .header("Range", "bytes=$offset-${offset + length - 1}")
+            .apply { if (etag.isNotEmpty()) header("If-Match", "\"$etag\"") }
+        return execute(request, account, RANGE_TIMEOUT_SECONDS).use { response ->
+            when (response.code) {
+                206 -> response.body.bytes()
+                // A server that ignores Range sends the whole file; only the start of it is usable.
+                200 -> if (offset == 0L) response.body.source().readByteArray(length.toLong()) else throw IOException("The server ignored the Range request")
+                else -> throw response.toException()
+            }
         }
     }
 
@@ -345,5 +365,8 @@ class NextcloudClient {
         // thread, so they must give up long before an original would.
         private const val PREVIEW_TIMEOUT_SECONDS = 15L
         private const val ORIGINAL_TIMEOUT_SECONDS = 120L
+
+        // One 2 MiB chunk of a stream; a reader waits for it.
+        private const val RANGE_TIMEOUT_SECONDS = 30L
     }
 }

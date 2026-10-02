@@ -81,6 +81,9 @@
     <string name="keyboard_setup_enabled">The photo keyboard is on.</string>
     <string name="keyboard_setup_disabled">The photo keyboard is off.</string>
     <string name="keyboard_setup_button">Keyboard settings</string>
+    <string name="streaming_channel">Sending from Nextcloud</string>
+    <string name="streaming_title">Sending from Nextcloud</string>
+    <string name="streaming_text">An app is reading a video from your Nextcloud.</string>
     <string name="notify_channel">Account and setup</string>
     <string name="notify_sign_in_title">Sign in to Nextcloud again</string>
     <string name="notify_sign_in_text">Your server refused NC Media Provider’s app password, so your photos have stopped updating. Tap to sign in again.</string>

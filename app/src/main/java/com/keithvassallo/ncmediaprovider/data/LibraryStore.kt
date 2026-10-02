@@ -138,7 +138,7 @@ class LibraryStore(
 
     /**
      * Saves what the next change check compares against (PLAN 2.4). Only a full listing knows
-     * [respectsNoMedia] and [duplicatePaths]; a change check leaves them as they are.
+     * [respectsNoMedia], [duplicatePaths] and [listingVersion]; a change check leaves them as they are.
      */
     fun saveFolderState(
         rootEtag: String,
@@ -146,6 +146,7 @@ class LibraryStore(
         hiddenFolders: Set<String>,
         respectsNoMedia: Boolean? = null,
         duplicatePaths: Boolean? = null,
+        listingVersion: Int? = null,
     ) = database.runInTransaction(Runnable {
         dao.clearFolders()
         folders.map { (path, etag) -> FolderEtag(path, etag) }.chunked(SQL_BATCH).forEach(dao::saveFolders)
@@ -155,6 +156,7 @@ class LibraryStore(
             hiddenFolders = hiddenFolders.sorted().joinToString("\n"),
             respectsNoMedia = respectsNoMedia ?: state.respectsNoMedia,
             duplicatePaths = duplicatePaths ?: state.duplicatePaths,
+            listingVersion = listingVersion ?: state.listingVersion,
         )
         dao.saveState(updated.also { cached = it })
     })

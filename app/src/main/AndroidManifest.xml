@@ -11,6 +11,9 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
     <!-- "Sign in again" and "select the provider again" (PLAN 4.4, 4.6). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Keeps the network open while another app reads a streamed video (PLAN 5.2). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <queries>
         <package android:name="moe.shizuku.privileged.api" />
@@ -69,6 +72,11 @@
         <activity
             android:name=".ui.FolderPickerActivity"
             android:exported="false" />
+
+        <service
+            android:name=".data.StreamingService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- The photo keyboard (PLAN 4.8), for apps with their own photo grid. -->
         <service

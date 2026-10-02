@@ -66,6 +66,9 @@ data class SyncState(
     /** When the last sync finished, whether or not it found anything. */
     @ColumnInfo(defaultValue = "0")
     val lastCheckMillis: Long = 0L,
+    /** What the last full listing included; see LibraryRepository's LISTING_VERSION. */
+    @ColumnInfo(defaultValue = "0")
+    val listingVersion: Int = 0,
 )
 
 @Dao
@@ -166,8 +169,13 @@ interface LibraryDao {
 
 @Database(
     entities = [MediaItem::class, DeletedMedia::class, SyncState::class, FolderEtag::class],
-    version = 5,
-    autoMigrations = [AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5)],
+    version = 6,
+    autoMigrations = [
+        AutoMigration(from = 2, to = 3),
+        AutoMigration(from = 3, to = 4),
+        AutoMigration(from = 4, to = 5),
+        AutoMigration(from = 5, to = 6),
+    ],
 )
 abstract class LibraryDatabase : RoomDatabase() {
     abstract fun dao(): LibraryDao

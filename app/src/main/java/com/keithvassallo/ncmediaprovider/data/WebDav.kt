@@ -55,18 +55,18 @@ object SearchRequest {
      */
     val HIDING_MARKERS = listOf(".nomedia", ".noimage", ".nomemories")
 
-    /** Files under [folders] whose MIME type starts with [mimePrefix], newest first. */
+    /** Files under [folders] whose MIME type starts with one of [mimePrefixes], newest first. */
     fun body(
         userId: String,
         folders: List<String>,
-        mimePrefix: String,
+        mimePrefixes: List<String>,
         modified: ModifiedFilter?,
         limit: Int,
     ): String {
         val where = if (modified == null) {
-            mimeFilter(mimePrefix)
+            mimeFilter(mimePrefixes)
         } else {
-            "<d:and>${mimeFilter(mimePrefix)}<d:${modified.operator}><d:prop><d:getlastmodified/></d:prop>" +
+            "<d:and>${mimeFilter(mimePrefixes)}<d:${modified.operator}><d:prop><d:getlastmodified/></d:prop>" +
                 "<d:literal>${modified.seconds}</d:literal></d:${modified.operator}></d:and>"
         }
         val orderBy = "<d:order><d:prop><d:getlastmodified/></d:prop><d:descending/></d:order>"
@@ -81,9 +81,9 @@ object SearchRequest {
     )
 
     /** File IDs of favourites under [folders]. Favouriting changes no etag, so it is checked apart. */
-    fun favorites(userId: String, folders: List<String>, mimePrefix: String): String = search(
+    fun favorites(userId: String, folders: List<String>, mimePrefixes: List<String>): String = search(
         "<oc:fileid/>", userId, folders,
-        "<d:and><d:eq><d:prop><oc:favorite/></d:prop><d:literal>1</d:literal></d:eq>${mimeFilter(mimePrefix)}</d:and>",
+        "<d:and><d:eq><d:prop><oc:favorite/></d:prop><d:literal>1</d:literal></d:eq>${mimeFilter(mimePrefixes)}</d:and>",
         orderBy = "", limit = UNLIMITED,
     )
 
@@ -115,8 +115,12 @@ object SearchRequest {
 </d:searchrequest>"""
     }
 
-    private fun mimeFilter(mimePrefix: String) =
-        "<d:like><d:prop><d:getcontenttype/></d:prop><d:literal>${xmlEscape(mimePrefix)}%</d:literal></d:like>"
+    private fun mimeFilter(mimePrefixes: List<String>): String {
+        val likes = mimePrefixes.map {
+            "<d:like><d:prop><d:getcontenttype/></d:prop><d:literal>${xmlEscape(it)}%</d:literal></d:like>"
+        }
+        return likes.singleOrNull() ?: likes.joinToString("", "<d:or>", "</d:or>")
+    }
 
     private const val UNLIMITED = 1_000_000
 

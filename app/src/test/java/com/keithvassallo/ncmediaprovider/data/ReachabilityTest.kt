@@ -22,5 +22,8 @@ class ReachabilityTest {
         assertFalse(isReachabilityFailure(OperationCanceledException()))
         assertFalse(isReachabilityFailure(FileNotFoundException("No server preview")))
         assertFalse(isReachabilityFailure(NextcloudHttpException(404, "gone")))
+        // What OkHttp threw for tiles the picker cancelled while scrolling (Phase 5).
+        assertFalse(isReachabilityFailure(java.io.InterruptedIOException("timeout").apply { initCause(IOException("Canceled")) }))
+        assertTrue(isReachabilityFailure(java.io.InterruptedIOException("timeout")))
     }
 }

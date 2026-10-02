@@ -5,8 +5,14 @@ import android.content.res.AssetFileDescriptor
 import android.graphics.Point
 import android.net.Uri
 import android.os.CancellationSignal
+import android.os.Handler
+import android.os.HandlerThread
 import android.os.OperationCanceledException
 import android.os.ParcelFileDescriptor
+import android.os.ProxyFileDescriptorCallback
+import android.os.storage.StorageManager
+import android.system.ErrnoException
+import android.system.OsConstants
 import android.os.SystemClock
 import android.provider.MediaStore
 import android.util.Log
@@ -40,13 +46,21 @@ import kotlinx.coroutines.flow.Flow
  * the next few previews fast. One missing preview or a cancelled request says nothing about the
  * server, and treating them as failures blanked whole screens of thumbnails in Phase 1.5.
  */
-internal fun isReachabilityFailure(error: Exception): Boolean = when (error) {
-    is NextcloudHttpException -> error.statusCode == 408 || error.statusCode == 429 || error.statusCode >= 500
-    is FileNotFoundException -> false
-    is OperationCanceledException -> false
-    is IOException -> error.message?.equals("Canceled", ignoreCase = true) != true
-    else -> false
+internal fun isReachabilityFailure(error: Exception): Boolean = when {
+    error is NextcloudHttpException -> error.statusCode == 408 || error.statusCode == 429 || error.statusCode >= 500
+    error is FileNotFoundException -> false
+    error is OperationCanceledException -> false
+    isCancellation(error) -> false
+    else -> error is IOException
 }
+
+/**
+ * OkHttp reports a cancelled call as IOException("Canceled"), and sometimes as a timeout whose
+ * cause is that: the picker cancelled tiles while scrolling in Phase 5, and those "timeouts" armed
+ * the back-off and blanked the screen.
+ */
+internal fun isCancellation(error: Throwable): Boolean =
+    generateSequence(error) { it.cause }.take(5).any { it is IOException && it.message.equals("Canceled", ignoreCase = true) }
 
 /**
  * Everything the picker reads goes through here. Picker calls are answered from the Room library
@@ -78,7 +92,7 @@ class LibraryRepository private constructor(context: Context) {
      */
     private val previewSlots = Semaphore(MAX_CONCURRENT_PREVIEW_DOWNLOADS, true)
     private val originalSlots = Semaphore(MAX_CONCURRENT_ORIGINAL_DOWNLOADS, true)
-    private val previewGate = RemoteQueryGate(PREVIEW_RETRY_DELAY_MS, ::isReachabilityFailure)
+    private val previewGate = RemoteQueryGate(PREVIEW_RETRY_DELAY_MS, ::isReachabilityFailure, failuresBeforeBackOff = PREVIEW_FAILURES_BEFORE_BACK_OFF)
 
     /** Plain preferences only, never the Keystore: safe on the picker's 100 ms collection-info path. */
     val hasAccount: Boolean get() = credentials.account() != null
@@ -125,7 +139,7 @@ class LibraryRepository private constructor(context: Context) {
 
     /** A page of photos for the keyboard, newest taken first (PLAN 4.8). Call off the main thread. */
     fun newestPhotos(after: MediaItem?, limit: Int): List<MediaItem> =
-        if (hasAccount) store.newestPage(MIME_PREFIX, after, limit) else emptyList()
+        if (hasAccount) store.newestPage(IMAGE_PREFIX, after, limit) else emptyList()
 
     /** What the diagnostics show (PLAN 4.6). Call off the main thread. */
     fun diagnostics(): Diagnostics {
@@ -380,7 +394,7 @@ class LibraryRepository private constructor(context: Context) {
         val state = store.state()
         val due = System.currentTimeMillis() - state.lastFullListingMillis >= FULL_LISTING_INTERVAL_MS
         val needsFull = full || !state.imported || due || state.rootEtag.isEmpty() ||
-            state.respectsNoMedia != settings.respectNoMedia
+            state.respectsNoMedia != settings.respectNoMedia || state.listingVersion != LISTING_VERSION
         val changed = if (needsFull) fullSync(account, folders, onProgress) else changeSync(account, folders, onProgress)
         val rematched = matchLocally()
         store.pruneDeletions(DELETION_RETENTION_MS)
@@ -447,7 +461,7 @@ class LibraryRepository private constructor(context: Context) {
         var changed = false
         var seen = 0
         val pending = ArrayList<MediaItem>()
-        val listing = client.listMedia(account, folders, MIME_PREFIX) { batch ->
+        val listing = client.listMedia(account, folders, MEDIA_PREFIXES) { batch ->
             if (batch.isEmpty()) return@listMedia
             seen += batch.size
             onProgress(SyncProgress.Listing(seen))
@@ -468,6 +482,7 @@ class LibraryRepository private constructor(context: Context) {
             etags.rootEtag, etags.byKey, hidden,
             respectsNoMedia = settings.respectNoMedia,
             duplicatePaths = listing.duplicates > 0,
+            listingVersion = LISTING_VERSION,
         )
         Log.i(
             TAG,
@@ -493,7 +508,7 @@ class LibraryRepository private constructor(context: Context) {
         onProgress(SyncProgress.Checking)
         val roots = folders.map { client.folderEntry(account, it) }
         val rootEtag = roots.joinToString(" ", transform = DavEntry::etag)
-        val favoritesChanged = store.applyFavorites(client.favoriteIds(account, folders, MIME_PREFIX))
+        val favoritesChanged = store.applyFavorites(client.favoriteIds(account, folders, MEDIA_PREFIXES))
         val state = store.state()
         if (rootEtag == state.rootEtag) {
             Log.d(TAG, "Change check: library folders unchanged, favourites changed: $favoritesChanged")
@@ -513,7 +528,7 @@ class LibraryRepository private constructor(context: Context) {
             return fullSync(account, folders, onProgress) || favoritesChanged
         }
         val listings = changedFolders.filterNot { isInsideAny(it, hidden) }.associateWith { key ->
-            client.listDirectFiles(account, etags.hrefByKey.getValue(key), MIME_PREFIX).toMediaItems(hidden)
+            client.listDirectFiles(account, etags.hrefByKey.getValue(key), MEDIA_PREFIXES).toMediaItems(hidden)
         }
         val changed = store.commitFolders(listings, removedFolders) || favoritesChanged
         store.saveFolderState(rootEtag, etags.byKey, hidden)
@@ -601,6 +616,7 @@ class LibraryRepository private constructor(context: Context) {
                 .getOrNull()
                 ?.let { return it }
         }
+        if (item.isVideo) return openStreamed(item)
         val account = requireAuthorizedAccount()
         val file = withSlot(originalSlots, ORIGINAL_SLOT_WAIT_MS, "original") {
             diskCache.getOrDownload(MediaDiskCache.Area.ORIGINAL, key, cancellationSignal) { target ->
@@ -608,6 +624,55 @@ class LibraryRepository private constructor(context: Context) {
             }
         }
         return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+    }
+
+    /**
+     * A file handle whose reads become HTTP Range requests (PLAN 5.2), for videos: it is returned
+     * at once, where downloading a large video first would outlast the picker's time limit. Each
+     * stream gets its own thread for the reads and one for reading ahead.
+     */
+    @Throws(FileNotFoundException::class)
+    private fun openStreamed(item: MediaItem): ParcelFileDescriptor {
+        val account = requireAuthorizedAccount()
+        val readThread = HandlerThread("nc-stream-${item.id}").apply { start() }
+        val readAhead = Executors.newSingleThreadExecutor { Thread(it, "nc-stream-ahead-${item.id}").apply { isDaemon = true } }
+        val reader = RangeReader(item.sizeBytes, prefetcher = readAhead) { offset, length ->
+            withNetworkRetries { unauthorizedStops { client.fetchRange(account, item.href, item.etag, offset, length) } }
+        }
+        val opened = SystemClock.elapsedRealtime()
+        val seconds = { (SystemClock.elapsedRealtime() - opened) / 1_000.0 }
+        Log.i(TAG, "Streaming ${item.id} (${item.sizeBytes / MEBIBYTE} MiB)")
+        val callback = object : ProxyFileDescriptorCallback() {
+            override fun onGetSize(): Long = item.sizeBytes
+
+            override fun onRead(offset: Long, size: Int, data: ByteArray): Int = try {
+                reader.read(offset, data, 0, size)
+            } catch (error: Exception) {
+                Log.w(TAG, "Stream ${item.id}: read at $offset failed after ${"%.1f".format(seconds())} s: ${error.javaClass.simpleName}: ${error.message.orEmpty()}")
+                throw ErrnoException("onRead", OsConstants.EIO)
+            }
+
+            override fun onRelease() {
+                reader.close()
+                readAhead.shutdownNow()
+                readThread.quitSafely()
+                StreamingService.streamClosed(appContext)
+                Log.i(
+                    TAG,
+                    "Stream ${item.id} closed after ${"%.1f".format(seconds())} s: ${reader.requests} requests, " +
+                        "${reader.bytesFetched / MEBIBYTE} MiB",
+                )
+            }
+        }
+        return try {
+            appContext.getSystemService(StorageManager::class.java)
+                .openProxyFileDescriptor(ParcelFileDescriptor.MODE_READ_ONLY, callback, Handler(readThread.looper))
+                .also { StreamingService.streamOpened(appContext) }
+        } catch (error: IOException) {
+            readAhead.shutdownNow()
+            readThread.quitSafely()
+            throw FileNotFoundException("Couldn't stream ${item.id}: ${error.message}").apply { initCause(error) }
+        }
     }
 
     /**
@@ -644,7 +709,7 @@ class LibraryRepository private constructor(context: Context) {
                         // OkHttp reports a cancelled call as IOException("Canceled"). The picker
                         // cancels every tile scrolled off screen, so this must not look like a
                         // dead server (Phase 1.5).
-                        if (cancellationSignal?.isCanceled == true) throw OperationCanceledException()
+                        if (cancellationSignal?.isCanceled == true || isCancellation(error)) throw OperationCanceledException()
                         throw error
                     }
                 }
@@ -658,7 +723,7 @@ class LibraryRepository private constructor(context: Context) {
 
     /** Drops hidden files (the video half of a live photo, say), empty ones, and anything in [hiddenFolders]. */
     private fun List<RemoteFile>.toMediaItems(hiddenFolders: Set<String>): List<MediaItem> =
-        filter { !it.isHidden && it.sizeBytes > 0L && it.mimeType.startsWith(MIME_PREFIX) }
+        filter { file -> !file.isHidden && file.sizeBytes > 0L && MEDIA_PREFIXES.any(file.mimeType::startsWith) }
             .map(::toMediaItem)
             .filterNot { isInsideAny(it.folder, hiddenFolders) }
 
@@ -690,6 +755,22 @@ class LibraryRepository private constructor(context: Context) {
 
     private fun requireAccount(): NextcloudAccount =
         credentials.load() ?: throw FileNotFoundException("No Nextcloud account is set up")
+
+    /**
+     * Retries a stream's request after a network error, briefly: the network can be cut for a
+     * moment before the streaming service has started (PLAN 5.2). HTTP errors aren't retried.
+     */
+    private fun <T> withNetworkRetries(block: () -> T): T {
+        var attempt = 0
+        while (true) {
+            try {
+                return block()
+            } catch (error: IOException) {
+                if (error is NextcloudHttpException || error is FileNotFoundException || ++attempt > STREAM_RETRIES) throw error
+                Thread.sleep(STREAM_RETRY_DELAY_MS * attempt)
+            }
+        }
+    }
 
     /** The account, unless the server refused its password: then no request is even tried (PLAN 4.4). */
     private fun requireAuthorizedAccount(): NextcloudAccount {
@@ -752,13 +833,25 @@ class LibraryRepository private constructor(context: Context) {
         private const val LOCAL_MATCH_DELAY_MS = 5_000L
         private const val SELECTED_SEEN_RESOLUTION_MS = 5L * 60L * 1_000L
 
-        /** Images only until video arrives in Phase 5. */
-        private const val MIME_PREFIX = "image/"
+        /** Photos and videos (PLAN 5.3). Hidden files, such as a live photo's video half, are dropped. */
+        private val MEDIA_PREFIXES = listOf("image/", "video/")
+
+        /** The photo keyboard sends images only: Messenger takes no video from keyboards (PLAN 4.8). */
+        private const val IMAGE_PREFIX = "image/"
+
+        /**
+         * What the listing includes. A change makes the next sync list everything, without
+         * starting a new library: 2 added videos.
+         */
+        private const val LISTING_VERSION = 2
 
         /** Catches what etags miss: external storage, and metadata Nextcloud fills in later. */
         private const val FULL_LISTING_INTERVAL_MS = 7L * 24L * 60L * 60L * 1_000L
         private const val DELETION_RETENTION_MS = 180L * 24L * 60L * 60L * 1_000L
 
+        private const val MEBIBYTE = 1024L * 1024L
+        private const val STREAM_RETRIES = 3
+        private const val STREAM_RETRY_DELAY_MS = 500L
         private const val SMALL_PREVIEW_PX = 256
         private const val LARGE_PREVIEW_PX = 1024
         private const val MAX_CONCURRENT_PREVIEW_DOWNLOADS = 4
@@ -770,6 +863,10 @@ class LibraryRepository private constructor(context: Context) {
 
         // Short enough that a server coming back online recovers within one picker session.
         private const val PREVIEW_RETRY_DELAY_MS = 5_000L
+
+        // The picker shows a refused thumbnail as a black tile until it is redrawn, so one odd
+        // failure mustn't refuse a screenful: back off only when the server keeps failing.
+        private const val PREVIEW_FAILURES_BEFORE_BACK_OFF = 3
 
         @Volatile
         private var instance: LibraryRepository? = null

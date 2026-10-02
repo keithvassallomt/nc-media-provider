@@ -2,6 +2,7 @@ package com.keithvassallo.ncmediaprovider.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
 
@@ -46,5 +47,21 @@ class RemoteQueryGateTest {
         }
 
         assertEquals("retry", gate.query { "retry" })
+    }
+
+    @Test
+    fun `backs off only after enough failures in a row`() {
+        var now = 0L
+        val gate = RemoteQueryGate(1_000, nowMillis = { now }, failuresBeforeBackOff = 3)
+        repeat(2) { runCatching { gate.query { throw IOException("down") } } }
+        gate.query { "a success resets the count" }
+        repeat(2) { runCatching { gate.query { throw IOException("down") } } }
+        assertEquals("still tried", gate.query { "still tried" })
+        runCatching { gate.query { throw IOException("down") } }
+        runCatching { gate.query { throw IOException("down") } }
+        runCatching { gate.query { throw IOException("down") } }
+        assertTrue(runCatching { gate.query { "deferred" } }.exceptionOrNull() is RemoteQueryDeferredException)
+        now += 1_000
+        assertEquals("open again", gate.query { "open again" })
     }
 }

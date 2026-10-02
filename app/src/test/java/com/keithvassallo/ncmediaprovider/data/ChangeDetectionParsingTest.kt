@@ -64,7 +64,7 @@ class ChangeDetectionParsingTest {
         val folders = SearchRequest.folders("alice", listOf("/Photos"))
         assertTrue(folders.contains("<d:literal>httpd/unix-directory</d:literal>"))
         assertTrue(folders.contains("<d:href>/files/alice/Photos</d:href>"))
-        val favorites = SearchRequest.favorites("alice", listOf("/Photos"), "image/")
+        val favorites = SearchRequest.favorites("alice", listOf("/Photos"), listOf("image/"))
         assertTrue(favorites.contains("<d:eq><d:prop><oc:favorite/></d:prop><d:literal>1</d:literal></d:eq>"))
         assertTrue(PropfindRequest.FILES.contains("<d:resourcetype/>"))
     }

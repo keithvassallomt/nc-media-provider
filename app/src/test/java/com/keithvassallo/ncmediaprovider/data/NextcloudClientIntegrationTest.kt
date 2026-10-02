@@ -39,8 +39,8 @@ class NextcloudClientIntegrationTest {
 
     @Test
     fun `date-window pages add up to the same listing as one big page`() {
-        val whole = client.listMedia(account, folders, "image/", pageSize = 1000).files
-        val paged = client.listMedia(account, folders, "image/", pageSize = 2).files
+        val whole = client.listMedia(account, folders, listOf("image/"), pageSize = 1000).files
+        val paged = client.listMedia(account, folders, listOf("image/"), pageSize = 2).files
         assertTrue("expected several images, got ${whole.size}", whole.size >= 3)
         assertEquals(whole.map(RemoteFile::fileId).toSet(), paged.map(RemoteFile::fileId).toSet())
         assertTrue(whole.all { it.mimeType.startsWith("image/") && it.href.contains(folder.replace(" ", "%20")) })
@@ -49,15 +49,15 @@ class NextcloudClientIntegrationTest {
     @Test
     fun `paged listing matches one unpaged request`() {
         // Read-only, so it is also safe against a real server (Phase 2.2 check on Keith's library).
-        val paged = client.listMedia(account, folders, "image/").files
-        val whole = client.search(account, folders, "image/", null, 1_000_000)
+        val paged = client.listMedia(account, folders, listOf("image/")).files
+        val whole = client.search(account, folders, listOf("image/"), null, 1_000_000)
         assertEquals(whole.size, paged.size)
         assertEquals(whole.map(RemoteFile::fileId).toSet(), paged.map(RemoteFile::fileId).toSet())
     }
 
     @Test
     fun `downloads a preview by file ID and the original by href`() {
-        val photo = client.listMedia(account, folders, "image/").files.first { it.mimeType == "image/jpeg" }
+        val photo = client.listMedia(account, folders, listOf("image/")).files.first { it.mimeType == "image/jpeg" }
         val preview = File.createTempFile("preview", ".jpg").apply { deleteOnExit() }
         client.downloadPreview(account, photo.fileId, 256, preview, null)
         assertTrue(preview.length() > 0)
@@ -78,7 +78,7 @@ class NextcloudClientIntegrationTest {
             (1..5).forEach { i ->
                 call(Request.Builder().url("$dir/burst-$i.jpg").header("X-OC-Mtime", "1700000000").put(jpeg.toRequestBody()))
             }
-            val listed = client.listMedia(account, listOf(path), "image/", pageSize = 2).files
+            val listed = client.listMedia(account, listOf(path), listOf("image/"), pageSize = 2).files
             assertEquals(5, listed.size)
             assertTrue(listed.all { it.lastModifiedMillis == 1_700_000_000_000L })
         } finally {
@@ -98,7 +98,7 @@ class NextcloudClientIntegrationTest {
             assertTrue(rootBefore.etag != client.folderEntry(account, folder).etag)
 
             val added = client.listSubfolders(account, folders).single { it.href.trimEnd('/').endsWith("/$name") }
-            val files = client.listDirectFiles(account, added.href, "image/")
+            val files = client.listDirectFiles(account, added.href, listOf("image/"))
             assertEquals(listOf("photo.jpg"), files.map(RemoteFile::fileName))
 
             call(
@@ -108,7 +108,7 @@ class NextcloudClientIntegrationTest {
                         <d:set><d:prop><oc:favorite>1</oc:favorite></d:prop></d:set></d:propertyupdate>""".toRequestBody(),
                 ),
             )
-            assertTrue(files.single().fileId in client.favoriteIds(account, folders, "image/"))
+            assertTrue(files.single().fileId in client.favoriteIds(account, folders, listOf("image/")))
         } finally {
             call(Request.Builder().url(dir).delete())
         }
@@ -126,7 +126,7 @@ class NextcloudClientIntegrationTest {
             }
             call(Request.Builder().url(davUrl("$base/b/.nomedia")).put(ByteArray(0).toRequestBody()))
 
-            val listing = client.listMedia(account, library, "image/", pageSize = 2)
+            val listing = client.listMedia(account, library, listOf("image/"), pageSize = 2)
             assertEquals(setOf("one.jpg", "two.jpg", "three.jpg"), listing.files.map(RemoteFile::fileName).toSet())
             assertEquals(0, listing.duplicates)
 
@@ -178,9 +178,29 @@ class NextcloudClientIntegrationTest {
         }
     }
 
+    @Test
+    fun `videos are listed and read by Range, pinned to their etag`() {
+        val media = client.listMedia(account, folders, listOf("image/", "video/")).files
+        val video = media.filter { it.mimeType.startsWith("video/") && !it.isHidden }.maxByOrNull(RemoteFile::sizeBytes)
+        assertTrue("no visible video in $folder", video != null)
+        val whole = File.createTempFile("video", ".bin").apply { deleteOnExit() }
+        client.downloadFile(account, video!!.href, whole, null)
+        val bytes = whole.readBytes()
+        val reader = RangeReader(video.sizeBytes, chunkSize = 4096) { offset, length -> client.fetchRange(account, video.href, video.etag, offset, length) }
+        val middle = ByteArray(10_000)
+        assertEquals(10_000, reader.read(1_000, middle, 0, 10_000))
+        assertTrue(middle.contentEquals(bytes.copyOfRange(1_000, 11_000)))
+        try {
+            client.fetchRange(account, video.href, "not-the-etag", 0, 10)
+            fail("a stale etag still read")
+        } catch (error: NextcloudHttpException) {
+            assertEquals(412, error.statusCode)
+        }
+    }
+
     @Test(expected = NextcloudHttpException::class)
     fun `a wrong password is an HTTP error, not an empty library`() {
-        client.listMedia(account.copy(appPassword = "wrong"), folders, "image/")
+        client.listMedia(account.copy(appPassword = "wrong"), folders, listOf("image/"))
     }
 
     private fun davUrl(path: String) = "${account.baseUrl.trimEnd('/')}/remote.php/dav/files/${account.userId}$path"
