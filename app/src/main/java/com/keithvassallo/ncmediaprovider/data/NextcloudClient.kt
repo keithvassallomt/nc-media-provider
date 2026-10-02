@@ -1,6 +1,8 @@
 package com.keithvassallo.ncmediaprovider.data
 
 import android.os.CancellationSignal
+import android.os.SystemClock
+import android.util.Log
 import com.keithvassallo.ncmediaprovider.BuildConfig
 import okhttp3.Credentials
 import okhttp3.HttpUrl
@@ -58,9 +60,19 @@ class NextcloudClient {
             .url(account.server().newBuilder().addPathSegments("remote.php/dav/").build())
             .method("SEARCH", body.toRequestBody(XML))
             .header("Accept", "application/xml")
+        val started = SystemClock.elapsedRealtime()
         return execute(request, account, SEARCH_TIMEOUT_SECONDS).use { response ->
             if (response.code != 207) throw response.toException()
-            MultistatusParser.parse(response.body.byteStream())
+            // Read fully first, so the log separates network time from parsing time.
+            val bytes = response.body.bytes()
+            val received = SystemClock.elapsedRealtime()
+            MultistatusParser.parse(bytes.inputStream()).also { files ->
+                Log.d(
+                    TAG,
+                    "SEARCH ${modified?.operator ?: "all"} ${modified?.seconds ?: ""} -> ${files.size} files, " +
+                        "${bytes.size / 1024} KiB: network ${received - started} ms, parse ${SystemClock.elapsedRealtime() - received} ms",
+                )
+            }
         }
     }
 
@@ -147,6 +159,7 @@ class NextcloudClient {
     private data class ServerAuth(val origin: HttpUrl, val credentials: String)
 
     companion object {
+        private const val TAG = "NextcloudClient"
         private val XML = "application/xml; charset=utf-8".toMediaType()
         private const val LIST_PAGE_SIZE = 1000
 

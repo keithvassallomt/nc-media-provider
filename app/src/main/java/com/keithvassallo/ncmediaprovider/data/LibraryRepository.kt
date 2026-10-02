@@ -111,6 +111,8 @@ class LibraryRepository private constructor(context: Context) {
         if (!hasAccount) return
         val request = PeriodicWorkRequestBuilder<LibrarySyncWorker>(PERIODIC_SYNC_HOURS, TimeUnit.HOURS)
             .setConstraints(NETWORK)
+            // Without a delay the first run fires at once, on top of the sync the provider asks for.
+            .setInitialDelay(PERIODIC_SYNC_HOURS, TimeUnit.HOURS)
             .build()
         WorkManager.getInstance(appContext)
             .enqueueUniquePeriodicWork(PERIODIC_SYNC_WORK, ExistingPeriodicWorkPolicy.KEEP, request)
@@ -137,22 +139,28 @@ class LibraryRepository private constructor(context: Context) {
         val firstImport = !store.state().imported
         val pending = ArrayList<MediaItem>()
         val started = System.currentTimeMillis()
+        var commitMillis = 0L
         val listed = client.listFolder(account, folder, mimePrefix = "image/") { batch ->
             if (!firstImport) return@listFolder
             pending += batch.toMediaItems()
             if (pending.size >= IMPORT_BATCH) {
+                val commitStarted = System.currentTimeMillis()
                 if (store.commit(pending, complete = false)) {
                     changed = true
                     notifyPickerOfChanges()
                 }
+                commitMillis += System.currentTimeMillis() - commitStarted
                 pending.clear()
             }
         }
+        val commitStarted = System.currentTimeMillis()
         if (store.commit(listed.toMediaItems(), complete = true)) changed = true
+        commitMillis += System.currentTimeMillis() - commitStarted
         store.pruneDeletions(DELETION_RETENTION_MS)
         Log.i(
             TAG,
-            "Synced ${listed.size} files in $folder in ${System.currentTimeMillis() - started} ms: " +
+            "Synced ${listed.size} files in $folder in ${System.currentTimeMillis() - started} ms " +
+                "(commits $commitMillis ms): " +
                 "generation ${store.state().generation}, changed: $changed, first import: $firstImport",
         )
         if (changed) notifyPickerOfChanges()

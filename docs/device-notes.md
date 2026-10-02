@@ -167,3 +167,23 @@ Reinstalling the debug APK (`adb install -r`) made MediaProvider log `Cloud prov
 ### Apps with their own photo grid
 
 Messenger's attach screen never called the provider. It holds full photo and video access and reads the phone's media database directly; cloud-provider photos are never in that database, only in the picker. Apps like that can't show a cloud library. WhatsApp offers the system picker behind its folder button, and it showed the Nextcloud library there.
+
+## Phase 2 on-device checks (GrapheneOS, 2026-10-02)
+
+### WorkManager jobs keep network access
+
+The sync runs as a WorkManager job with a network constraint. With the screen off and the app not in the foreground, it listed the server normally: background network restriction (Phase 1.5) does not apply to a running job. First import: 16,896 images in 7 batch commits (generation 8) in 121 s. A second full listing with no changes kept generation 8.
+
+### Listing speed on the phone
+
+Per-request timing (debug build, 1,000-file pages of about 690 KiB):
+
+| | Network | Parse |
+|---|---|---|
+| Foreground, after the date fix | 170 to 310 ms | 305 to 476 ms |
+| Background job, after the date fix | 170 to 430 ms | 2.4 to 6.2 s |
+| Background job, before the date fix | 230 to 300 ms | 3.5 to 6.7 s |
+
+- Parsing `getlastmodified` through `ZonedDateTime` cost several ms per file on Android (the JVM caches what Android looks up each time); parsing Nextcloud's fixed format by hand fixed that.
+- A background job then still parses about 10 times slower than the foreground, with no growth in work: Android runs background jobs on restricted CPU. A full background listing of this library takes about 1.5 minutes in a debug build. Fine for a first import or a weekly check, too slow for checking changes each time the picker opens: that is what the folder-etag walk (PLAN 2.4) is for.
+- The commit that compares 16,896 unchanged rows took 11 to 26 s in the background, also CPU-bound.

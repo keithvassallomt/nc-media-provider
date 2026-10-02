@@ -4,6 +4,8 @@ import org.xml.sax.Attributes
 import org.xml.sax.helpers.DefaultHandler
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import javax.xml.parsers.SAXParserFactory
@@ -214,9 +216,28 @@ object MultistatusParser {
         }
     }
 
-    private fun parseHttpDate(value: String): Long? = runCatching {
-        ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli()
-    }.getOrNull()
+    /**
+     * Nextcloud always sends `Thu, 01 Feb 2024 10:00:00 GMT`. Parsed by hand because going through
+     * ZonedDateTime cost about 4 ms per file on the phone (Phase 2), most of a listing's time.
+     */
+    internal fun parseHttpDate(value: String): Long? {
+        val parts = value.split(' ')
+        if (parts.size == 6 && parts[5] == "GMT") {
+            val time = parts[4].split(':')
+            val month = MONTHS.indexOf(parts[2]) + 1
+            if (month > 0 && time.size == 3) {
+                return runCatching {
+                    LocalDateTime.of(parts[3].toInt(), month, parts[1].toInt(), time[0].toInt(), time[1].toInt(), time[2].toInt())
+                        .toEpochSecond(ZoneOffset.UTC) * 1000L
+                }.getOrNull()
+            }
+        }
+        return runCatching {
+            ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli()
+        }.getOrNull()
+    }
+
+    private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
     private fun key(namespace: String?, name: String?) = "${namespace.orEmpty()}|$name"
 }

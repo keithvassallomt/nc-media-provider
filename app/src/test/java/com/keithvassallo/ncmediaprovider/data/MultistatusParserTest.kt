@@ -64,6 +64,14 @@ class MultistatusParserTest {
     }
 
     @Test
+    fun `HTTP dates parse by hand and by the fallback alike`() {
+        assertEquals(1706781600_000L, MultistatusParser.parseHttpDate("Thu, 01 Feb 2024 10:00:00 GMT"))
+        assertEquals(951782400_000L, MultistatusParser.parseHttpDate("Tue, 29 Feb 2000 00:00:00 GMT"))
+        assertEquals(1706781600_000L, MultistatusParser.parseHttpDate("Thu, 1 Feb 2024 10:00:00 +0000")) // fallback
+        assertNull(MultistatusParser.parseHttpDate("yesterday"))
+    }
+
+    @Test
     fun `entries without a date taken fall back to null`() {
         val xml = """<?xml version="1.0"?>
 <d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">

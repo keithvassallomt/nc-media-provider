@@ -17,7 +17,7 @@ internal fun diffLibrary(stored: Collection<MediaItem>, listed: Collection<Media
     val storedById = stored.associateBy(MediaItem::id)
     val upserts = listed.filter { item ->
         val old = storedById[item.id]
-        old == null || old.copy(generation = 0L) != item.copy(generation = 0L)
+        old == null || !old.sameContentAs(item)
     }
     val deletedIds = if (complete) {
         val listedIds = listed.mapTo(HashSet(), MediaItem::id)
@@ -27,6 +27,13 @@ internal fun diffLibrary(stored: Collection<MediaItem>, listed: Collection<Media
     }
     return LibraryChanges(upserts, deletedIds)
 }
+
+/** Equal in everything but the generation. Compared field by field: no copies for 20,000 rows. */
+internal fun MediaItem.sameContentAs(other: MediaItem): Boolean =
+    id == other.id && href == other.href && etag == other.etag && fileName == other.fileName &&
+        mimeType == other.mimeType && sizeBytes == other.sizeBytes && lastModifiedMillis == other.lastModifiedMillis &&
+        dateTakenMillis == other.dateTakenMillis && durationMillis == other.durationMillis && width == other.width &&
+        height == other.height && isFavorite == other.isFavorite
 
 /**
  * A position in one sync pass (PLAN 2.3). [pass] says which query issued it: Android 17's picker can
