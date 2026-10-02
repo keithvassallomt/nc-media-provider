@@ -221,6 +221,10 @@ Screenshots and most messaging-app images have no date taken in MediaStore, so o
 
 The first run matched the 24 photos and moved each to a new generation; later runs changed nothing.
 
+### Exit test
+
+After Keith reselected the provider, MediaProvider rebuilt its copy of the library (`MEDIA_FULL_WITH_RESET`, generation 13). For each of the 24 matched rows it logged, at verbose level, a failed insert (`UNIQUE constraint failed: media.local_id, media.is_visible`), a failed retry as an update, and nothing more: it then stored the row hidden, behind the visible phone copy. The same 24 lines in Phase 1.5 were this path too. The photos showed once, and picking them never reached the provider's `onOpenMedia`, so nothing was downloaded.
+
 ## Photo keyboard prototype (GrapheneOS, 2026-10-02)
 
 A keyboard showing the 30 newest Nextcloud photos, inserting the tapped one through the keyboard content API (branch `proto/photo-keyboard`, debug builds only). Tested in Messenger, whose own photo grid never sees a cloud provider:

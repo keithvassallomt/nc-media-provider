@@ -289,14 +289,14 @@ Moved up to straight after the sync engine, because an auto-uploading phone has 
 Done, with these changes (findings in [docs/device-notes.md](docs/device-notes.md)):
 
 - **Stored, not worked out per query.** The base matched when the picker asked, against a snapshot that was often not ready, and MediaProvider kept whatever went out. Each row now stores its match (schema 4); `LocalMatcher` runs after every sync, after each first-import batch, and when the phone's media changes, and a row whose match changes moves to the next generation.
-- **One phone item per row.** Two rows naming one local item made MediaProvider log `UNIQUE constraint failed: media.local_id, media.is_visible` 24 times in Phase 1.5. Each phone item is now claimed once, and a row keeps its match while it still fits, so matches don't flip.
+- **A photo stored twice in Nextcloud still shows once.** Several rows may name the same phone item: MediaProvider keeps each such row hidden. It first tries the row as visible, which its `UNIQUE (local_id, is_visible)` constraint refuses, and logs `UNIQUE constraint failed` at verbose level before storing the row hidden. That is its normal path, once per matched row; Phase 1.5's 24 such lines were the 24 matched camera photos, not an error. A row keeps its match while it still fits, so matches don't flip.
 - **Rules, strongest first:** name (ASCII case ignored) and size; then size and date taken; then name, kind and date taken, for copies edited on one side.
 - **Dates allow a time-zone offset.** On Keith's phone every match was exactly an hour apart: Nextcloud and Android read the camera's date in different zones. Dates count as equal within 2 s of any whole offset (15-minute steps, up to 14 hours).
 - **Fast enough to run every sync.** SQLite picks out rows with a phone item's size or name (every rule needs one or the other), plus rows already matched. Checking all 16,895 rows took 8.4 s on a dozing phone; the filtered match takes 0.6 s.
 
 **3.3 Local delivery.** Done: `onOpenMedia` opens the stored match first and downloads only if the phone copy can't be opened. When a matched item is selected, `onOpenMedia` hands over the local file with no download.
 
-**Exit:** photos that are also on the phone appear once in the picker, and selecting one doesn't download anything.
+**Exit:** photos that are also on the phone appear once in the picker, and selecting one doesn't download anything. **Passed** on the GrapheneOS phone (2026-10-02): the 24 matched camera photos were each stored hidden behind the phone's copy, and picking them never reached `onOpenMedia`.
 
 ### Phase 4: Accounts, settings and activation
 

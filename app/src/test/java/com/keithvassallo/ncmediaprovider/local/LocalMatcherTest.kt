@@ -28,22 +28,22 @@ class LocalMatcherTest {
     }
 
     @Test
-    fun `a phone item goes to one row only`() {
-        // The same photo uploaded to two folders: MediaProvider refuses two rows naming one local item.
+    fun `a photo stored twice in Nextcloud hides behind one phone copy`() {
+        // MediaProvider keeps both rows hidden, so the photo shows once.
         val matches = LocalMatcher.match(
             listOf(cloud("2", "a.jpg", 100), cloud("1", "a.jpg", 100)),
             listOf(local(7, "a.jpg", 100)),
         )
-        assertEquals(mapOf("1" to uri(7)), matches)
+        assertEquals(mapOf("1" to uri(7), "2" to uri(7)), matches)
     }
 
     @Test
-    fun `two copies on each side pair up`() {
+    fun `among several phone copies the date decides, then the lowest ID`() {
         val matches = LocalMatcher.match(
-            listOf(cloud("1", "a.jpg", 100), cloud("2", "a.jpg", 100)),
-            listOf(local(8, "a.jpg", 100), local(7, "a.jpg", 100)),
+            listOf(cloud("1", "a.jpg", 100), cloud("2", "b.jpg", 200)),
+            listOf(local(9, "a.jpg", 100), local(8, "a.jpg", 100, date = taken + 7_000), local(6, "b.jpg", 200), local(5, "b.jpg", 200)),
         )
-        assertEquals(mapOf("1" to uri(7), "2" to uri(8)), matches)
+        assertEquals(mapOf("1" to uri(9), "2" to uri(5)), matches)
     }
 
     @Test
