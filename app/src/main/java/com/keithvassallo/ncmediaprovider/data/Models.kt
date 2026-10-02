@@ -8,7 +8,7 @@ import androidx.room.PrimaryKey
  * One photo or video in the user's Nextcloud library, keyed by its Nextcloud file ID. Stored as a
  * row of the `media` table with the generation it last changed in (PLAN 2.1).
  */
-@Entity(tableName = "media", indices = [Index(value = ["generation", "id"])])
+@Entity(tableName = "media", indices = [Index(value = ["generation", "id"]), Index(value = ["folder"])])
 data class MediaItem(
     @PrimaryKey val id: String,
     /** Percent-encoded WebDAV path, as the server returned it. */
@@ -24,6 +24,8 @@ data class MediaItem(
     val height: Int = 0,
     val isFavorite: Boolean = false,
     val generation: Long = 0L,
+    /** Decoded path of the folder holding the file, ending in '/' (see [parentFolderKey]). */
+    val folder: String = "",
 ) {
     val isVideo: Boolean get() = mimeType.startsWith("video/")
 }

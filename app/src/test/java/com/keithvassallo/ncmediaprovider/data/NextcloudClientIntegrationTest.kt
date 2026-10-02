@@ -84,6 +84,40 @@ class NextcloudClientIntegrationTest {
         }
     }
 
+    @Test
+    fun `etags, one-level listings and favourites reveal a change`() {
+        // Uploads one photo into a temporary folder, favourites it, then removes the folder.
+        val http = OkHttpClient()
+        val auth = Credentials.basic(account.loginName, account.appPassword)
+        val name = "etag-test-${System.nanoTime()}"
+        val dir = "${account.baseUrl.trimEnd('/')}/remote.php/dav/files/${account.userId}$folder/$name"
+        fun call(request: Request.Builder) = http.newCall(request.header("Authorization", auth).build()).execute().use {
+            assertTrue("${it.code} for ${it.request.method}", it.isSuccessful)
+        }
+        val jpeg = File("../tools/testserver/library/alice/Photos/2021/Summer/no-exif.jpg").readBytes()
+        val rootBefore = client.folderEntry(account, folder)
+        call(Request.Builder().url(dir).method("MKCOL", null))
+        try {
+            call(Request.Builder().url("$dir/photo.jpg").put(jpeg.toRequestBody()))
+            assertTrue(rootBefore.etag != client.folderEntry(account, folder).etag)
+
+            val added = client.listFolders(account, folder).single { it.href.trimEnd('/').endsWith("/$name") }
+            val files = client.listDirectFiles(account, added.href, "image/")
+            assertEquals(listOf("photo.jpg"), files.map(RemoteFile::fileName))
+
+            call(
+                Request.Builder().url("$dir/photo.jpg").method(
+                    "PROPPATCH",
+                    """<?xml version="1.0"?><d:propertyupdate xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns">
+                        <d:set><d:prop><oc:favorite>1</oc:favorite></d:prop></d:set></d:propertyupdate>""".toRequestBody(),
+                ),
+            )
+            assertTrue(files.single().fileId in client.favoriteIds(account, folder, "image/"))
+        } finally {
+            call(Request.Builder().url(dir).delete())
+        }
+    }
+
     @Test(expected = NextcloudHttpException::class)
     fun `a wrong password is an HTTP error, not an empty library`() {
         client.listFolder(account.copy(appPassword = "wrong"), folder, "image/")

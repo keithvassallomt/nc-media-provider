@@ -123,6 +123,59 @@ class LibraryStoreTest {
         assertFalse(store.isBehindDeletionFloor(2))
     }
 
+    private fun inFolder(id: Int, folder: String, etag: String = "e$id") =
+        MediaItem("$id", "/dav$folder$id.jpg", etag, "$id.jpg", "image/jpeg", 10, 1_000, 1_000, folder = folder)
+
+    @Test
+    fun `folder commits touch only the folders that changed`() {
+        // a/ holds 1 and 2, b/ holds 3, c/ holds 4
+        store.commit(listOf(inFolder(1, "/a/"), inFolder(2, "/a/"), inFolder(3, "/b/"), inFolder(4, "/c/")), complete = true)
+        // a/ changed: 2 was deleted and 5 added. c/ is not listed, so 4 must survive.
+        assertTrue(store.commitFolders(mapOf("/a/" to listOf(inFolder(1, "/a/"), inFolder(5, "/a/"))), emptySet()))
+        assertEquals(setOf("1", "3", "4", "5"), allMedia(since = null).map(MediaItem::id).toSet())
+        assertEquals(listOf("2"), store.deletedPage(1, null, 10).items)
+        assertEquals(setOf("5"), allMedia(since = 1).map(MediaItem::id).toSet())
+    }
+
+    @Test
+    fun `a file moved between changed folders is a move, not a deletion`() {
+        store.commit(listOf(inFolder(1, "/a/"), inFolder(2, "/b/")), complete = true)
+        store.commitFolders(mapOf("/a/" to emptyList(), "/b/" to listOf(inFolder(2, "/b/"), inFolder(1, "/b/"))), emptySet())
+        assertTrue(store.deletedPage(0, null, 10).items.isEmpty())
+        assertEquals("/b/", store.media("1")!!.folder)
+        assertEquals(2L, store.media("1")!!.generation)
+    }
+
+    @Test
+    fun `a removed folder takes its files with it`() {
+        store.commit(listOf(inFolder(1, "/a/"), inFolder(2, "/gone/"), inFolder(3, "/gone/sub/")), complete = true)
+        store.commitFolders(emptyMap(), setOf("/gone/", "/gone/sub/"))
+        assertEquals(setOf("1"), allMedia(since = null).map(MediaItem::id).toSet())
+        assertEquals(setOf("2", "3"), store.deletedPage(0, null, 10).items.toSet())
+    }
+
+    @Test
+    fun `favourites flip without a listing`() {
+        store.commit(listOf(inFolder(1, "/a/"), inFolder(2, "/a/").copy(isFavorite = true)), complete = true)
+        assertFalse(store.applyFavorites(setOf("2")))
+        assertTrue(store.applyFavorites(setOf("1", "99"))) // 99 isn't in the library and is ignored
+        assertTrue(store.media("1")!!.isFavorite)
+        assertFalse(store.media("2")!!.isFavorite)
+        assertEquals(setOf("1", "2"), allMedia(since = 1).map(MediaItem::id).toSet())
+    }
+
+    @Test
+    fun `folder etags and the root etag are saved together`() {
+        store.saveFolderEtags("root-1", mapOf("/a/" to "x", "/b/" to "y"))
+        assertEquals(mapOf("/a/" to "x", "/b/" to "y"), store.folderEtags())
+        assertEquals("root-1", store.state().rootEtag)
+        store.saveFolderEtags("root-2", mapOf("/a/" to "z"))
+        assertEquals(mapOf("/a/" to "z"), store.folderEtags())
+        store.resetFor("elsewhere")
+        assertTrue(store.folderEtags().isEmpty())
+        assertEquals("", store.state().rootEtag)
+    }
+
     @Test
     fun `state survives a new store on the same database, and a reset starts over`() {
         store.commit((1..3).map(::item), complete = true)

@@ -42,11 +42,12 @@ sealed class ModifiedFilter(val operator: String, val seconds: Long) {
  * is unreliable because results can't be ordered by file ID.
  */
 object SearchRequest {
-    private val PROPS = listOf(
+    private val FILE_PROPS = listOf(
         "oc:fileid", "d:getetag", "d:getcontenttype", "d:getcontentlength", "d:getlastmodified",
         "oc:favorite", "nc:hidden", "nc:metadata-photos-original_date_time", "nc:metadata-photos-size",
     ).joinToString("") { "<$it/>" }
 
+    /** Files under [folder] whose MIME type starts with [mimePrefix], newest first. */
     fun body(
         userId: String,
         folder: String,
@@ -54,34 +55,80 @@ object SearchRequest {
         modified: ModifiedFilter?,
         limit: Int,
     ): String {
-        // The scope is a raw path: Nextcloud answers 404 for a percent-encoded one.
-        val scope = "/files/$userId" + if (folder == "/") "" else folder
-        val mimeFilter = "<d:like><d:prop><d:getcontenttype/></d:prop><d:literal>${xmlEscape(mimePrefix)}%</d:literal></d:like>"
         val where = if (modified == null) {
-            mimeFilter
+            mimeFilter(mimePrefix)
         } else {
-            "<d:and>$mimeFilter<d:${modified.operator}><d:prop><d:getlastmodified/></d:prop>" +
+            "<d:and>${mimeFilter(mimePrefix)}<d:${modified.operator}><d:prop><d:getlastmodified/></d:prop>" +
                 "<d:literal>${modified.seconds}</d:literal></d:${modified.operator}></d:and>"
         }
+        val orderBy = "<d:order><d:prop><d:getlastmodified/></d:prop><d:descending/></d:order>"
+        return search(FILE_PROPS, userId, folder, where, orderBy, limit)
+    }
+
+    /** Every folder under [folder] with its etag, in one request (PLAN 2.4). Not the folder itself. */
+    fun folders(userId: String, folder: String): String = search(
+        "<d:getetag/><d:resourcetype/>", userId, folder,
+        "<d:eq><d:prop><d:getcontenttype/></d:prop><d:literal>httpd/unix-directory</d:literal></d:eq>",
+        orderBy = "", limit = UNLIMITED,
+    )
+
+    /** File IDs of favourites under [folder]. Favouriting changes no etag, so it is checked apart. */
+    fun favorites(userId: String, folder: String, mimePrefix: String): String = search(
+        "<oc:fileid/>", userId, folder,
+        "<d:and><d:eq><d:prop><oc:favorite/></d:prop><d:literal>1</d:literal></d:eq>${mimeFilter(mimePrefix)}</d:and>",
+        orderBy = "", limit = UNLIMITED,
+    )
+
+    private fun search(select: String, userId: String, folder: String, where: String, orderBy: String, limit: Int): String {
+        // The scope is a raw path: Nextcloud answers 404 for a percent-encoded one.
+        val scope = "/files/$userId" + if (folder == "/") "" else folder
         // Without nresults Nextcloud caps the answer at 100. It imposes no upper limit of its own.
         return """<?xml version="1.0" encoding="UTF-8"?>
-<d:searchrequest xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">
+<d:searchrequest $NAMESPACES>
 <d:basicsearch>
-<d:select><d:prop>$PROPS</d:prop></d:select>
+<d:select><d:prop>$select</d:prop></d:select>
 <d:from><d:scope><d:href>${xmlEscape(scope)}</d:href><d:depth>infinity</d:depth></d:scope></d:from>
 <d:where>$where</d:where>
-<d:orderby><d:order><d:prop><d:getlastmodified/></d:prop><d:descending/></d:order></d:orderby>
+<d:orderby>$orderBy</d:orderby>
 <d:limit><d:nresults>$limit</d:nresults></d:limit>
 </d:basicsearch>
 </d:searchrequest>"""
     }
 
-    private fun xmlEscape(value: String) = value
+    private fun mimeFilter(mimePrefix: String) =
+        "<d:like><d:prop><d:getcontenttype/></d:prop><d:literal>${xmlEscape(mimePrefix)}%</d:literal></d:like>"
+
+    private const val UNLIMITED = 1_000_000
+
+    internal fun xmlEscape(value: String) = value
         .replace("&", "&amp;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace("\"", "&quot;")
 }
+
+/** PROPFIND bodies: a folder's own etag (depth 0), and the files directly inside it (depth 1). */
+object PropfindRequest {
+    val ETAG = """<?xml version="1.0" encoding="UTF-8"?>
+<d:propfind $NAMESPACES><d:prop><d:getetag/><d:resourcetype/></d:prop></d:propfind>"""
+
+    val FILES = """<?xml version="1.0" encoding="UTF-8"?>
+<d:propfind $NAMESPACES><d:prop><oc:fileid/><d:getetag/><d:getcontenttype/><d:getcontentlength/>
+<d:getlastmodified/><oc:favorite/><nc:hidden/><nc:metadata-photos-original_date_time/>
+<nc:metadata-photos-size/><d:resourcetype/></d:prop></d:propfind>"""
+}
+
+private const val NAMESPACES = """xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns""""
+
+/** A folder or file seen in a listing, with just enough to compare it (PLAN 2.4). */
+data class DavEntry(val href: String, val etag: String, val isFolder: Boolean, val fileId: String?)
+
+/** Decoded folder path ending in '/': the key folders and their files are matched on (PLAN 2.4). */
+internal fun folderKey(folderHref: String): String = percentDecode(folderHref).let { if (it.endsWith('/')) it else "$it/" }
+
+/** [folderKey] of the folder holding a file. */
+internal fun parentFolderKey(fileHref: String): String =
+    percentDecode(fileHref).trimEnd('/').substringBeforeLast('/') + "/"
 
 /**
  * Lists everything [search] can return, newest first, in pages of [pageSize].
@@ -126,19 +173,35 @@ object MultistatusParser {
     private const val OC = "http://owncloud.org/ns"
     private const val NC = "http://nextcloud.org/ns"
 
+    /** The files in a response. Folders and other entries without a file ID or MIME type are skipped. */
     fun parse(input: InputStream): List<RemoteFile> = ArrayList<RemoteFile>().also { files ->
         parse(input) { files += it }
     }
 
-    fun parse(input: InputStream, onFile: (RemoteFile) -> Unit) {
+    fun parse(input: InputStream, onFile: (RemoteFile) -> Unit) =
+        parseResponses(input) { href, props -> toRemoteFile(href, props)?.let(onFile) }
+
+    /** Every entry in a response, folders included, with its etag. */
+    fun parseEntries(input: InputStream): List<DavEntry> = ArrayList<DavEntry>().also { entries ->
+        parseResponses(input) { href, props ->
+            entries += DavEntry(
+                href = href,
+                etag = props[key(DAV, "getetag")]?.trim('"').orEmpty(),
+                isFolder = key(DAV, "resourcetype") + "/collection" in props,
+                fileId = props[key(OC, "fileid")]?.takeIf(String::isNotEmpty),
+            )
+        }
+    }
+
+    private fun parseResponses(input: InputStream, onResponse: (href: String, props: Map<String, String>) -> Unit) {
         val factory = SAXParserFactory.newInstance().apply {
             isNamespaceAware = true
             runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
         }
-        factory.newSAXParser().parse(input, Handler(onFile))
+        factory.newSAXParser().parse(input, Handler(onResponse))
     }
 
-    private class Handler(private val onFile: (RemoteFile) -> Unit) : DefaultHandler() {
+    private class Handler(private val onResponse: (String, Map<String, String>) -> Unit) : DefaultHandler() {
         private val text = StringBuilder()
         private var href: String? = null
         private val props = HashMap<String, String>()
@@ -186,34 +249,34 @@ object MultistatusParser {
                 uri == DAV && localName == "href" -> href = value
                 uri == DAV && localName == "status" -> propstatOk = value.contains(" 200 ")
                 uri == DAV && localName == "propstat" -> if (propstatOk) props.putAll(propstatProps)
-                uri == DAV && localName == "response" -> toRemoteFile()?.let(onFile)
+                uri == DAV && localName == "response" -> href?.let { onResponse(it, props) }
             }
         }
 
         override fun characters(ch: CharArray, start: Int, length: Int) {
             text.append(ch, start, length)
         }
+    }
 
-        private fun toRemoteFile(): RemoteFile? {
-            fun text(namespace: String, name: String) = props[key(namespace, name)]?.takeIf(String::isNotEmpty)
-            val size = key(NC, "metadata-photos-size")
-            return RemoteFile(
-                href = href ?: return null,
-                fileId = text(OC, "fileid") ?: return null,
-                etag = text(DAV, "getetag")?.trim('"').orEmpty(),
-                mimeType = text(DAV, "getcontenttype") ?: return null,
-                sizeBytes = text(DAV, "getcontentlength")?.toLongOrNull() ?: 0L,
-                lastModifiedMillis = text(DAV, "getlastmodified")?.let(::parseHttpDate) ?: 0L,
-                originalDateTimeMillis = text(NC, "metadata-photos-original_date_time")
-                    ?.toLongOrNull()
-                    ?.takeIf { it > 0L }
-                    ?.times(1000L),
-                width = props["$size/width"]?.toIntOrNull() ?: 0,
-                height = props["$size/height"]?.toIntOrNull() ?: 0,
-                isFavorite = text(OC, "favorite") == "1",
-                isHidden = text(NC, "hidden") == "true",
-            )
-        }
+    private fun toRemoteFile(href: String, props: Map<String, String>): RemoteFile? {
+        fun text(namespace: String, name: String) = props[key(namespace, name)]?.takeIf(String::isNotEmpty)
+        val size = key(NC, "metadata-photos-size")
+        return RemoteFile(
+            href = href,
+            fileId = text(OC, "fileid") ?: return null,
+            etag = text(DAV, "getetag")?.trim('"').orEmpty(),
+            mimeType = text(DAV, "getcontenttype") ?: return null,
+            sizeBytes = text(DAV, "getcontentlength")?.toLongOrNull() ?: 0L,
+            lastModifiedMillis = text(DAV, "getlastmodified")?.let(::parseHttpDate) ?: 0L,
+            originalDateTimeMillis = text(NC, "metadata-photos-original_date_time")
+                ?.toLongOrNull()
+                ?.takeIf { it > 0L }
+                ?.times(1000L),
+            width = props["$size/width"]?.toIntOrNull() ?: 0,
+            height = props["$size/height"]?.toIntOrNull() ?: 0,
+            isFavorite = text(OC, "favorite") == "1",
+            isHidden = text(NC, "hidden") == "true",
+        )
     }
 
     /**

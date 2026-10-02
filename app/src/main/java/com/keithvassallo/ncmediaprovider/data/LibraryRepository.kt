@@ -119,12 +119,9 @@ class LibraryRepository private constructor(context: Context) {
     }
 
     /**
-     * Lists the library and commits what changed. Runs on a WorkManager thread, where the network
-     * is allowed. The first import commits every [IMPORT_BATCH] files and tells the picker each
-     * time, so photos appear long before a large library is fully listed (PLAN 2.5).
-     *
-     * Change detection by folder etags (PLAN 2.4) is still to come; until then every sync is a full
-     * listing.
+     * Brings the library up to date and returns true when anything changed. Runs on a WorkManager
+     * thread, where the network is allowed (PLAN 2.5a). Usually a change check (PLAN 2.4); a full
+     * listing on the first import, once a week, and whenever there are no folder etags to compare.
      */
     @Throws(IOException::class)
     fun syncNow(): Boolean = synchronized(syncLock) {
@@ -134,38 +131,94 @@ class LibraryRepository private constructor(context: Context) {
             Log.i(TAG, "New server, user or folder set: starting a new library")
             store.resetFor(source)
         }
-        val folder = settings.folder
-        var changed = false
-        val firstImport = !store.state().imported
-        val pending = ArrayList<MediaItem>()
+        val state = store.state()
+        val due = System.currentTimeMillis() - state.lastFullListingMillis >= FULL_LISTING_INTERVAL_MS
+        val changed = if (!state.imported || due || state.rootEtag.isEmpty()) {
+            fullSync(account, settings.folder)
+        } else {
+            changeSync(account, settings.folder)
+        }
+        store.pruneDeletions(DELETION_RETENTION_MS)
+        if (changed) notifyPickerOfChanges()
+        return changed
+    }
+
+    /**
+     * Lists everything and commits it as complete. The first import commits every [IMPORT_BATCH]
+     * files and tells the picker each time, so photos appear long before a large library is fully
+     * listed (PLAN 2.5). Folder etags are read before the listing, so anything that changes while it
+     * runs still shows up at the next check.
+     */
+    private fun fullSync(account: NextcloudAccount, folder: String): Boolean {
         val started = System.currentTimeMillis()
-        var commitMillis = 0L
-        val listed = client.listFolder(account, folder, mimePrefix = "image/") { batch ->
+        val etags = folderEtags(account, folder)
+        val firstImport = !store.state().imported
+        var changed = false
+        val pending = ArrayList<MediaItem>()
+        val listed = client.listFolder(account, folder, MIME_PREFIX) { batch ->
             if (!firstImport) return@listFolder
             pending += batch.toMediaItems()
             if (pending.size >= IMPORT_BATCH) {
-                val commitStarted = System.currentTimeMillis()
                 if (store.commit(pending, complete = false)) {
                     changed = true
                     notifyPickerOfChanges()
                 }
-                commitMillis += System.currentTimeMillis() - commitStarted
                 pending.clear()
             }
         }
-        val commitStarted = System.currentTimeMillis()
         if (store.commit(listed.toMediaItems(), complete = true)) changed = true
-        commitMillis += System.currentTimeMillis() - commitStarted
-        store.pruneDeletions(DELETION_RETENTION_MS)
+        store.saveFolderEtags(etags.root.etag, etags.byKey)
         Log.i(
             TAG,
-            "Synced ${listed.size} files in $folder in ${System.currentTimeMillis() - started} ms " +
-                "(commits $commitMillis ms): " +
+            "Full sync of ${listed.size} files in $folder in ${System.currentTimeMillis() - started} ms: " +
                 "generation ${store.state().generation}, changed: $changed, first import: $firstImport",
         )
-        if (changed) notifyPickerOfChanges()
         return changed
     }
+
+    /**
+     * Checks for changes without listing everything (PLAN 2.4). Nextcloud changes a folder's etag
+     * whenever anything below it changes, so an unchanged root etag means nothing to do; otherwise
+     * one request returns every folder's etag, and only the folders whose etag moved are re-listed,
+     * one level each. Favourites are checked apart, since favouriting changes no etag.
+     */
+    private fun changeSync(account: NextcloudAccount, folder: String): Boolean {
+        val started = System.currentTimeMillis()
+        val root = client.folderEntry(account, folder)
+        var changed = store.applyFavorites(client.favoriteIds(account, folder, MIME_PREFIX))
+        if (root.etag == store.state().rootEtag) {
+            Log.d(TAG, "Change check: root etag unchanged, favourites changed: $changed")
+            return changed
+        }
+        val etags = folderEtags(account, folder, root)
+        val stored = store.folderEtags()
+        val changedFolders = etags.byKey.filter { (key, etag) -> stored[key] != etag }.keys
+        val removedFolders = stored.keys - etags.byKey.keys
+        val listings = changedFolders.associateWith { key ->
+            client.listDirectFiles(account, etags.hrefByKey.getValue(key), MIME_PREFIX).toMediaItems()
+        }
+        if (store.commitFolders(listings, removedFolders)) changed = true
+        store.saveFolderEtags(root.etag, etags.byKey)
+        Log.i(
+            TAG,
+            "Change check in ${System.currentTimeMillis() - started} ms: ${etags.byKey.size} folders, " +
+                "${changedFolders.size} changed, ${removedFolders.size} removed: " +
+                "generation ${store.state().generation}, changed: $changed",
+        )
+        return changed
+    }
+
+    /** The root's and every folder's etag, keyed by [folderKey]; the root counts as a folder. */
+    private fun folderEtags(account: NextcloudAccount, folder: String, root: DavEntry = client.folderEntry(account, folder)): FolderEtags {
+        val folders = client.listFolders(account, folder) + root
+        return FolderEtags(
+            root = root,
+            byKey = folders.associate { folderKey(it.href) to it.etag },
+            hrefByKey = folders.associate { folderKey(it.href) to it.href },
+        )
+    }
+
+    private class FolderEtags(val root: DavEntry, val byKey: Map<String, String>, val hrefByKey: Map<String, String>)
 
     /**
      * Rows changed after [sinceGeneration]. A picker so far behind that pruned deletions can't be
@@ -284,7 +337,7 @@ class LibraryRepository private constructor(context: Context) {
         store.media(mediaId) ?: throw FileNotFoundException("Unknown media $mediaId")
 
     private fun List<RemoteFile>.toMediaItems(): List<MediaItem> =
-        filter { !it.isHidden && it.sizeBytes > 0L && it.mimeType.startsWith("image/") }.map(::toMediaItem)
+        filter { !it.isHidden && it.sizeBytes > 0L && it.mimeType.startsWith(MIME_PREFIX) }.map(::toMediaItem)
 
     private fun toMediaItem(file: RemoteFile) = MediaItem(
         id = file.fileId,
@@ -300,6 +353,7 @@ class LibraryRepository private constructor(context: Context) {
         width = file.width,
         height = file.height,
         isFavorite = file.isFavorite,
+        folder = parentFolderKey(file.href),
     )
 
     /** Which server, user and folder set this library holds (plain preferences only). */
@@ -348,6 +402,12 @@ class LibraryRepository private constructor(context: Context) {
         private val NETWORK = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
         private const val IMPORT_BATCH = 2_000
+
+        /** Images only until video arrives in Phase 5. */
+        private const val MIME_PREFIX = "image/"
+
+        /** Catches what etags miss: external storage, and metadata Nextcloud fills in later. */
+        private const val FULL_LISTING_INTERVAL_MS = 7L * 24L * 60L * 60L * 1_000L
         private const val DELETION_RETENTION_MS = 180L * 24L * 60L * 60L * 1_000L
 
         private const val SMALL_PREVIEW_PX = 256

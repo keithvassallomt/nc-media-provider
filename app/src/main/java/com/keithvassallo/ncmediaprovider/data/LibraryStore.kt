@@ -1,6 +1,7 @@
 package com.keithvassallo.ncmediaprovider.data
 
 import com.keithvassallo.ncmediaprovider.data.db.DeletedMedia
+import com.keithvassallo.ncmediaprovider.data.db.FolderEtag
 import com.keithvassallo.ncmediaprovider.data.db.LibraryDatabase
 import com.keithvassallo.ncmediaprovider.data.db.SyncState
 import java.util.UUID
@@ -35,6 +36,7 @@ class LibraryStore(
     fun resetFor(sourceKey: String) = database.runInTransaction(Runnable {
         dao.clearMedia()
         dao.clearDeleted()
+        dao.clearFolders()
         val fresh = SyncState(instanceId = UUID.randomUUID().toString(), sourceKey = sourceKey)
         dao.saveState(fresh)
         cached = fresh
@@ -46,8 +48,47 @@ class LibraryStore(
      * longer contains as deleted.
      */
     fun commit(listed: Collection<MediaItem>, complete: Boolean): Boolean = database.runInTransaction<Boolean> {
+        applyChanges(diffLibrary(dao.allMedia(), listed, complete), fullListing = complete)
+    }
+
+    /**
+     * Commits the direct listings of the folders whose etag changed, and drops what was in folders
+     * that are gone (PLAN 2.4). Only rows in those folders are compared, so a file missing from them
+     * is deleted unless it turned up in another of them, which makes it a move.
+     */
+    fun commitFolders(listings: Map<String, List<MediaItem>>, removedFolders: Set<String>): Boolean =
+        database.runInTransaction<Boolean> {
+            val scope = (listings.keys + removedFolders).toList()
+            val stored = scope.chunked(SQL_BATCH).flatMap(dao::mediaIn)
+            applyChanges(diffLibrary(stored, listings.values.flatten(), complete = true), fullListing = false)
+        }
+
+    /**
+     * Brings favourite flags in line with [favoriteIds]. Favouriting changes no etag, so the folder
+     * walk can't see it; this is the cheap separate check.
+     */
+    fun applyFavorites(favoriteIds: Set<String>): Boolean = database.runInTransaction<Boolean> {
+        val current = dao.favoriteIds().toSet()
+        val flipped = (favoriteIds - current) + (current - favoriteIds)
+        val upserts = flipped.toList().chunked(SQL_BATCH)
+            .flatMap(dao::mediaWithIds)
+            .map { it.copy(isFavorite = it.id in favoriteIds) }
+        applyChanges(LibraryChanges(upserts, emptyList()), fullListing = false)
+    }
+
+    /** Etags at the last check, by [folderKey]. */
+    fun folderEtags(): Map<String, String> = dao.folders().associate { it.path to it.etag }
+
+    fun saveFolderEtags(rootEtag: String, folders: Map<String, String>) = database.runInTransaction(Runnable {
+        dao.clearFolders()
+        folders.map { (path, etag) -> FolderEtag(path, etag) }.chunked(SQL_BATCH).forEach(dao::saveFolders)
         val state = dao.state() ?: state()
-        val changes = diffLibrary(dao.allMedia(), listed, complete)
+        dao.saveState(state.copy(rootEtag = rootEtag).also { cached = it })
+    })
+
+    /** Writes [changes] under the next generation, if there are any. Call inside a transaction. */
+    private fun applyChanges(changes: LibraryChanges, fullListing: Boolean): Boolean {
+        val state = dao.state() ?: state()
         val now = nowMillis()
         val generation = if (changes.isEmpty) state.generation else state.generation + 1
         if (!changes.isEmpty) {
@@ -60,12 +101,12 @@ class LibraryStore(
         }
         val updated = state.copy(
             generation = generation,
-            imported = state.imported || complete,
-            lastFullListingMillis = if (complete) now else state.lastFullListingMillis,
+            imported = state.imported || fullListing,
+            lastFullListingMillis = if (fullListing) now else state.lastFullListingMillis,
         )
         dao.saveState(updated)
         cached = updated
-        !changes.isEmpty
+        return !changes.isEmpty
     }
 
     /**

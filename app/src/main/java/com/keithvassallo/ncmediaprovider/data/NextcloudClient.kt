@@ -76,6 +76,53 @@ class NextcloudClient {
         }
     }
 
+    /** The library root's own entry, whose etag changes whenever anything below it changes. */
+    fun folderEntry(account: NextcloudAccount, folder: String): DavEntry {
+        val request = Request.Builder()
+            .url(account.userFolderUrl(folder))
+            .method("PROPFIND", PropfindRequest.ETAG.toRequestBody(XML))
+            .header("Depth", "0")
+        return execute(request, account, SEARCH_TIMEOUT_SECONDS).use { response ->
+            if (response.code != 207) throw response.toException()
+            MultistatusParser.parseEntries(response.body.byteStream()).firstOrNull()
+                ?: throw IOException("No entry for the library folder")
+        }
+    }
+
+    /** Every folder below [folder], with its etag, in one request. */
+    fun listFolders(account: NextcloudAccount, folder: String): List<DavEntry> =
+        davSearch(account, SearchRequest.folders(account.userId, folder)) { MultistatusParser.parseEntries(it) }
+            .filter(DavEntry::isFolder)
+
+    /** File IDs of the favourites below [folder]. */
+    fun favoriteIds(account: NextcloudAccount, folder: String, mimePrefix: String): Set<String> =
+        davSearch(account, SearchRequest.favorites(account.userId, folder, mimePrefix)) { MultistatusParser.parseEntries(it) }
+            .mapNotNullTo(HashSet(), DavEntry::fileId)
+
+    /** The files directly inside one folder (a depth-1 PROPFIND), whose MIME type starts with [mimePrefix]. */
+    fun listDirectFiles(account: NextcloudAccount, folderHref: String, mimePrefix: String): List<RemoteFile> {
+        val url = account.server().resolve(folderHref) ?: throw IOException("Unusable folder path from the server")
+        val request = Request.Builder()
+            .url(url)
+            .method("PROPFIND", PropfindRequest.FILES.toRequestBody(XML))
+            .header("Depth", "1")
+        return execute(request, account, SEARCH_TIMEOUT_SECONDS).use { response ->
+            if (response.code != 207) throw response.toException()
+            MultistatusParser.parse(response.body.byteStream()).filter { it.mimeType.startsWith(mimePrefix) }
+        }
+    }
+
+    private fun <T> davSearch(account: NextcloudAccount, body: String, parse: (java.io.InputStream) -> T): T {
+        val request = Request.Builder()
+            .url(account.server().newBuilder().addPathSegments("remote.php/dav/").build())
+            .method("SEARCH", body.toRequestBody(XML))
+            .header("Accept", "application/xml")
+        return execute(request, account, SEARCH_TIMEOUT_SECONDS).use { response ->
+            if (response.code != 207) throw response.toException()
+            parse(response.body.byteStream())
+        }
+    }
+
     /** Server-rendered preview, already rotated, cropped to cover a [sizePx] square. */
     fun downloadPreview(
         account: NextcloudAccount,
@@ -152,6 +199,14 @@ class NextcloudClient {
     private fun Response.toException() = NextcloudHttpException(code, "Server returned HTTP $code")
 
     private fun NextcloudAccount.server(): HttpUrl = baseUrl.trimEnd('/').toHttpUrl()
+
+    /** `remote.php/dav/files/<user>/<folder>/`, each segment percent-encoded by OkHttp. */
+    private fun NextcloudAccount.userFolderUrl(folder: String): HttpUrl = server().newBuilder()
+        .addPathSegments("remote.php/dav/files")
+        .addPathSegment(userId)
+        .apply { folder.split('/').filter(String::isNotEmpty).forEach(::addPathSegment) }
+        .addPathSegment("")
+        .build()
 
     private fun HttpUrl.hasSameOrigin(other: HttpUrl): Boolean =
         scheme == other.scheme && host == other.host && port == other.port

@@ -33,7 +33,7 @@ internal fun MediaItem.sameContentAs(other: MediaItem): Boolean =
     id == other.id && href == other.href && etag == other.etag && fileName == other.fileName &&
         mimeType == other.mimeType && sizeBytes == other.sizeBytes && lastModifiedMillis == other.lastModifiedMillis &&
         dateTakenMillis == other.dateTakenMillis && durationMillis == other.durationMillis && width == other.width &&
-        height == other.height && isFavorite == other.isFavorite
+        height == other.height && isFavorite == other.isFavorite && folder == other.folder
 
 /**
  * A position in one sync pass (PLAN 2.3). [pass] says which query issued it: Android 17's picker can

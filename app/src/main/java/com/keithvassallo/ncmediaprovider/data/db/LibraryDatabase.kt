@@ -20,6 +20,13 @@ data class DeletedMedia(
     val deletedAtMillis: Long,
 )
 
+/** The etag a folder had at the last check (PLAN 2.4); keyed by its decoded path ending in '/'. */
+@Entity(tableName = "folder")
+data class FolderEtag(
+    @PrimaryKey val path: String,
+    val etag: String,
+)
+
 /** The one row describing what the picker has been told. */
 @Entity(tableName = "sync_state")
 data class SyncState(
@@ -36,6 +43,8 @@ data class SyncState(
     val lastFullListingMillis: Long = 0L,
     /** True once one complete listing has been committed. */
     val imported: Boolean = false,
+    /** The library root's etag at the last check: unchanged means nothing below it changed. */
+    val rootEtag: String = "",
 )
 
 @Dao
@@ -51,6 +60,24 @@ interface LibraryDao {
 
     @Query("SELECT * FROM media WHERE id = :id")
     fun media(id: String): MediaItem?
+
+    @Query("SELECT * FROM media WHERE id IN (:ids)")
+    fun mediaWithIds(ids: List<String>): List<MediaItem>
+
+    @Query("SELECT * FROM media WHERE folder IN (:folders)")
+    fun mediaIn(folders: List<String>): List<MediaItem>
+
+    @Query("SELECT id FROM media WHERE isFavorite = 1")
+    fun favoriteIds(): List<String>
+
+    @Query("SELECT * FROM folder")
+    fun folders(): List<FolderEtag>
+
+    @Upsert
+    fun saveFolders(rows: List<FolderEtag>)
+
+    @Query("DELETE FROM folder")
+    fun clearFolders()
 
     @Query("SELECT COUNT(*) FROM media")
     fun mediaCount(): Int
@@ -95,12 +122,16 @@ interface LibraryDao {
     fun clearDeleted()
 }
 
-@Database(entities = [MediaItem::class, DeletedMedia::class, SyncState::class], version = 1)
+@Database(entities = [MediaItem::class, DeletedMedia::class, SyncState::class, FolderEtag::class], version = 2)
 abstract class LibraryDatabase : RoomDatabase() {
     abstract fun dao(): LibraryDao
 
     companion object {
         fun open(context: Context): LibraryDatabase =
-            Room.databaseBuilder(context.applicationContext, LibraryDatabase::class.java, "library.db").build()
+            Room.databaseBuilder(context.applicationContext, LibraryDatabase::class.java, "library.db")
+                // Version 1 only ever existed on the development phone. Dropping it gives a new
+                // instance ID and so a new collection ID, which makes MediaProvider rebuild.
+                .fallbackToDestructiveMigrationFrom(dropAllTables = true, 1)
+                .build()
     }
 }
