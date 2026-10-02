@@ -347,6 +347,8 @@ Onboarding says plainly that only one cloud source can be active at a time, and 
 
 **5.5 Live photos.** Hide the hidden MOV half of each pair. Optionally, pair an image and a MOV with the same name in the same folder, for live photos uploaded by clients other than iOS. Testing needs a real iPhone live photo with a licence that allows committing it: neither Nextcloud 33 nor 35 detected the synthetic pair in Phase 0.2.
 
+**5.6 Thumbnail pre-cache (optional setting).** Downloads grid thumbnails ahead of time, so the picker and the 4.7 share flow show the library at once instead of filling in tile by tile. Runs as a WorkManager job (2.5a) on an unmetered network, preferably while charging, newest first, resuming where it stopped, and re-fetching only thumbnails whose etag changed. Thumbnails from Keith's server measured 9 to 14 KB at 256 px (Phase 0.2), so about 150 MB per 14,000 photos: the setting shows that estimate, offers a scope (everything, or the last N months) and gets its own size cap, separate from the 256 MiB on-demand cache. Cache the sizes the picker actually requests: log `onOpenPreview` sizes on both phones first, since a foldable's grid may ask for more than 256 px. Keep to the same 4 to 6 parallel requests as 5.1.
+
 **Exit:** large videos browse, play in the picker preview, and attach to an app within the 3-minute limit.
 
 ### Phase 6: Memories layer
