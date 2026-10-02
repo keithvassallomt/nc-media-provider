@@ -25,7 +25,7 @@ class ListingTest {
     }
 
     private fun assertListsAll(files: List<RemoteFile>, pageSize: Int) {
-        val listed = listByModifiedWindows(pageSize, FakeServer(files)::search)
+        val listed = listByModifiedWindows(pageSize, search = FakeServer(files)::search)
         assertEquals(files.size, listed.size)
         assertEquals(files.map(RemoteFile::fileId).toSet(), listed.map(RemoteFile::fileId).toSet())
     }
@@ -50,7 +50,7 @@ class ListingTest {
     @Test
     fun `a short first page needs one request`() {
         val server = FakeServer((1..5).map { file(it, 100L + it) })
-        assertEquals(5, listByModifiedWindows(10, server::search).size)
+        assertEquals(5, listByModifiedWindows(10, search = server::search).size)
         assertEquals(1, server.requests)
     }
 

@@ -9,7 +9,8 @@
         <item quantity="one">%d image listed</item>
         <item quantity="other">%d images listed</item>
     </plurals>
-    <string name="library_not_listed">Not listed yet. Open the picker to start.</string>
+    <string name="library_not_listed">Not listed yet. The first sync starts as soon as the network allows.</string>
+    <string name="library_counting">Counting photos…</string>
     <string name="local_network_granted">Local network access allowed</string>
     <string name="local_network_missing">Local network access not allowed. A server on your home network can’t be reached without it.</string>
     <string name="grant_local_network">Allow local network access</string>

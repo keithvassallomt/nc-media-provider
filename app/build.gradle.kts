@@ -2,6 +2,8 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
+    id("com.google.devtools.ksp")
+    id("androidx.room")
 }
 
 // Debug builds sign in with the server details in the git-ignored local.properties (PLAN 1.2).
@@ -102,7 +104,22 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        // Robolectric tests (the Room store) need Android resources on the classpath.
+        unitTests.isIncludeAndroidResources = true
+        // Robolectric reaches into FileDescriptor through JDK internals that JDK 17+ closes by
+        // default; on SDK 37 its set-up needs jdk.internal.access as well.
+        unitTests.all {
+            it.jvmArgs(
+                "--add-opens=java.base/java.io=ALL-UNNAMED",
+                "--add-exports=java.base/jdk.internal.access=ALL-UNNAMED",
+            )
+        }
     }
+}
+
+// Exported schemas let every database migration be tested (PLAN 9.6).
+room {
+    schemaDirectory("$projectDir/schemas")
 }
 
 dependencies {
@@ -115,6 +132,11 @@ dependencies {
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("androidx.room:room-runtime:2.8.5")
+    ksp("androidx.room:room-compiler:2.8.5")
+    implementation("androidx.work:work-runtime-ktx:2.12.0")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("androidx.test:core:1.7.0")
 }

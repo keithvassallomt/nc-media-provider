@@ -9,16 +9,22 @@ import android.os.OperationCanceledException
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import android.util.Log
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import com.keithvassallo.ncmediaprovider.data.db.LibraryDatabase
 import com.keithvassallo.ncmediaprovider.local.LocalMediaIndex
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.security.MessageDigest
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Whether a failed download means the server is unreachable, which arms the back-off that fails
@@ -33,12 +39,10 @@ internal fun isReachabilityFailure(error: Exception): Boolean = when (error) {
     else -> false
 }
 
-/** Thrown instead of answering with an empty library, which MediaProvider would cache as real. */
-class LibraryNotReadyException : IllegalStateException("The library has not been listed yet")
-
 /**
- * Everything the picker reads goes through here. The proof of concept keeps one listing of one
- * folder in memory (PLAN 1.3 and 1.4); Phase 2 replaces it with a Room snapshot and change detection.
+ * Everything the picker reads goes through here. Picker calls are answered from the Room library
+ * (PLAN 2.1) and never wait on the network; listing runs in [LibrarySyncWorker], because Android 17
+ * cuts this app's network off once MediaProvider's call returns (PLAN 2.5a).
  */
 class LibraryRepository private constructor(context: Context) {
     private val appContext = context.applicationContext
@@ -47,18 +51,8 @@ class LibraryRepository private constructor(context: Context) {
     private val client = NextcloudClient()
     private val diskCache = MediaDiskCache(appContext)
     private val localMedia = LocalMediaIndex(appContext)
-
-    @Volatile
-    private var snapshot: LibrarySnapshot? = null
-    private val firstListing = CountDownLatch(1)
-    private val loadLock = Any()
-    private val loadInFlight = AtomicBoolean(false)
-    private val loadExecutor = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "nc-library-load").apply { isDaemon = true }
-    }
-
-    @Volatile
-    private var lastFailureMillis = 0L
+    private val store by lazy { LibraryStore(LibraryDatabase.open(appContext)) }
+    private val syncLock = Any()
 
     /**
      * The picker asks for a screenful of thumbnails at once and every request arrives on one of the
@@ -79,18 +73,113 @@ class LibraryRepository private constructor(context: Context) {
 
     fun folder(): String = settings.folder
 
-    fun collectionId(): String {
-        val account = credentials.account() ?: return "nc-unconfigured-v1"
-        val identity = listOf(account.baseUrl, account.userId, settings.folder, settings.epoch, COLLECTION_FORMAT)
-            .joinToString("|")
-        return "nc-" + sha256(identity).take(24)
+    /** Reads the database once; afterwards its state comes from memory. Call off the main thread. */
+    fun warm() {
+        if (hasAccount) store.state()
+        warmLocalMediaIndex()
     }
 
-    fun generation(): Long = snapshot?.generation ?: settings.generation
+    /**
+     * Changes when the server, user, folder set or database changes, or when [LibraryStore.bumpEpoch]
+     * forces a rebuild (PLAN 2.7). Anything else keeps it, so MediaProvider can sync incrementally.
+     */
+    fun collectionId(): String {
+        val source = sourceKey() ?: return "nc-unconfigured-v1"
+        val state = store.state()
+        return "nc-" + sha256(listOf(source, state.instanceId, state.epoch, COLLECTION_FORMAT).joinToString("|")).take(24)
+    }
 
-    fun itemCount(): Int? = snapshot?.items?.size
+    fun generation(): Long = if (hasAccount) store.state().generation else 0L
+
+    /** Call off the main thread. */
+    fun itemCount(): Int = if (hasAccount) store.mediaCount() else 0
 
     fun accountName(): String = credentials.account()?.displayName ?: "Not set up"
+
+    /** Asks for a sync as soon as the network allows. Requests made while one is queued are dropped. */
+    fun requestSync(expedited: Boolean = false) {
+        if (!hasAccount) return
+        val request = OneTimeWorkRequestBuilder<LibrarySyncWorker>()
+            .setConstraints(NETWORK)
+            .apply { if (expedited) setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST) }
+            .build()
+        WorkManager.getInstance(appContext).enqueueUniqueWork(SYNC_WORK, ExistingWorkPolicy.KEEP, request)
+    }
+
+    /** A sync every few hours, whatever the picker does (PLAN 2.6). */
+    fun schedulePeriodicSync() {
+        if (!hasAccount) return
+        val request = PeriodicWorkRequestBuilder<LibrarySyncWorker>(PERIODIC_SYNC_HOURS, TimeUnit.HOURS)
+            .setConstraints(NETWORK)
+            .build()
+        WorkManager.getInstance(appContext)
+            .enqueueUniquePeriodicWork(PERIODIC_SYNC_WORK, ExistingPeriodicWorkPolicy.KEEP, request)
+    }
+
+    /**
+     * Lists the library and commits what changed. Runs on a WorkManager thread, where the network
+     * is allowed. The first import commits every [IMPORT_BATCH] files and tells the picker each
+     * time, so photos appear long before a large library is fully listed (PLAN 2.5).
+     *
+     * Change detection by folder etags (PLAN 2.4) is still to come; until then every sync is a full
+     * listing.
+     */
+    @Throws(IOException::class)
+    fun syncNow(): Boolean = synchronized(syncLock) {
+        val account = credentials.load() ?: return false
+        val source = sourceKey() ?: return false
+        if (store.state().sourceKey != source) {
+            Log.i(TAG, "New server, user or folder set: starting a new library")
+            store.resetFor(source)
+        }
+        val folder = settings.folder
+        var changed = false
+        val firstImport = !store.state().imported
+        val pending = ArrayList<MediaItem>()
+        val started = System.currentTimeMillis()
+        val listed = client.listFolder(account, folder, mimePrefix = "image/") { batch ->
+            if (!firstImport) return@listFolder
+            pending += batch.toMediaItems()
+            if (pending.size >= IMPORT_BATCH) {
+                if (store.commit(pending, complete = false)) {
+                    changed = true
+                    notifyPickerOfChanges()
+                }
+                pending.clear()
+            }
+        }
+        if (store.commit(listed.toMediaItems(), complete = true)) changed = true
+        store.pruneDeletions(DELETION_RETENTION_MS)
+        Log.i(
+            TAG,
+            "Synced ${listed.size} files in $folder in ${System.currentTimeMillis() - started} ms: " +
+                "generation ${store.state().generation}, changed: $changed, first import: $firstImport",
+        )
+        if (changed) notifyPickerOfChanges()
+        return changed
+    }
+
+    /**
+     * Rows changed after [sinceGeneration]. A picker so far behind that pruned deletions can't be
+     * reported gets an empty page and a new collection ID, which makes it rebuild (PLAN 2.3).
+     */
+    fun queryMedia(pageSize: Int, pageToken: String?, sinceGeneration: Long?): Page<MediaItem> {
+        if (sinceGeneration != null && forcedRebuild(sinceGeneration)) return Page(emptyList(), null)
+        return store.mediaPage(sinceGeneration, pageToken, pageSize)
+    }
+
+    fun deletedSince(sinceGeneration: Long, pageToken: String?, pageSize: Int): Page<String> {
+        if (forcedRebuild(sinceGeneration)) return Page(emptyList(), null)
+        return store.deletedPage(sinceGeneration, pageToken, pageSize)
+    }
+
+    private fun forcedRebuild(sinceGeneration: Long): Boolean {
+        if (!store.isBehindDeletionFloor(sinceGeneration)) return false
+        Log.w(TAG, "Picker at generation $sinceGeneration is behind the pruned deletions: forcing a rebuild")
+        store.bumpEpoch()
+        notifyPickerOfChanges()
+        return true
+    }
 
     /**
      * Tells MediaProvider that the library changed. A plain ContentResolver.notifyChange on the
@@ -110,44 +199,6 @@ class LibraryRepository private constructor(context: Context) {
         }
     }
 
-    /**
-     * Lists the library once per process. Returns true when the generation moved, which means the
-     * picker must be told. Change detection while running arrives in Phase 2.
-     */
-    fun pollChanges(ignoreRetryDelay: Boolean = false): Boolean = synchronized(loadLock) {
-        if (snapshot != null || !hasAccount) return false
-        if (!ignoreRetryDelay && System.currentTimeMillis() - lastFailureMillis < LOAD_RETRY_DELAY_MS) return false
-        val account = credentials.load() ?: return false
-        val folder = settings.folder
-        val files = try {
-            client.listFolder(account, folder, mimePrefix = "image/")
-        } catch (error: Exception) {
-            lastFailureMillis = System.currentTimeMillis()
-            Log.w(TAG, "Listing $folder failed: ${error.javaClass.simpleName}: ${error.message.orEmpty()}")
-            return false
-        }
-        val items = files.asSequence()
-            .filter { !it.isHidden && it.sizeBytes > 0L && it.mimeType.startsWith("image/") }
-            .map(::toMediaItem)
-            .sortedByDescending(MediaItem::dateTakenMillis)
-            .toList()
-        val fingerprint = sha256(folder + "\n" + items.map { "${it.id}:${it.etag}" }.sorted().joinToString("\n"))
-        val changed = fingerprint != settings.fingerprint
-        val generation = if (changed) settings.generation + 1 else settings.generation
-        if (changed) settings.recordListing(generation, fingerprint)
-        snapshot = LibrarySnapshot(generation, items)
-        firstListing.countDown()
-        Log.i(TAG, "Listed ${items.size} images in $folder at generation $generation (changed: $changed)")
-        return changed
-    }
-
-    fun queryMedia(pageSize: Int, pageToken: String?, sinceGeneration: Long?): Page<MediaItem> =
-        awaitSnapshot(QUERY_WAIT_MS).page(pageSize, pageToken, sinceGeneration)
-
-    /** Deletions are tracked from Phase 2; a single listing per process has none to report. */
-    @Suppress("UNUSED_PARAMETER")
-    fun deletedSince(generation: Long): List<String> = emptyList()
-
     fun localUri(item: MediaItem): Uri? =
         localMedia.find(item.fileName, item.sizeBytes, item.dateTakenMillis, item.mimeType)
 
@@ -159,7 +210,7 @@ class LibraryRepository private constructor(context: Context) {
 
     @Throws(FileNotFoundException::class)
     fun openOriginal(mediaId: String, cancellationSignal: CancellationSignal?): ParcelFileDescriptor {
-        val item = findItem(mediaId, ORIGINAL_SLOT_WAIT_MS)
+        val item = findItem(mediaId)
         val key = "original:${item.id}:${item.etag}"
         diskCache.peek(MediaDiskCache.Area.ORIGINAL, key)?.let {
             return ParcelFileDescriptor.open(it, ParcelFileDescriptor.MODE_READ_ONLY)
@@ -193,7 +244,7 @@ class LibraryRepository private constructor(context: Context) {
         if (!thumbnailOnly) {
             return AssetFileDescriptor(openOriginal(mediaId, cancellationSignal), 0, AssetFileDescriptor.UNKNOWN_LENGTH)
         }
-        val item = findItem(mediaId, PREVIEW_SLOT_WAIT_MS)
+        val item = findItem(mediaId)
         val sizePx = if (maxOf(requestedSize.x, requestedSize.y) <= SMALL_PREVIEW_PX) SMALL_PREVIEW_PX else LARGE_PREVIEW_PX
         val key = "preview:${item.id}:${item.etag}:$sizePx"
         diskCache.peek(MediaDiskCache.Area.PREVIEW, key)?.let { return it.asAssetFileDescriptor() }
@@ -221,39 +272,11 @@ class LibraryRepository private constructor(context: Context) {
         return file.asAssetFileDescriptor()
     }
 
-    private fun findItem(mediaId: String, waitMillis: Long): MediaItem {
-        val current = try {
-            awaitSnapshot(waitMillis)
-        } catch (error: LibraryNotReadyException) {
-            throw FileNotFoundException("Library not listed yet").apply { initCause(error) }
-        }
-        return current.find(mediaId) ?: throw FileNotFoundException("Unknown media $mediaId")
-    }
+    private fun findItem(mediaId: String): MediaItem =
+        store.media(mediaId) ?: throw FileNotFoundException("Unknown media $mediaId")
 
-    /**
-     * Picker calls can arrive in a fresh process before the first listing. Answering them as if the
-     * library were empty would be cached by MediaProvider, so wait for the listing, then give up.
-     *
-     * Waiting here also matters for the network: Android 17 only lets this app's process use the
-     * network while it is in the foreground or MediaProvider is calling it. A listing started from
-     * a background thread after the call returns is cut off, so this forces an attempt while the
-     * caller is still waiting.
-     */
-    private fun awaitSnapshot(waitMillis: Long): LibrarySnapshot {
-        snapshot?.let { return it }
-        if (!hasAccount) return EMPTY
-        if (loadInFlight.compareAndSet(false, true)) {
-            loadExecutor.execute {
-                try {
-                    if (pollChanges(ignoreRetryDelay = true)) notifyPickerOfChanges()
-                } finally {
-                    loadInFlight.set(false)
-                }
-            }
-        }
-        firstListing.await(waitMillis, TimeUnit.MILLISECONDS)
-        return snapshot ?: throw LibraryNotReadyException()
-    }
+    private fun List<RemoteFile>.toMediaItems(): List<MediaItem> =
+        filter { !it.isHidden && it.sizeBytes > 0L && it.mimeType.startsWith("image/") }.map(::toMediaItem)
 
     private fun toMediaItem(file: RemoteFile) = MediaItem(
         id = file.fileId,
@@ -270,6 +293,12 @@ class LibraryRepository private constructor(context: Context) {
         height = file.height,
         isFavorite = file.isFavorite,
     )
+
+    /** Which server, user and folder set this library holds (plain preferences only). */
+    private fun sourceKey(): String? {
+        val account = credentials.account() ?: return null
+        return sha256(listOf(account.baseUrl, account.userId, settings.folder).joinToString("|"))
+    }
 
     private fun requireAccount(): NextcloudAccount =
         credentials.load() ?: throw FileNotFoundException("No Nextcloud account is set up")
@@ -303,14 +332,15 @@ class LibraryRepository private constructor(context: Context) {
         private const val TAG = "LibraryRepository"
 
         /** Bump to make MediaProvider drop its cached copy of every user's library. */
-        private const val COLLECTION_FORMAT = "v1"
-        private val EMPTY = LibrarySnapshot(0L, emptyList())
+        private const val COLLECTION_FORMAT = "v2"
 
-        private const val LOAD_RETRY_DELAY_MS = 30_000L
+        private const val SYNC_WORK = "library-sync"
+        private const val PERIODIC_SYNC_WORK = "library-sync-periodic"
+        private const val PERIODIC_SYNC_HOURS = 6L
+        private val NETWORK = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
-        // MediaProvider syncs in the background, so a first listing of a large library may take a
-        // while; previews are on screen and give up quickly.
-        private const val QUERY_WAIT_MS = 60_000L
+        private const val IMPORT_BATCH = 2_000
+        private const val DELETION_RETENTION_MS = 180L * 24L * 60L * 60L * 1_000L
 
         private const val SMALL_PREVIEW_PX = 256
         private const val LARGE_PREVIEW_PX = 1024

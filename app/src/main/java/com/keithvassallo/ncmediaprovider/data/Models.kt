@@ -1,8 +1,16 @@
 package com.keithvassallo.ncmediaprovider.data
 
-/** One photo or video in the user's Nextcloud library, keyed by its Nextcloud file ID. */
+import androidx.room.Entity
+import androidx.room.Index
+import androidx.room.PrimaryKey
+
+/**
+ * One photo or video in the user's Nextcloud library, keyed by its Nextcloud file ID. Stored as a
+ * row of the `media` table with the generation it last changed in (PLAN 2.1).
+ */
+@Entity(tableName = "media", indices = [Index(value = ["generation", "id"])])
 data class MediaItem(
-    val id: String,
+    @PrimaryKey val id: String,
     /** Percent-encoded WebDAV path, as the server returned it. */
     val href: String,
     val etag: String,
@@ -15,6 +23,7 @@ data class MediaItem(
     val width: Int = 0,
     val height: Int = 0,
     val isFavorite: Boolean = false,
+    val generation: Long = 0L,
 ) {
     val isVideo: Boolean get() = mimeType.startsWith("video/")
 }

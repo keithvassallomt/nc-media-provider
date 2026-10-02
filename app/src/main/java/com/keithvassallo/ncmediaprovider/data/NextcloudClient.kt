@@ -41,7 +41,8 @@ class NextcloudClient {
         folder: String,
         mimePrefix: String,
         pageSize: Int = LIST_PAGE_SIZE,
-    ): List<RemoteFile> = listByModifiedWindows(pageSize) { filter, limit ->
+        onBatch: (List<RemoteFile>) -> Unit = {},
+    ): List<RemoteFile> = listByModifiedWindows(pageSize, onBatch) { filter, limit ->
         search(account, folder, mimePrefix, filter, limit)
     }
 

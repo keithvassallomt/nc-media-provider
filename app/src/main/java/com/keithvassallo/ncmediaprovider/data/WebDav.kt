@@ -87,20 +87,23 @@ object SearchRequest {
  * Results are ordered by modification time, newest first, so a full page holds every file newer
  * than its oldest second; only that second may continue past the page. It is fetched whole with an
  * exact match, and the next page starts strictly below it. Phase 1.5 found 2,677 files sharing one
- * second on a real server, which stalled plain date-window paging.
+ * second on a real server, which stalled plain date-window paging. [onBatch] sees each file once, as
+ * it arrives, so a first import can commit before the listing ends.
  */
 internal fun listByModifiedWindows(
     pageSize: Int,
+    onBatch: (List<RemoteFile>) -> Unit = {},
     search: (filter: ModifiedFilter?, limit: Int) -> List<RemoteFile>,
 ): List<RemoteFile> {
     val files = LinkedHashMap<String, RemoteFile>()
+    fun add(batch: List<RemoteFile>) = batch.filter { files.putIfAbsent(it.fileId, it) == null }.also(onBatch)
     var filter: ModifiedFilter? = null
     while (true) {
         val page = search(filter, pageSize)
-        page.forEach { files.putIfAbsent(it.fileId, it) }
+        add(page)
         if (page.size < pageSize) break
         val oldestSecond = page.minOf { it.lastModifiedMillis } / 1000L
-        search(ModifiedFilter.Exactly(oldestSecond), WHOLE_SECOND_LIMIT).forEach { files.putIfAbsent(it.fileId, it) }
+        add(search(ModifiedFilter.Exactly(oldestSecond), WHOLE_SECOND_LIMIT))
         if (oldestSecond <= 0L) break
         filter = ModifiedFilter.AtOrBefore(oldestSecond - 1)
     }

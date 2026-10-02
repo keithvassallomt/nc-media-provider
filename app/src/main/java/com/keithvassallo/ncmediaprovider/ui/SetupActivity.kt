@@ -178,11 +178,19 @@ class SetupActivity : AppCompatActivity() {
         if (account == null) {
             binding.connectionStatus.setText(R.string.not_connected)
         } else {
-            val listed = repository.itemCount()
-                ?.let { resources.getQuantityString(R.plurals.library_listed, it, it) }
-                ?: getString(R.string.library_not_listed)
-            binding.connectionStatus.text =
-                getString(R.string.connection_ready, account.userId, account.baseUrl, repository.folder(), listed)
+            binding.connectionStatus.text = getString(
+                R.string.connection_ready, account.userId, account.baseUrl, repository.folder(), getString(R.string.library_counting),
+            )
+            lifecycleScope.launch {
+                // Room refuses to query on the main thread.
+                val count = withContext(Dispatchers.IO) { runCatching { repository.itemCount() }.getOrNull() }
+                val listed = when {
+                    count == null || count == 0 -> getString(R.string.library_not_listed)
+                    else -> resources.getQuantityString(R.plurals.library_listed, count, count)
+                }
+                binding.connectionStatus.text =
+                    getString(R.string.connection_ready, account.userId, account.baseUrl, repository.folder(), listed)
+            }
         }
     }
 

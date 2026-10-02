@@ -12,33 +12,13 @@ class LibrarySettings(context: Context) {
         get() = preferences.getString(KEY_FOLDER, "/") ?: "/"
         set(value) = preferences.edit { putString(KEY_FOLDER, normalizeFolder(value)) }
 
-    /** Part of the collection ID: bumping it makes MediaProvider rebuild the library from scratch. */
-    val epoch: Long get() = preferences.getLong(KEY_EPOCH, 0L)
-
-    /**
-     * The last generation reported to the picker. It survives process death: an in-memory counter
-     * would restart at 0 with the same collection ID, which MediaProvider reads as going backwards.
-     */
-    val generation: Long get() = preferences.getLong(KEY_GENERATION, 0L)
-
-    /** Fingerprint of the listing that [generation] describes. */
-    val fingerprint: String? get() = preferences.getString(KEY_FINGERPRINT, null)
-
     var debugSeed: String?
         get() = preferences.getString(KEY_DEBUG_SEED, null)
         set(value) = preferences.edit { putString(KEY_DEBUG_SEED, value) }
 
-    fun recordListing(generation: Long, fingerprint: String) = preferences.edit(commit = true) {
-        putLong(KEY_GENERATION, generation)
-        putString(KEY_FINGERPRINT, fingerprint)
-    }
-
     companion object {
         private const val PREFERENCES = "library"
         private const val KEY_FOLDER = "folder"
-        private const val KEY_EPOCH = "epoch"
-        private const val KEY_GENERATION = "generation"
-        private const val KEY_FINGERPRINT = "fingerprint"
         private const val KEY_DEBUG_SEED = "debug_seed"
 
         /** "Photos/", "/Photos/" and "/Photos" are the same folder; the root is "/". */

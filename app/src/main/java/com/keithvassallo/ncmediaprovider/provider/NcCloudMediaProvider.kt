@@ -16,14 +16,13 @@ import android.os.Process
 import android.provider.CloudMediaProvider
 import android.provider.CloudMediaProviderContract
 import android.util.Log
-import com.keithvassallo.ncmediaprovider.data.LibraryNotReadyException
 import com.keithvassallo.ncmediaprovider.data.LibraryRepository
 import com.keithvassallo.ncmediaprovider.data.MediaItem
 import com.keithvassallo.ncmediaprovider.data.Page
 import com.keithvassallo.ncmediaprovider.data.RemoteQueryDeferredException
 import java.io.FileNotFoundException
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 @SuppressLint("InlinedApi") // CloudMediaProvider constants are inlined and safe on the Android 14 minimum.
 class NcCloudMediaProvider : CloudMediaProvider() {
@@ -43,9 +42,10 @@ class NcCloudMediaProvider : CloudMediaProvider() {
             runCatching {
                 val repository = LibraryRepository.get(context)
                 if (repository.hasAccount) {
-                    repository.warmLocalMediaIndex()
-                    // List the library straight away rather than at the picker's first request.
-                    if (repository.pollChanges()) repository.notifyPickerOfChanges()
+                    // Opens the database off the binder threads, so the picker's 100 ms
+                    // collection-info call never pays for it.
+                    repository.warm()
+                    repository.requestSync()
                 }
             }
         }
@@ -100,7 +100,7 @@ class NcCloudMediaProvider : CloudMediaProvider() {
             Page(emptyList(), null)
         }
         Log.d(TAG, "onQueryMedia since=$sinceGeneration token=$pageToken album=$albumId -> ${page.items.size} rows, next=${page.nextPageToken}")
-        return mediaCursor(page, collection.generation).apply {
+        return mediaCursor(page).apply {
             this.extras = collectionExtras(collection.id, page.nextPageToken).apply {
                 putStringArrayList(
                     ContentResolver.EXTRA_HONORED_ARGS,
@@ -119,12 +119,24 @@ class NcCloudMediaProvider : CloudMediaProvider() {
         enforceSystemCaller()
         val collection = queryCollection()
         val previousGeneration = extras.getLong(CloudMediaProviderContract.EXTRA_SYNC_GENERATION, 0L)
+        val pageSize = extras.pageSize(DEFAULT_PAGE_SIZE)
+        // Android 17 may hand over the media pass's last token here; the store treats a token from
+        // the other pass as "start from the beginning".
+        val pageToken = extras.getString(CloudMediaProviderContract.EXTRA_PAGE_TOKEN)
+        val page = runCatching {
+            if (repository.hasAccount) repository.deletedSince(previousGeneration, pageToken, pageSize) else Page(emptyList(), null)
+        }.onFailure(::logProviderFailure).getOrDefault(Page(emptyList(), null))
+        Log.d(TAG, "onQueryDeletedMedia since=$previousGeneration token=$pageToken -> ${page.items.size} rows, next=${page.nextPageToken}")
         return MatrixCursor(arrayOf(CloudMediaProviderContract.MediaColumns.ID)).apply {
-            repository.deletedSince(previousGeneration).forEach { addRow(arrayOf(it)) }
-            this.extras = collectionExtras(collection.id).apply {
+            page.items.forEach { addRow(arrayOf(it)) }
+            this.extras = collectionExtras(collection.id, page.nextPageToken).apply {
                 putStringArrayList(
                     ContentResolver.EXTRA_HONORED_ARGS,
-                    arrayListOf(CloudMediaProviderContract.EXTRA_SYNC_GENERATION),
+                    arrayListOf<String>().apply {
+                        add(CloudMediaProviderContract.EXTRA_SYNC_GENERATION)
+                        if (extras.containsKey(CloudMediaProviderContract.EXTRA_PAGE_SIZE)) add(CloudMediaProviderContract.EXTRA_PAGE_SIZE)
+                        if (pageToken != null) add(CloudMediaProviderContract.EXTRA_PAGE_TOKEN)
+                    },
                 )
             }
         }
@@ -184,19 +196,25 @@ class NcCloudMediaProvider : CloudMediaProvider() {
         }
     }
 
-    private fun mediaCursor(page: Page<MediaItem>, generation: Long): MatrixCursor =
+    private fun mediaCursor(page: Page<MediaItem>): MatrixCursor =
         MatrixCursor(MEDIA_PROJECTION).apply {
             page.items.forEach { item ->
-                val localUri = runCatching { repository.localUri(item) }.getOrNull()
+                val localUri = runCatching { repository.localUri(item) }.getOrNull()?.toString()
+                PickerRowCheck.problem(item, localUri)?.let { problem ->
+                    Log.w(TAG, "Dropped row ${item.id}: $problem")
+                    return@forEach
+                }
                 addRow(
                     arrayOf<Any?>(
                         item.id,
                         item.dateTakenMillis,
-                        generation,
+                        // The generation this row last changed in, so an incremental sync only
+                        // receives what changed (PLAN 2.3).
+                        item.generation,
                         item.mimeType,
                         standardMimeExtension(item.mimeType),
                         item.sizeBytes,
-                        localUri?.toString(),
+                        localUri,
                         item.durationMillis.takeIf { it > 0L },
                         if (item.isFavorite) 1 else 0,
                         item.width.takeIf { it > 0 },
@@ -211,11 +229,7 @@ class NcCloudMediaProvider : CloudMediaProvider() {
 
     private fun safelyQuery(block: () -> Page<MediaItem>): Page<MediaItem> {
         if (!repository.hasAccount) return Page(emptyList(), null)
-        return runCatching(block).onFailure { error ->
-            // An empty answer would be cached as the real library, so let this sync fail instead.
-            if (error is LibraryNotReadyException) throw error
-            logProviderFailure(error)
-        }.getOrDefault(Page(emptyList(), null))
+        return runCatching(block).onFailure(::logProviderFailure).getOrDefault(Page(emptyList(), null))
     }
 
     private fun collectionExtras(collectionId: String, nextPageToken: String? = null): Bundle = Bundle().apply {
@@ -229,23 +243,16 @@ class NcCloudMediaProvider : CloudMediaProvider() {
 
     private fun queryCollection() = advertisedCollection ?: currentCollection()
 
+    /**
+     * Asks for a sync at most every [SYNC_CHECK_INTERVAL_MS]. The sync itself runs as a WorkManager
+     * job, which keeps network access after this call returns (PLAN 2.5a), and tells MediaProvider
+     * itself when the library changed.
+     */
     private fun scheduleSyncCheck() {
-        val repo = repository
-        if (!SYNC_IN_FLIGHT.compareAndSet(false, true)) return
-        SYNC_EXECUTOR.execute {
-            val changed = try {
-                runCatching { repo.pollChanges() }.getOrDefault(false)
-            } finally {
-                SYNC_IN_FLIGHT.set(false)
-            }
-            if (changed) {
-                // The collection id and generation just moved, so the value cached for this sync
-                // pass is stale. Dropping it makes the next cursor advertise the new collection,
-                // which is how MediaProvider is told to restart rather than commit mixed data.
-                advertisedCollection = null
-                repo.notifyPickerOfChanges()
-            }
-        }
+        val now = System.currentTimeMillis()
+        val last = LAST_SYNC_REQUEST.get()
+        if (now - last < SYNC_CHECK_INTERVAL_MS || !LAST_SYNC_REQUEST.compareAndSet(last, now)) return
+        runCatching { repository.requestSync(expedited = true) }.onFailure(::logProviderFailure)
     }
 
     private fun Bundle.pageSize(default: Int, maximum: Int = MAX_PAGE_SIZE): Int =
@@ -297,8 +304,10 @@ class NcCloudMediaProvider : CloudMediaProvider() {
             Thread(runnable, "nc-provider-sync").apply { isDaemon = true }
         }
 
-        /** Keeps a burst of picker callbacks from queueing one sync pass behind another. */
-        val SYNC_IN_FLIGHT = AtomicBoolean(false)
+        const val SYNC_CHECK_INTERVAL_MS = 30_000L
+
+        /** Keeps a burst of picker callbacks from asking for one sync after another. */
+        val LAST_SYNC_REQUEST = AtomicLong(0L)
 
         // Intended to match the order AOSP's own test providers use (PLAN 1.4). Unverified, and the
         // picker is expected to read columns by name, so this is a precaution, not a requirement.
