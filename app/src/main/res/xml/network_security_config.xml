@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <!-- HTTPS only for now. Self-hosted servers often use a private CA, so user-installed
+         certificates are trusted alongside the system ones (PLAN 4.2). Whether to allow plain
+         HTTP for LAN addresses is still to be decided there. -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates
+                src="user"
+                tools:ignore="AcceptsUserCertificates" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

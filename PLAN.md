@@ -1,6 +1,6 @@
 # nc-media-provider: project plan
 
-**Status (2026-10-02):** planning agreed, no code written. Phase 0.1 is done: activation needs no root on either test phone (see [docs/device-notes.md](docs/device-notes.md)). Phase 0.2 is done (see [docs/server-notes.md](docs/server-notes.md)), and so is 0.3 (see [docs/base-repo-map.md](docs/base-repo-map.md)). Phase 0 is complete. Next up is Phase 1.
+**Status (2026-10-02):** planning agreed, no code written. Phase 0.1 is done: activation needs no root on either test phone (see [docs/device-notes.md](docs/device-notes.md)). Phase 0.2 is done (see [docs/server-notes.md](docs/server-notes.md)), and so is 0.3 (see [docs/base-repo-map.md](docs/base-repo-map.md)). Phase 0 is complete. Phase 1.1 (the renamed skeleton) is done; next up is 1.2.
 
 Progress is tracked in [GitHub issues](https://github.com/keithvassallomt/nc-media-provider/issues): one issue per phase, with each numbered sub-task below as a sub-issue.
 
@@ -211,7 +211,7 @@ Server test matrix:
 
 ### Phase 1: Proof of concept
 
-**1.1 Skeleton.** Rename the package and strip out Immich. Move the build to the agreed toolchain. The manifest declares the provider exported, protected by the `MANAGE_CLOUD_MEDIA_PROVIDERS` permission, with the `CLOUD_MEDIA_PROVIDER` intent filter. Add the base's copyright line ("Copyright (c) 2026 Immich Media Picker contributors") to `LICENSE` as soon as any base code is copied in. Make sure no Keystore decryption happens inside `onGetMediaCollectionInfo`: the base decrypts there on a cold start.
+**1.1 Skeleton.** Done: the app builds on the agreed toolchain, the provider registers and answers with an empty library, and activation already writes an explicit allow-list that keeps Google Photos, with restore commands and no `put` fallback or forced reboot. Plain HTTP is off until 4.2. Rename the package and strip out Immich. Move the build to the agreed toolchain. The manifest declares the provider exported, protected by the `MANAGE_CLOUD_MEDIA_PROVIDERS` permission, with the `CLOUD_MEDIA_PROVIDER` intent filter. Add the base's copyright line ("Copyright (c) 2026 Immich Media Picker contributors") to `LICENSE` as soon as any base code is copied in. Make sure no Keystore decryption happens inside `onGetMediaCollectionInfo`: the base decrypts there on a cold start.
 
 **1.2 Hard-coded auth.** Debug builds read the server URL, login name, user ID and app password from a git-ignored `local.properties`. HTTP Basic auth is attached only to requests to that server.
 

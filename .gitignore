@@ -1,5 +1,8 @@
 # Machine-specific settings and credentials
 local.properties
+keystore.properties
+*.jks
+*.keystore
 # Captures from real servers (may contain private file names, paths and metadata)
 local/
 
@@ -14,6 +17,7 @@ captures/
 .cxx/
 *.apk
 *.aab
+.DS_Store
 
 # Python
 __pycache__/

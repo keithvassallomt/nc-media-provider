@@ -31,7 +31,7 @@ Android only lets apps on a system allow-list act as a cloud photo source. Activ
 
 ## Credits
 
-The Android provider layer will be adapted from [9dc/immich-media-picker](https://github.com/9dc/immich-media-picker) (MIT), which does the same job for Immich.
+The Android provider layer is adapted from [9dc/immich-media-picker](https://github.com/9dc/immich-media-picker) v0.4.2 (MIT), which does the same job for Immich. Its copyright notice is kept in [LICENSE](LICENSE).
 
 ## Disclaimer
 
