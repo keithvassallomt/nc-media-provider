@@ -225,6 +225,16 @@ The first run matched the 24 photos and moved each to a new generation; later ru
 
 After Keith reselected the provider, MediaProvider rebuilt its copy of the library (`MEDIA_FULL_WITH_RESET`, generation 13). For each of the 24 matched rows it logged, at verbose level, a failed insert (`UNIQUE constraint failed: media.local_id, media.is_visible`), a failed retry as an update, and nothing more: it then stored the row hidden, behind the visible phone copy. The same 24 lines in Phase 1.5 were this path too. The photos showed once, and picking them never reached the provider's `onOpenMedia`, so nothing was downloaded.
 
+## Phase 4 checks (GrapheneOS, 2026-10-02)
+
+### The shell can select the provider
+
+`adb shell content call --uri content://media --method get_cloud_provider` reports the selected provider. After an install cleared it (`null`), `--method set_cloud_provider --extra cloud_provider:s:<authority>` returned `true`, and `get_cloud_provider` and `dumpsys` then named this app. So Shizuku, which runs as the shell, can select the app after activation and again after every update.
+
+### Reselecting after an update
+
+A `MY_PACKAGE_REPLACED` receiver declared with `exported="false"` still receives the broadcast. The first test failed: a sync that ran 2 s after the install saw the provider deselected and recorded the user as having deselected it, before the reselect job ran. A deselection seen after an update no longer counts as the user's choice. On the second run the job found the provider deselected and, without Shizuku, posted the notification.
+
 ## Photo keyboard prototype (GrapheneOS, 2026-10-02)
 
 A keyboard showing the 30 newest Nextcloud photos, inserting the tapped one through the keyboard content API (branch `proto/photo-keyboard`, debug builds only). Tested in Messenger, whose own photo grid never sees a cloud provider:
