@@ -16,7 +16,9 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import androidx.work.workDataOf
 import com.keithvassallo.ncmediaprovider.data.db.LibraryDatabase
 import com.keithvassallo.ncmediaprovider.local.LocalMediaIndex
 import java.io.File
@@ -25,6 +27,7 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Whether a failed download means the server is unreachable, which arms the back-off that fails
@@ -71,7 +74,7 @@ class LibraryRepository private constructor(context: Context) {
 
     fun account(): CredentialStore.SavedAccount? = credentials.account()
 
-    fun folder(): String = settings.folder
+    fun folders(): List<String> = settings.folders
 
     /** Reads the database once; afterwards its state comes from memory. Call off the main thread. */
     fun warm() {
@@ -96,49 +99,75 @@ class LibraryRepository private constructor(context: Context) {
 
     fun accountName(): String = credentials.account()?.displayName ?: "Not set up"
 
+    /** When the last sync finished, or 0. Call off the main thread. */
+    fun lastCheckMillis(): Long = if (hasAccount) store.state().lastCheckMillis else 0L
+
     /** Asks for a sync as soon as the network allows. Requests made while one is queued are dropped. */
     fun requestSync(expedited: Boolean = false) {
         if (!hasAccount) return
         val request = OneTimeWorkRequestBuilder<LibrarySyncWorker>()
             .setConstraints(NETWORK)
+            .addTag(SYNC_TAG)
             .apply { if (expedited) setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST) }
             .build()
         WorkManager.getInstance(appContext).enqueueUniqueWork(SYNC_WORK, ExistingWorkPolicy.KEEP, request)
     }
+
+    /**
+     * The "Refresh now" button (PLAN 2.6): a full listing, queued after any sync already running. The
+     * picker already runs a change check whenever it opens, so what a person pressing the button
+     * needs is what change checks miss, such as files on external storage.
+     */
+    fun refreshNow() {
+        if (!hasAccount) return
+        val request = OneTimeWorkRequestBuilder<LibrarySyncWorker>()
+            .setConstraints(NETWORK)
+            .addTag(SYNC_TAG)
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            .setInputData(workDataOf(LibrarySyncWorker.KEY_FULL to true))
+            .build()
+        WorkManager.getInstance(appContext).enqueueUniqueWork(SYNC_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+    }
+
+    /** Every queued, running and finished sync job, for showing progress (PLAN 2.5). */
+    fun syncJobs(): Flow<List<WorkInfo>> = WorkManager.getInstance(appContext).getWorkInfosByTagFlow(SYNC_TAG)
 
     /** A sync every few hours, whatever the picker does (PLAN 2.6). */
     fun schedulePeriodicSync() {
         if (!hasAccount) return
         val request = PeriodicWorkRequestBuilder<LibrarySyncWorker>(PERIODIC_SYNC_HOURS, TimeUnit.HOURS)
             .setConstraints(NETWORK)
+            .addTag(SYNC_TAG)
             // Without a delay the first run fires at once, on top of the sync the provider asks for.
             .setInitialDelay(PERIODIC_SYNC_HOURS, TimeUnit.HOURS)
             .build()
+        // UPDATE rather than KEEP, so a job scheduled by an older version picks up the tag.
         WorkManager.getInstance(appContext)
-            .enqueueUniquePeriodicWork(PERIODIC_SYNC_WORK, ExistingPeriodicWorkPolicy.KEEP, request)
+            .enqueueUniquePeriodicWork(PERIODIC_SYNC_WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
     }
 
     /**
      * Brings the library up to date and returns true when anything changed. Runs on a WorkManager
      * thread, where the network is allowed (PLAN 2.5a). Usually a change check (PLAN 2.4); a full
-     * listing on the first import, once a week, and whenever there are no folder etags to compare.
+     * listing when [full] asks for one, on the first import, once a week, whenever there are no
+     * folder etags to compare, and when the `.nomedia` setting changed.
      */
     @Throws(IOException::class)
-    fun syncNow(): Boolean = synchronized(syncLock) {
+    fun syncNow(full: Boolean = false, onProgress: (SyncProgress) -> Unit = {}): Boolean = synchronized(syncLock) {
         val account = credentials.load() ?: return false
         val source = sourceKey() ?: return false
         if (store.state().sourceKey != source) {
             Log.i(TAG, "New server, user or folder set: starting a new library")
             store.resetFor(source)
         }
+        val folders = settings.folders
         val state = store.state()
         val due = System.currentTimeMillis() - state.lastFullListingMillis >= FULL_LISTING_INTERVAL_MS
-        val changed = if (!state.imported || due || state.rootEtag.isEmpty()) {
-            fullSync(account, settings.folder)
-        } else {
-            changeSync(account, settings.folder)
-        }
+        val needsFull = full || !state.imported || due || state.rootEtag.isEmpty() ||
+            state.respectsNoMedia != settings.respectNoMedia
+        val changed = if (needsFull) fullSync(account, folders, onProgress) else changeSync(account, folders, onProgress)
         store.pruneDeletions(DELETION_RETENTION_MS)
+        store.markChecked()
         if (changed) notifyPickerOfChanges()
         return changed
     }
@@ -149,15 +178,21 @@ class LibraryRepository private constructor(context: Context) {
      * listed (PLAN 2.5). Folder etags are read before the listing, so anything that changes while it
      * runs still shows up at the next check.
      */
-    private fun fullSync(account: NextcloudAccount, folder: String): Boolean {
+    private fun fullSync(account: NextcloudAccount, folders: List<String>, onProgress: (SyncProgress) -> Unit): Boolean {
         val started = System.currentTimeMillis()
-        val etags = folderEtags(account, folder)
+        onProgress(SyncProgress.Listing(0))
+        val etags = folderEtags(account, folders)
+        val hidden = hiddenFolders(account, folders)
         val firstImport = !store.state().imported
         var changed = false
+        var seen = 0
         val pending = ArrayList<MediaItem>()
-        val listed = client.listFolder(account, folder, MIME_PREFIX) { batch ->
-            if (!firstImport) return@listFolder
-            pending += batch.toMediaItems()
+        val listing = client.listMedia(account, folders, MIME_PREFIX) { batch ->
+            if (batch.isEmpty()) return@listMedia
+            seen += batch.size
+            onProgress(SyncProgress.Listing(seen))
+            if (!firstImport) return@listMedia
+            pending += batch.toMediaItems(hidden)
             if (pending.size >= IMPORT_BATCH) {
                 if (store.commit(pending, complete = false)) {
                     changed = true
@@ -166,11 +201,16 @@ class LibraryRepository private constructor(context: Context) {
                 pending.clear()
             }
         }
-        if (store.commit(listed.toMediaItems(), complete = true)) changed = true
-        store.saveFolderEtags(etags.root.etag, etags.byKey)
+        if (store.commit(listing.files.toMediaItems(hidden), complete = true)) changed = true
+        store.saveFolderState(
+            etags.rootEtag, etags.byKey, hidden,
+            respectsNoMedia = settings.respectNoMedia,
+            duplicatePaths = listing.duplicates > 0,
+        )
         Log.i(
             TAG,
-            "Full sync of ${listed.size} files in $folder in ${System.currentTimeMillis() - started} ms: " +
+            "Full sync of ${listing.files.size} files in ${folders.size} folders in ${System.currentTimeMillis() - started} ms: " +
+                "${hidden.size} hidden folders, ${listing.duplicates} files at two paths, " +
                 "generation ${store.state().generation}, changed: $changed, first import: $firstImport",
         )
         return changed
@@ -178,27 +218,43 @@ class LibraryRepository private constructor(context: Context) {
 
     /**
      * Checks for changes without listing everything (PLAN 2.4). Nextcloud changes a folder's etag
-     * whenever anything below it changes, so an unchanged root etag means nothing to do; otherwise
-     * one request returns every folder's etag, and only the folders whose etag moved are re-listed,
-     * one level each. Favourites are checked apart, since favouriting changes no etag.
+     * whenever anything below it changes, so unchanged etags on the library folders mean nothing to
+     * do; otherwise one request returns every folder's etag, and only the folders whose etag moved
+     * are re-listed, one level each. Favourites are checked apart, since favouriting changes no etag.
+     *
+     * Falls back to a full listing in two rare cases a folder walk can't settle: a marker file such
+     * as `.nomedia` came or went, which shows or hides whole trees; or folders were removed while some
+     * file is reachable at two paths, since their files may still be reachable at the other path.
      */
-    private fun changeSync(account: NextcloudAccount, folder: String): Boolean {
+    private fun changeSync(account: NextcloudAccount, folders: List<String>, onProgress: (SyncProgress) -> Unit): Boolean {
         val started = System.currentTimeMillis()
-        val root = client.folderEntry(account, folder)
-        var changed = store.applyFavorites(client.favoriteIds(account, folder, MIME_PREFIX))
-        if (root.etag == store.state().rootEtag) {
-            Log.d(TAG, "Change check: root etag unchanged, favourites changed: $changed")
-            return changed
+        onProgress(SyncProgress.Checking)
+        val roots = folders.map { client.folderEntry(account, it) }
+        val rootEtag = roots.joinToString(" ", transform = DavEntry::etag)
+        val favoritesChanged = store.applyFavorites(client.favoriteIds(account, folders, MIME_PREFIX))
+        val state = store.state()
+        if (rootEtag == state.rootEtag) {
+            Log.d(TAG, "Change check: library folders unchanged, favourites changed: $favoritesChanged")
+            return favoritesChanged
         }
-        val etags = folderEtags(account, folder, root)
+        val hidden = hiddenFolders(account, folders)
+        if (hidden != store.hiddenFolders()) {
+            Log.i(TAG, "Hidden folders changed: listing everything")
+            return fullSync(account, folders, onProgress) || favoritesChanged
+        }
+        val etags = folderEtags(account, folders, roots)
         val stored = store.folderEtags()
         val changedFolders = etags.byKey.filter { (key, etag) -> stored[key] != etag }.keys
         val removedFolders = stored.keys - etags.byKey.keys
-        val listings = changedFolders.associateWith { key ->
-            client.listDirectFiles(account, etags.hrefByKey.getValue(key), MIME_PREFIX).toMediaItems()
+        if (removedFolders.isNotEmpty() && state.duplicatePaths) {
+            Log.i(TAG, "Folders removed while some files are at two paths: listing everything")
+            return fullSync(account, folders, onProgress) || favoritesChanged
         }
-        if (store.commitFolders(listings, removedFolders)) changed = true
-        store.saveFolderEtags(root.etag, etags.byKey)
+        val listings = changedFolders.filterNot { isInsideAny(it, hidden) }.associateWith { key ->
+            client.listDirectFiles(account, etags.hrefByKey.getValue(key), MIME_PREFIX).toMediaItems(hidden)
+        }
+        val changed = store.commitFolders(listings, removedFolders) || favoritesChanged
+        store.saveFolderState(rootEtag, etags.byKey, hidden)
         Log.i(
             TAG,
             "Change check in ${System.currentTimeMillis() - started} ms: ${etags.byKey.size} folders, " +
@@ -208,17 +264,25 @@ class LibraryRepository private constructor(context: Context) {
         return changed
     }
 
-    /** The root's and every folder's etag, keyed by [folderKey]; the root counts as a folder. */
-    private fun folderEtags(account: NextcloudAccount, folder: String, root: DavEntry = client.folderEntry(account, folder)): FolderEtags {
-        val folders = client.listFolders(account, folder) + root
+    /** Every folder's etag, keyed by [folderKey]; the library folders count as folders. */
+    private fun folderEtags(
+        account: NextcloudAccount,
+        folders: List<String>,
+        roots: List<DavEntry> = folders.map { client.folderEntry(account, it) },
+    ): FolderEtags {
+        val entries = client.listSubfolders(account, folders) + roots
         return FolderEtags(
-            root = root,
-            byKey = folders.associate { folderKey(it.href) to it.etag },
-            hrefByKey = folders.associate { folderKey(it.href) to it.href },
+            rootEtag = roots.joinToString(" ", transform = DavEntry::etag),
+            byKey = entries.associate { folderKey(it.href) to it.etag },
+            hrefByKey = entries.associate { folderKey(it.href) to it.href },
         )
     }
 
-    private class FolderEtags(val root: DavEntry, val byKey: Map<String, String>, val hrefByKey: Map<String, String>)
+    private class FolderEtags(val rootEtag: String, val byKey: Map<String, String>, val hrefByKey: Map<String, String>)
+
+    /** Folders holding a marker such as `.nomedia`, by [folderKey]; none when the setting is off. */
+    private fun hiddenFolders(account: NextcloudAccount, folders: List<String>): Set<String> =
+        if (!settings.respectNoMedia) emptySet() else client.hidingMarkers(account, folders).mapTo(HashSet()) { parentFolderKey(it.href) }
 
     /**
      * Rows changed after [sinceGeneration]. A picker so far behind that pruned deletions can't be
@@ -336,8 +400,11 @@ class LibraryRepository private constructor(context: Context) {
     private fun findItem(mediaId: String): MediaItem =
         store.media(mediaId) ?: throw FileNotFoundException("Unknown media $mediaId")
 
-    private fun List<RemoteFile>.toMediaItems(): List<MediaItem> =
-        filter { !it.isHidden && it.sizeBytes > 0L && it.mimeType.startsWith(MIME_PREFIX) }.map(::toMediaItem)
+    /** Drops hidden files (the video half of a live photo, say), empty ones, and anything in [hiddenFolders]. */
+    private fun List<RemoteFile>.toMediaItems(hiddenFolders: Set<String>): List<MediaItem> =
+        filter { !it.isHidden && it.sizeBytes > 0L && it.mimeType.startsWith(MIME_PREFIX) }
+            .map(::toMediaItem)
+            .filterNot { isInsideAny(it.folder, hiddenFolders) }
 
     private fun toMediaItem(file: RemoteFile) = MediaItem(
         id = file.fileId,
@@ -356,10 +423,13 @@ class LibraryRepository private constructor(context: Context) {
         folder = parentFolderKey(file.href),
     )
 
-    /** Which server, user and folder set this library holds (plain preferences only). */
+    /**
+     * Which server, user and folder set this library holds (plain preferences only). One folder
+     * gives the same key as before several were allowed, so upgrading keeps the library.
+     */
     private fun sourceKey(): String? {
         val account = credentials.account() ?: return null
-        return sha256(listOf(account.baseUrl, account.userId, settings.folder).joinToString("|"))
+        return sha256(listOf(account.baseUrl, account.userId, settings.folders.joinToString("\n")).joinToString("|"))
     }
 
     private fun requireAccount(): NextcloudAccount =
@@ -397,6 +467,7 @@ class LibraryRepository private constructor(context: Context) {
         private const val COLLECTION_FORMAT = "v2"
 
         private const val SYNC_WORK = "library-sync"
+        private const val SYNC_TAG = "library-sync-job"
         private const val PERIODIC_SYNC_WORK = "library-sync-periodic"
         private const val PERIODIC_SYNC_HOURS = 6L
         private val NETWORK = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()

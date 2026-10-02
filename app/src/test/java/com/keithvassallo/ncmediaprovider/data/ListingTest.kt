@@ -4,8 +4,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ListingTest {
-    private fun file(id: Int, second: Long) =
-        RemoteFile("/f/$id.jpg", "$id", "e$id", "image/jpeg", 1, second * 1000, null, 0, 0, false, false)
+    private fun file(id: Int, second: Long, href: String = "/f/$id.jpg") =
+        RemoteFile(href, "$id", "e$id", "image/jpeg", 1, second * 1000, null, 0, 0, false, false)
 
     /** A fake server that filters, orders newest first and limits the way Nextcloud does. */
     private class FakeServer(private val files: List<RemoteFile>) {
@@ -25,7 +25,7 @@ class ListingTest {
     }
 
     private fun assertListsAll(files: List<RemoteFile>, pageSize: Int) {
-        val listed = listByModifiedWindows(pageSize, search = FakeServer(files)::search)
+        val listed = listByModifiedWindows(pageSize, search = FakeServer(files)::search).files
         assertEquals(files.size, listed.size)
         assertEquals(files.map(RemoteFile::fileId).toSet(), listed.map(RemoteFile::fileId).toSet())
     }
@@ -50,8 +50,22 @@ class ListingTest {
     @Test
     fun `a short first page needs one request`() {
         val server = FakeServer((1..5).map { file(it, 100L + it) })
-        assertEquals(5, listByModifiedWindows(10, search = server::search).size)
+        assertEquals(5, listByModifiedWindows(10, search = server::search).files.size)
         assertEquals(1, server.requests)
+    }
+
+    @Test
+    fun `a file at two paths is listed once, under the first path, whichever comes first`() {
+        val files = listOf(file(1, 300, "/f/z/1.jpg"), file(2, 200), file(1, 300, "/f/a/1.jpg"), file(3, 100))
+        for (order in listOf(files, files.reversed())) {
+            val batches = mutableListOf<RemoteFile>()
+            val listing = listByModifiedWindows(2, onBatch = { batches += it }, search = FakeServer(order)::search)
+            assertEquals(listOf("1", "2", "3"), listing.files.map(RemoteFile::fileId).sorted())
+            assertEquals("/f/a/1.jpg", listing.files.single { it.fileId == "1" }.href)
+            assertEquals(1, listing.duplicates)
+            // A first import commits batches as they come: the winning path must reach it last.
+            assertEquals("/f/a/1.jpg", batches.last { it.fileId == "1" }.href)
+        }
     }
 
     @Test

@@ -55,12 +55,27 @@ class LibraryStore(
      * Commits the direct listings of the folders whose etag changed, and drops what was in folders
      * that are gone (PLAN 2.4). Only rows in those folders are compared, so a file missing from them
      * is deleted unless it turned up in another of them, which makes it a move.
+     *
+     * A listed file whose row is in a folder that wasn't re-listed is still in that folder too, since
+     * that folder's etag didn't move: the file is reachable at two paths (PLAN 2.2). It keeps one row,
+     * under the alphabetically first path as in [Listing], and the library is marked as having such
+     * files.
      */
     fun commitFolders(listings: Map<String, List<MediaItem>>, removedFolders: Set<String>): Boolean =
         database.runInTransaction<Boolean> {
             val scope = (listings.keys + removedFolders).toList()
             val stored = scope.chunked(SQL_BATCH).flatMap(dao::mediaIn)
-            applyChanges(diffLibrary(stored, listings.values.flatten(), complete = true), fullListing = false)
+            val storedIds = stored.mapTo(HashSet(), MediaItem::id)
+            val listed = listings.values.flatten()
+            val elsewhere = listed.map(MediaItem::id).filterNot(storedIds::contains).distinct()
+                .chunked(SQL_BATCH).flatMap(dao::mediaWithIds)
+            val copies = (listed + elsewhere).groupBy(MediaItem::id).values
+            if (copies.any { it.distinctBy(MediaItem::href).size > 1 }) {
+                val state = dao.state() ?: state()
+                dao.saveState(state.copy(duplicatePaths = true).also { cached = it })
+            }
+            val kept = copies.map { it.minBy(MediaItem::href) }
+            applyChanges(diffLibrary(stored + elsewhere, kept, complete = true), fullListing = false)
         }
 
     /**
@@ -79,11 +94,36 @@ class LibraryStore(
     /** Etags at the last check, by [folderKey]. */
     fun folderEtags(): Map<String, String> = dao.folders().associate { it.path to it.etag }
 
-    fun saveFolderEtags(rootEtag: String, folders: Map<String, String>) = database.runInTransaction(Runnable {
+    /** Folders hidden by a marker file at the last check, by [folderKey]. */
+    fun hiddenFolders(): Set<String> = state().hiddenFolders.split('\n').filterTo(HashSet(), String::isNotEmpty)
+
+    /**
+     * Saves what the next change check compares against (PLAN 2.4). Only a full listing knows
+     * [respectsNoMedia] and [duplicatePaths]; a change check leaves them as they are.
+     */
+    fun saveFolderState(
+        rootEtag: String,
+        folders: Map<String, String>,
+        hiddenFolders: Set<String>,
+        respectsNoMedia: Boolean? = null,
+        duplicatePaths: Boolean? = null,
+    ) = database.runInTransaction(Runnable {
         dao.clearFolders()
         folders.map { (path, etag) -> FolderEtag(path, etag) }.chunked(SQL_BATCH).forEach(dao::saveFolders)
         val state = dao.state() ?: state()
-        dao.saveState(state.copy(rootEtag = rootEtag).also { cached = it })
+        val updated = state.copy(
+            rootEtag = rootEtag,
+            hiddenFolders = hiddenFolders.sorted().joinToString("\n"),
+            respectsNoMedia = respectsNoMedia ?: state.respectsNoMedia,
+            duplicatePaths = duplicatePaths ?: state.duplicatePaths,
+        )
+        dao.saveState(updated.also { cached = it })
+    })
+
+    /** Records that a sync finished, whatever it found. */
+    fun markChecked() = database.runInTransaction(Runnable {
+        val state = dao.state() ?: state()
+        dao.saveState(state.copy(lastCheckMillis = nowMillis()).also { cached = it })
     })
 
     /** Writes [changes] under the next generation, if there are any. Call inside a transaction. */

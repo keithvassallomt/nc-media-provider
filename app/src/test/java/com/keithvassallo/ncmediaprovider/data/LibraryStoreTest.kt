@@ -155,6 +155,27 @@ class LibraryStoreTest {
     }
 
     @Test
+    fun `a file at two paths keeps one row under the first path`() {
+        // 1 is in /b/ and, through a second mount, also in /a/. Only /a/ changed.
+        store.commit(listOf(inFolder(1, "/b/"), inFolder(2, "/c/")), complete = true)
+        assertTrue(store.commitFolders(mapOf("/a/" to listOf(inFolder(1, "/a/"))), emptySet()))
+        assertEquals("/a/", store.media("1")!!.folder)
+        assertTrue(store.state().duplicatePaths)
+        // Now /b/ changes for an unrelated reason: the row stays under /a/, and nothing is deleted.
+        assertFalse(store.commitFolders(mapOf("/b/" to listOf(inFolder(1, "/b/"))), emptySet()))
+        assertEquals("/a/", store.media("1")!!.folder)
+        assertTrue(store.deletedPage(0, null, 10).items.isEmpty())
+    }
+
+    @Test
+    fun `a file listed in two changed folders keeps one row under the first path`() {
+        store.commitFolders(mapOf("/b/" to listOf(inFolder(1, "/b/")), "/a/" to listOf(inFolder(1, "/a/"))), emptySet())
+        assertEquals(1, store.mediaCount())
+        assertEquals("/a/", store.media("1")!!.folder)
+        assertTrue(store.state().duplicatePaths)
+    }
+
+    @Test
     fun `favourites flip without a listing`() {
         store.commit(listOf(inFolder(1, "/a/"), inFolder(2, "/a/").copy(isFavorite = true)), complete = true)
         assertFalse(store.applyFavorites(setOf("2")))
@@ -165,15 +186,27 @@ class LibraryStoreTest {
     }
 
     @Test
-    fun `folder etags and the root etag are saved together`() {
-        store.saveFolderEtags("root-1", mapOf("/a/" to "x", "/b/" to "y"))
+    fun `folder state is saved together, and a change check keeps what only a full listing knows`() {
+        store.saveFolderState("root-1", mapOf("/a/" to "x", "/b/" to "y"), setOf("/b/", "/a/x/"), respectsNoMedia = true, duplicatePaths = true)
         assertEquals(mapOf("/a/" to "x", "/b/" to "y"), store.folderEtags())
         assertEquals("root-1", store.state().rootEtag)
-        store.saveFolderEtags("root-2", mapOf("/a/" to "z"))
+        assertEquals(setOf("/b/", "/a/x/"), store.hiddenFolders())
+        store.saveFolderState("root-2", mapOf("/a/" to "z"), emptySet())
         assertEquals(mapOf("/a/" to "z"), store.folderEtags())
+        assertTrue(store.hiddenFolders().isEmpty())
+        assertTrue(store.state().respectsNoMedia)
+        assertTrue(store.state().duplicatePaths)
         store.resetFor("elsewhere")
         assertTrue(store.folderEtags().isEmpty())
         assertEquals("", store.state().rootEtag)
+        assertFalse(store.state().duplicatePaths)
+    }
+
+    @Test
+    fun `finishing a sync records the time`() {
+        assertEquals(0L, store.state().lastCheckMillis)
+        store.markChecked()
+        assertEquals(now, store.state().lastCheckMillis)
     }
 
     @Test

@@ -63,6 +63,31 @@
                     android:textAppearance="?attr/textAppearanceBodyMedium" />
 
                 <TextView
+                    android:id="@+id/syncStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:accessibilityLiveRegion="polite"
+                    android:textAppearance="?attr/textAppearanceBodySmall" />
+
+                <com.google.android.material.progressindicator.LinearProgressIndicator
+                    android:id="@+id/syncProgress"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:indeterminate="true"
+                    android:visibility="gone" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/refreshButton"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/refresh_now" />
+
+                <TextView
                     android:id="@+id/localNetworkStatus"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

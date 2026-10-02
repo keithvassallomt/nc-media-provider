@@ -1,6 +1,7 @@
 package com.keithvassallo.ncmediaprovider.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -40,6 +41,15 @@ class ChangeDetectionParsingTest {
     }
 
     @Test
+    fun `a folder is inside itself and its ancestors, not a sibling with a longer name`() {
+        val hidden = setOf("/dav/alice/Photos/Private/")
+        assertTrue(isInsideAny("/dav/alice/Photos/Private/", hidden))
+        assertTrue(isInsideAny("/dav/alice/Photos/Private/2024/", hidden))
+        assertFalse(isInsideAny("/dav/alice/Photos/Private stuff/", hidden))
+        assertFalse(isInsideAny("/dav/alice/Photos/", hidden))
+    }
+
+    @Test
     fun `folders and files meet on decoded keys`() {
         val folder = "/remote.php/dav/files/alice/Photos/2023/"
         assertEquals(folder, folderKey(folder))
@@ -51,10 +61,10 @@ class ChangeDetectionParsingTest {
 
     @Test
     fun `change detection requests ask for the right things`() {
-        val folders = SearchRequest.folders("alice", "/Photos")
+        val folders = SearchRequest.folders("alice", listOf("/Photos"))
         assertTrue(folders.contains("<d:literal>httpd/unix-directory</d:literal>"))
         assertTrue(folders.contains("<d:href>/files/alice/Photos</d:href>"))
-        val favorites = SearchRequest.favorites("alice", "/Photos", "image/")
+        val favorites = SearchRequest.favorites("alice", listOf("/Photos"), "image/")
         assertTrue(favorites.contains("<d:eq><d:prop><oc:favorite/></d:prop><d:literal>1</d:literal></d:eq>"))
         assertTrue(PropfindRequest.FILES.contains("<d:resourcetype/>"))
     }

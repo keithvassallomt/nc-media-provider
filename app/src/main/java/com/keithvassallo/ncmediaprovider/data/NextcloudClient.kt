@@ -37,25 +37,25 @@ class NextcloudClient {
         .callTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    /** Lists every file under [folder] whose MIME type starts with [mimePrefix], newest first. */
-    fun listFolder(
+    /** Lists every file under [folders] whose MIME type starts with [mimePrefix], newest first. */
+    internal fun listMedia(
         account: NextcloudAccount,
-        folder: String,
+        folders: List<String>,
         mimePrefix: String,
         pageSize: Int = LIST_PAGE_SIZE,
         onBatch: (List<RemoteFile>) -> Unit = {},
-    ): List<RemoteFile> = listByModifiedWindows(pageSize, onBatch) { filter, limit ->
-        search(account, folder, mimePrefix, filter, limit)
+    ): Listing = listByModifiedWindows(pageSize, onBatch) { filter, limit ->
+        search(account, folders, mimePrefix, filter, limit)
     }
 
     fun search(
         account: NextcloudAccount,
-        folder: String,
+        folders: List<String>,
         mimePrefix: String,
         modified: ModifiedFilter?,
         limit: Int,
     ): List<RemoteFile> {
-        val body = SearchRequest.body(account.userId, folder, mimePrefix, modified, limit)
+        val body = SearchRequest.body(account.userId, folders, mimePrefix, modified, limit)
         val request = Request.Builder()
             .url(account.server().newBuilder().addPathSegments("remote.php/dav/").build())
             .method("SEARCH", body.toRequestBody(XML))
@@ -76,7 +76,7 @@ class NextcloudClient {
         }
     }
 
-    /** The library root's own entry, whose etag changes whenever anything below it changes. */
+    /** A library folder's own entry, whose etag changes whenever anything below it changes. */
     fun folderEntry(account: NextcloudAccount, folder: String): DavEntry {
         val request = Request.Builder()
             .url(account.userFolderUrl(folder))
@@ -89,15 +89,20 @@ class NextcloudClient {
         }
     }
 
-    /** Every folder below [folder], with its etag, in one request. */
-    fun listFolders(account: NextcloudAccount, folder: String): List<DavEntry> =
-        davSearch(account, SearchRequest.folders(account.userId, folder)) { MultistatusParser.parseEntries(it) }
+    /** Every folder below [folders], with its etag, in one request. */
+    fun listSubfolders(account: NextcloudAccount, folders: List<String>): List<DavEntry> =
+        davSearch(account, SearchRequest.folders(account.userId, folders)) { MultistatusParser.parseEntries(it) }
             .filter(DavEntry::isFolder)
 
-    /** File IDs of the favourites below [folder]. */
-    fun favoriteIds(account: NextcloudAccount, folder: String, mimePrefix: String): Set<String> =
-        davSearch(account, SearchRequest.favorites(account.userId, folder, mimePrefix)) { MultistatusParser.parseEntries(it) }
+    /** File IDs of the favourites below [folders]. */
+    fun favoriteIds(account: NextcloudAccount, folders: List<String>, mimePrefix: String): Set<String> =
+        davSearch(account, SearchRequest.favorites(account.userId, folders, mimePrefix)) { MultistatusParser.parseEntries(it) }
             .mapNotNullTo(HashSet(), DavEntry::fileId)
+
+    /** The [SearchRequest.HIDING_MARKERS] files below [folders]. */
+    fun hidingMarkers(account: NextcloudAccount, folders: List<String>): List<DavEntry> =
+        davSearch(account, SearchRequest.markers(account.userId, folders)) { MultistatusParser.parseEntries(it) }
+            .filterNot(DavEntry::isFolder)
 
     /** The files directly inside one folder (a depth-1 PROPFIND), whose MIME type starts with [mimePrefix]. */
     fun listDirectFiles(account: NextcloudAccount, folderHref: String, mimePrefix: String): List<RemoteFile> {

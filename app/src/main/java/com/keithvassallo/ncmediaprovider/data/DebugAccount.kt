@@ -6,7 +6,8 @@ import java.security.MessageDigest
 
 /**
  * Debug builds sign in with the server details from local.properties (PLAN 1.2) until Login Flow v2
- * arrives in 4.1. The Keystore write only happens when those details change.
+ * arrives in 4.1. The Keystore write only happens when those details change. `nextcloud.folder` may
+ * name several folders separated by '|'.
  */
 object DebugAccount {
     fun seed(context: Context) {
@@ -17,14 +18,15 @@ object DebugAccount {
             userId = BuildConfig.NC_DEBUG_USER_ID.ifBlank { BuildConfig.NC_DEBUG_LOGIN },
             appPassword = BuildConfig.NC_DEBUG_APP_PASSWORD,
         )
-        val folder = LibrarySettings.normalizeFolder(BuildConfig.NC_DEBUG_FOLDER)
+        val folders = LibrarySettings.normalizeFolders(BuildConfig.NC_DEBUG_FOLDER.split('|'))
+        // One folder gives the same seed as before several were allowed, so no new sign-in.
         val seed = MessageDigest.getInstance("SHA-256")
-            .digest(listOf(account.baseUrl, account.loginName, account.userId, account.appPassword, folder).joinToString("\n").toByteArray())
+            .digest((listOf(account.baseUrl, account.loginName, account.userId, account.appPassword) + folders).joinToString("\n").toByteArray())
             .joinToString("") { "%02x".format(it) }
         val settings = LibrarySettings(context)
         if (settings.debugSeed == seed) return
         CredentialStore(context).save(account)
-        settings.folder = folder
+        settings.folders = folders
         settings.debugSeed = seed
     }
 }

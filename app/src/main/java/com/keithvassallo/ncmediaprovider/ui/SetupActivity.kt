@@ -11,13 +11,17 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.IBinder
 import android.provider.MediaStore
+import android.text.format.DateUtils
 import android.text.format.Formatter
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.net.toUri
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.work.WorkInfo
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.keithvassallo.ncmediaprovider.BuildConfig
 import com.keithvassallo.ncmediaprovider.R
@@ -25,6 +29,8 @@ import com.keithvassallo.ncmediaprovider.activation.DeviceConfigUserService
 import com.keithvassallo.ncmediaprovider.activation.IActivationService
 import com.keithvassallo.ncmediaprovider.data.CredentialStore
 import com.keithvassallo.ncmediaprovider.data.LibraryRepository
+import com.keithvassallo.ncmediaprovider.data.LibrarySyncWorker
+import com.keithvassallo.ncmediaprovider.data.SyncProgress
 import com.keithvassallo.ncmediaprovider.databinding.ActivitySetupBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -38,6 +44,7 @@ class SetupActivity : AppCompatActivity() {
     private var shizukuActivationRunning = false
     private var shizukuServiceConnected = false
     private var shizukuAttempt = 0
+    private var syncWasRunning = false
 
     private val shizukuUserServiceArgs by lazy {
         Shizuku.UserServiceArgs(
@@ -132,6 +139,12 @@ class SetupActivity : AppCompatActivity() {
         binding.testPickerButton.setOnClickListener { openSystemPicker() }
         binding.pickerSettingsButton.setOnClickListener { openPickerSettings() }
         binding.shizukuButton.setOnClickListener { handleShizukuAction() }
+        binding.refreshButton.setOnClickListener { repository.refreshNow() }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                repository.syncJobs().collect(::showSyncJobs)
+            }
+        }
 
         Shizuku.addBinderReceivedListenerSticky(shizukuBinderReceivedListener)
         Shizuku.addBinderDeadListener(shizukuBinderDeadListener)
@@ -179,7 +192,7 @@ class SetupActivity : AppCompatActivity() {
             binding.connectionStatus.setText(R.string.not_connected)
         } else {
             binding.connectionStatus.text = getString(
-                R.string.connection_ready, account.userId, account.baseUrl, repository.folder(), getString(R.string.library_counting),
+                R.string.connection_ready, account.userId, account.baseUrl, folderList(), getString(R.string.library_counting),
             )
             lifecycleScope.launch {
                 // Room refuses to query on the main thread.
@@ -189,7 +202,54 @@ class SetupActivity : AppCompatActivity() {
                     else -> resources.getQuantityString(R.plurals.library_listed, count, count)
                 }
                 binding.connectionStatus.text =
-                    getString(R.string.connection_ready, account.userId, account.baseUrl, repository.folder(), listed)
+                    getString(R.string.connection_ready, account.userId, account.baseUrl, folderList(), listed)
+            }
+        }
+    }
+
+    private fun folderList(): String = repository.folders().joinToString(", ")
+
+    /** Sync progress and the last check (PLAN 2.5), from the sync jobs' WorkManager state. */
+    private suspend fun showSyncJobs(jobs: List<WorkInfo>) {
+        val visibility = if (repository.hasAccount) View.VISIBLE else View.GONE
+        binding.syncStatus.visibility = visibility
+        binding.refreshButton.visibility = visibility
+        if (!repository.hasAccount) return
+        val running = jobs.firstOrNull { it.state == WorkInfo.State.RUNNING }
+        binding.syncProgress.visibility = if (running != null) View.VISIBLE else View.GONE
+        binding.refreshButton.isEnabled = running == null
+        if (running != null) {
+            syncWasRunning = true
+            binding.syncStatus.text = when (val progress = LibrarySyncWorker.progressOf(running)) {
+                is SyncProgress.Listing -> if (progress.files == 0) {
+                    getString(R.string.sync_listing_started)
+                } else {
+                    resources.getQuantityString(R.plurals.sync_listing, progress.files, progress.files)
+                }
+                else -> getString(R.string.sync_checking)
+            }
+            return
+        }
+        if (syncWasRunning) {
+            syncWasRunning = false
+            updateConnectionUi()
+        }
+        // The periodic job always waits in ENQUEUED between runs, so only one-off jobs count as queued.
+        val queued = jobs.filter { it.state == WorkInfo.State.ENQUEUED }
+        when {
+            queued.any { it.runAttemptCount > 0 } -> binding.syncStatus.setText(R.string.sync_retrying)
+            queued.any { it.periodicityInfo == null } -> binding.syncStatus.setText(R.string.sync_waiting)
+            else -> {
+                val last = withContext(Dispatchers.IO) { runCatching { repository.lastCheckMillis() }.getOrDefault(0L) }
+                val now = System.currentTimeMillis()
+                binding.syncStatus.text = when {
+                    last == 0L -> getString(R.string.sync_never_checked)
+                    now - last < DateUtils.MINUTE_IN_MILLIS -> getString(R.string.sync_checked_just_now)
+                    else -> getString(
+                        R.string.sync_last_checked,
+                        DateUtils.getRelativeTimeSpanString(last, now, DateUtils.MINUTE_IN_MILLIS),
+                    )
+                }
             }
         }
     }

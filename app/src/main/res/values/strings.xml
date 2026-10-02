@@ -4,13 +4,25 @@
     <string name="app_tagline">Your Nextcloud photos in Android’s system photo picker</string>
     <string name="connection_title">Server</string>
     <string name="not_connected">No server set up yet. Signing in arrives in a later version.</string>
-    <string name="connection_ready">Signed in as %1$s\n%2$s\nFolder: %3$s\n%4$s</string>
+    <string name="connection_ready">Signed in as %1$s\n%2$s\nFolders: %3$s\n%4$s</string>
     <plurals name="library_listed">
         <item quantity="one">%d image listed</item>
         <item quantity="other">%d images listed</item>
     </plurals>
     <string name="library_not_listed">Not listed yet. The first sync starts as soon as the network allows.</string>
     <string name="library_counting">Counting photos…</string>
+    <string name="refresh_now">Refresh now</string>
+    <string name="sync_checking">Checking for changes…</string>
+    <string name="sync_listing_started">Listing photos…</string>
+    <plurals name="sync_listing">
+        <item quantity="one">Listing photos: %d found so far</item>
+        <item quantity="other">Listing photos: %d found so far</item>
+    </plurals>
+    <string name="sync_waiting">Sync queued. It starts when the network allows.</string>
+    <string name="sync_retrying">Couldn’t reach the server. Trying again soon.</string>
+    <string name="sync_last_checked">Last checked %s</string>
+    <string name="sync_never_checked">Not checked yet</string>
+    <string name="sync_checked_just_now">Last checked just now</string>
     <string name="local_network_granted">Local network access allowed</string>
     <string name="local_network_missing">Local network access not allowed. A server on your home network can’t be reached without it.</string>
     <string name="grant_local_network">Allow local network access</string>

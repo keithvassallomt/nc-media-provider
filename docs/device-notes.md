@@ -188,6 +188,18 @@ Per-request timing (debug build, 1,000-file pages of about 690 KiB):
 - A background job then still parses about 10 times slower than the foreground, with no growth in work: Android runs background jobs on restricted CPU. A full background listing of this library takes about 1.5 minutes in a debug build. Fine for a first import or a weekly check, too slow for checking changes each time the picker opens: that is what the folder-etag walk (PLAN 2.4) is for.
 - The commit that compares 16,896 unchanged rows took 11 to 26 s in the background, also CPU-bound.
 
+### Exit test: changes arrive incrementally
+
+Keith changed files in a subfolder (`Photos/2026/09`) from his computer, with the picker open in between:
+
+| Change on the server | In the picker | MediaProvider's sync |
+|---|---|---|
+| Added a photo | appeared | `MEDIA_INCREMENTAL`, generation 8 to 9 |
+| Replaced it with a file of the same name | updated | `MEDIA_INCREMENTAL`, 9 to 10 |
+| Deleted it, toggled a favourite | gone; favourite shown | `MEDIA_INCREMENTAL`, 10 to 12 |
+
+The only reset in the log came first: `MEDIA_FULL_WITH_RESET` when Keith reselected the provider after reinstalling, which is expected. A move was not tried on the phone; the move logic is covered by unit tests and the integration test.
+
 ## Photo keyboard prototype (GrapheneOS, 2026-10-02)
 
 A keyboard showing the 30 newest Nextcloud photos, inserting the tapped one through the keyboard content API (branch `proto/photo-keyboard`, debug builds only). Tested in Messenger, whose own photo grid never sees a cloud provider:

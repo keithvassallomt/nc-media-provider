@@ -1,6 +1,8 @@
 package com.keithvassallo.ncmediaprovider.data.db
 
 import android.content.Context
+import androidx.room.AutoMigration
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -43,8 +45,23 @@ data class SyncState(
     val lastFullListingMillis: Long = 0L,
     /** True once one complete listing has been committed. */
     val imported: Boolean = false,
-    /** The library root's etag at the last check: unchanged means nothing below it changed. */
+    /**
+     * The library folders' etags at the last check, joined by spaces: unchanged means nothing below
+     * them changed.
+     */
     val rootEtag: String = "",
+    /** Folders hidden by a marker such as `.nomedia` at the last check, as folder keys joined by '\n'. */
+    @ColumnInfo(defaultValue = "")
+    val hiddenFolders: String = "",
+    /** Whether the last full listing hid those folders; listings before schema 3 didn't. */
+    @ColumnInfo(defaultValue = "0")
+    val respectsNoMedia: Boolean = false,
+    /** Some file is reachable at two paths, which makes removed folders need a full listing (PLAN 2.2). */
+    @ColumnInfo(defaultValue = "0")
+    val duplicatePaths: Boolean = false,
+    /** When the last sync finished, whether or not it found anything. */
+    @ColumnInfo(defaultValue = "0")
+    val lastCheckMillis: Long = 0L,
 )
 
 @Dao
@@ -122,7 +139,11 @@ interface LibraryDao {
     fun clearDeleted()
 }
 
-@Database(entities = [MediaItem::class, DeletedMedia::class, SyncState::class, FolderEtag::class], version = 2)
+@Database(
+    entities = [MediaItem::class, DeletedMedia::class, SyncState::class, FolderEtag::class],
+    version = 3,
+    autoMigrations = [AutoMigration(from = 2, to = 3)],
+)
 abstract class LibraryDatabase : RoomDatabase() {
     abstract fun dao(): LibraryDao
 

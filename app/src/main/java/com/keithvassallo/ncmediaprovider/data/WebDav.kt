@@ -37,9 +37,11 @@ sealed class ModifiedFilter(val operator: String, val seconds: Long) {
 }
 
 /**
- * Builds a WebDAV SEARCH for one folder tree, newest first, optionally filtered on modification
- * time. Listing walks backwards through those windows (see [listByModifiedWindows]): offset paging
- * is unreliable because results can't be ordered by file ID.
+ * Builds WebDAV SEARCH requests over the library folders. One request covers every folder, and
+ * Nextcloud orders and limits the results across all of them (checked on 33 and 35). File listings
+ * come newest first, optionally filtered on modification time, and listing walks backwards through
+ * those windows (see [listByModifiedWindows]): offset paging is unreliable because results can't be
+ * ordered by file ID.
  */
 object SearchRequest {
     private val FILE_PROPS = listOf(
@@ -47,10 +49,16 @@ object SearchRequest {
         "oc:favorite", "nc:hidden", "nc:metadata-photos-original_date_time", "nc:metadata-photos-size",
     ).joinToString("") { "<$it/>" }
 
-    /** Files under [folder] whose MIME type starts with [mimePrefix], newest first. */
+    /**
+     * Marker files that hide their folder, and everything below it, from Nextcloud Photos and
+     * Memories. The app hides those folders too unless the user turns that off (PLAN 2.2).
+     */
+    val HIDING_MARKERS = listOf(".nomedia", ".noimage", ".nomemories")
+
+    /** Files under [folders] whose MIME type starts with [mimePrefix], newest first. */
     fun body(
         userId: String,
-        folder: String,
+        folders: List<String>,
         mimePrefix: String,
         modified: ModifiedFilter?,
         limit: Int,
@@ -62,32 +70,44 @@ object SearchRequest {
                 "<d:literal>${modified.seconds}</d:literal></d:${modified.operator}></d:and>"
         }
         val orderBy = "<d:order><d:prop><d:getlastmodified/></d:prop><d:descending/></d:order>"
-        return search(FILE_PROPS, userId, folder, where, orderBy, limit)
+        return search(FILE_PROPS, userId, folders, where, orderBy, limit)
     }
 
-    /** Every folder under [folder] with its etag, in one request (PLAN 2.4). Not the folder itself. */
-    fun folders(userId: String, folder: String): String = search(
-        "<d:getetag/><d:resourcetype/>", userId, folder,
+    /** Every folder under [folders] with its etag, in one request (PLAN 2.4). Not the folders themselves. */
+    fun folders(userId: String, folders: List<String>): String = search(
+        "<d:getetag/><d:resourcetype/>", userId, folders,
         "<d:eq><d:prop><d:getcontenttype/></d:prop><d:literal>httpd/unix-directory</d:literal></d:eq>",
         orderBy = "", limit = UNLIMITED,
     )
 
-    /** File IDs of favourites under [folder]. Favouriting changes no etag, so it is checked apart. */
-    fun favorites(userId: String, folder: String, mimePrefix: String): String = search(
-        "<oc:fileid/>", userId, folder,
+    /** File IDs of favourites under [folders]. Favouriting changes no etag, so it is checked apart. */
+    fun favorites(userId: String, folders: List<String>, mimePrefix: String): String = search(
+        "<oc:fileid/>", userId, folders,
         "<d:and><d:eq><d:prop><oc:favorite/></d:prop><d:literal>1</d:literal></d:eq>${mimeFilter(mimePrefix)}</d:and>",
         orderBy = "", limit = UNLIMITED,
     )
 
-    private fun search(select: String, userId: String, folder: String, where: String, orderBy: String, limit: Int): String {
-        // The scope is a raw path: Nextcloud answers 404 for a percent-encoded one.
-        val scope = "/files/$userId" + if (folder == "/") "" else folder
+    /** The [HIDING_MARKERS] under [folders]. */
+    fun markers(userId: String, folders: List<String>): String = search(
+        "<d:resourcetype/>", userId, folders,
+        HIDING_MARKERS.joinToString("", "<d:or>", "</d:or>") {
+            "<d:eq><d:prop><d:displayname/></d:prop><d:literal>${xmlEscape(it)}</d:literal></d:eq>"
+        },
+        orderBy = "", limit = UNLIMITED,
+    )
+
+    private fun search(select: String, userId: String, folders: List<String>, where: String, orderBy: String, limit: Int): String {
+        // Each scope is a raw path: Nextcloud answers 404 for a percent-encoded one.
+        val scopes = folders.joinToString("") { folder ->
+            val scope = "/files/$userId" + if (folder == "/") "" else folder
+            "<d:scope><d:href>${xmlEscape(scope)}</d:href><d:depth>infinity</d:depth></d:scope>"
+        }
         // Without nresults Nextcloud caps the answer at 100. It imposes no upper limit of its own.
         return """<?xml version="1.0" encoding="UTF-8"?>
 <d:searchrequest $NAMESPACES>
 <d:basicsearch>
 <d:select><d:prop>$select</d:prop></d:select>
-<d:from><d:scope><d:href>${xmlEscape(scope)}</d:href><d:depth>infinity</d:depth></d:scope></d:from>
+<d:from>$scopes</d:from>
 <d:where>$where</d:where>
 <d:orderby>$orderBy</d:orderby>
 <d:limit><d:nresults>$limit</d:nresults></d:limit>
@@ -130,22 +150,39 @@ internal fun folderKey(folderHref: String): String = percentDecode(folderHref).l
 internal fun parentFolderKey(fileHref: String): String =
     percentDecode(fileHref).trimEnd('/').substringBeforeLast('/') + "/"
 
+/** Whether the folder with key [folder] is one of [folders] or inside one of them. */
+internal fun isInsideAny(folder: String, folders: Collection<String>): Boolean = folders.any(folder::startsWith)
+
+/**
+ * A full listing. Each file is in it once, although Nextcloud shows a file at two paths when it is
+ * reachable through two mounts (a share and a share of one of its subfolders, say): the
+ * alphabetically first path wins, so the choice doesn't flip between listings. [duplicates] counts
+ * the files seen at more than one path (PLAN 2.2).
+ */
+internal class Listing(val files: List<RemoteFile>, val duplicates: Int)
+
 /**
  * Lists everything [search] can return, newest first, in pages of [pageSize].
  *
  * Results are ordered by modification time, newest first, so a full page holds every file newer
  * than its oldest second; only that second may continue past the page. It is fetched whole with an
  * exact match, and the next page starts strictly below it. Phase 1.5 found 2,677 files sharing one
- * second on a real server, which stalled plain date-window paging. [onBatch] sees each file once, as
- * it arrives, so a first import can commit before the listing ends.
+ * second on a real server, which stalled plain date-window paging. [onBatch] sees each file as it
+ * arrives, so a first import can commit before the listing ends; a file comes again only when a
+ * path that wins (see [Listing]) turns up.
  */
 internal fun listByModifiedWindows(
     pageSize: Int,
     onBatch: (List<RemoteFile>) -> Unit = {},
     search: (filter: ModifiedFilter?, limit: Int) -> List<RemoteFile>,
-): List<RemoteFile> {
+): Listing {
     val files = LinkedHashMap<String, RemoteFile>()
-    fun add(batch: List<RemoteFile>) = batch.filter { files.putIfAbsent(it.fileId, it) == null }.also(onBatch)
+    val duplicates = HashSet<String>()
+    fun add(batch: List<RemoteFile>) = batch.filter { file ->
+        val kept = files[file.fileId]
+        if (kept != null && kept.href != file.href) duplicates += file.fileId
+        (kept == null || file.href < kept.href).also { wins -> if (wins) files[file.fileId] = file }
+    }.also(onBatch)
     var filter: ModifiedFilter? = null
     while (true) {
         val page = search(filter, pageSize)
@@ -156,7 +193,7 @@ internal fun listByModifiedWindows(
         if (oldestSecond <= 0L) break
         filter = ModifiedFilter.AtOrBefore(oldestSecond - 1)
     }
-    return files.values.toList()
+    return Listing(files.values.toList(), duplicates.size)
 }
 
 /** Large enough for any one second's worth of files; Nextcloud doesn't cap nresults. */
