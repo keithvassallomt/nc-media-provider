@@ -15,7 +15,7 @@ nc-media-provider implements Android's `CloudMediaProvider` API so that your Nex
 - your library is never mirrored to the phone;
 - photos that are already on the phone (for example from auto-upload) show up once, not twice.
 
-Apps with their own photo grid, such as Messenger, never open the system picker, so no cloud library can appear in them. Some, like WhatsApp, offer it behind a folder or "more" button. For the rest, the app will offer a "Send from Nextcloud" shortcut that picks through the system picker and shares the photo into them.
+Apps with their own photo grid, such as Messenger, never open the system picker, so no cloud library can appear in them. Some, like WhatsApp, offer it behind a folder or "more" button. For the rest, the app will offer a "Send from Nextcloud" shortcut that picks through the system picker and shares the photo into them, and a photo keyboard: switch to it while writing a message, tap a photo, and it's inserted.
 
 It works with plain Nextcloud and doesn't depend on a particular gallery app. If [Memories](https://github.com/pulsejet/memories) is installed, the app uses it for better dates and video details.
 

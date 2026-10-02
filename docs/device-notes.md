@@ -187,3 +187,12 @@ Per-request timing (debug build, 1,000-file pages of about 690 KiB):
 - Parsing `getlastmodified` through `ZonedDateTime` cost several ms per file on Android (the JVM caches what Android looks up each time); parsing Nextcloud's fixed format by hand fixed that.
 - A background job then still parses about 10 times slower than the foreground, with no growth in work: Android runs background jobs on restricted CPU. A full background listing of this library takes about 1.5 minutes in a debug build. Fine for a first import or a weekly check, too slow for checking changes each time the picker opens: that is what the folder-etag walk (PLAN 2.4) is for.
 - The commit that compares 16,896 unchanged rows took 11 to 26 s in the background, also CPU-bound.
+
+## Photo keyboard prototype (GrapheneOS, 2026-10-02)
+
+A keyboard showing the 30 newest Nextcloud photos, inserting the tapped one through the keyboard content API (branch `proto/photo-keyboard`, debug builds only). Tested in Messenger, whose own photo grid never sees a cloud provider:
+
+- Messenger declares it accepts `image/png`, `image/gif`, `image/jpeg` and `image/webp` from keyboards. No HEIC, no video.
+- Tapping a 3 MB JPEG original fetched it and inserted it in 400 ms; Messenger accepted it.
+- All thumbnails loaded while the keyboard was open: an active keyboard has network access.
+- Enabling the keyboard with `adb shell ime enable` skips the trust warning a user sees when enabling it in Settings.

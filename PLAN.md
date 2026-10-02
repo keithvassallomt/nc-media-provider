@@ -321,6 +321,14 @@ Onboarding says plainly that only one cloud source can be active at a time, and 
 
 **4.7 "Send from Nextcloud" shortcut.** Apps with their own photo grid, such as Messenger, never open the system picker, so cloud photos can't appear in them (Phase 1.5). A launcher shortcut and a Quick Settings tile open the system picker (`PickVisualMedia`), then hand the picked photos to the Android share sheet (`ACTION_SEND` or `ACTION_SEND_MULTIPLE`), so they can go to any app that accepts shares. Forward the picker's read grant with the share intent if Android allows it; otherwise copy the picked files into the cache and share them through a `FileProvider`. Check that the receiving app gets the original, not a preview.
 
+**4.8 Photo keyboard.** For apps with their own photo grid, a keyboard (input method) that shows the Nextcloud library and inserts the tapped photo through the keyboard content API, the way GIF keyboards work. A prototype proved it (branch `proto/photo-keyboard`, debug builds only): Messenger declares that it accepts `image/png`, `image/gif`, `image/jpeg` and `image/webp` from keyboards, and it took a 3 MB JPEG that was fetched and inserted in 400 ms; thumbnails loaded while the keyboard was open, so it has network access. To build:
+
+- browse the library (newest first, then by month or album), using the picker's thumbnails and cache;
+- send only the types the app declares: convert HEIC and other unlisted types to JPEG (a large server preview, or on the phone). Messenger takes no video from keyboards, so videos go through 4.7;
+- a button back to the previous keyboard (`switchToPreviousInputMethod()`);
+- onboarding that enables the keyboard and explains Android's "may collect all the text you type" warning: this keyboard never handles text;
+- check which types other apps accept (Facebook, Telegram, Signal) with the prototype's status line.
+
 **Exit:** a fresh install gets to a working picker with nothing hard-coded.
 
 ### Phase 5: Media delivery and video
