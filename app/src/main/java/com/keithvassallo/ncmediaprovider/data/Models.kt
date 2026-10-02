@@ -26,6 +26,11 @@ data class MediaItem(
     val generation: Long = 0L,
     /** Decoded path of the folder holding the file, ending in '/' (see [parentFolderKey]). */
     val folder: String = "",
+    /**
+     * The phone's own copy, which makes the picker show this photo once (PLAN 3.2). Set by
+     * [com.keithvassallo.ncmediaprovider.local.LocalMatcher], never by a listing.
+     */
+    val mediaStoreUri: String? = null,
 ) {
     val isVideo: Boolean get() = mimeType.startsWith("video/")
 }

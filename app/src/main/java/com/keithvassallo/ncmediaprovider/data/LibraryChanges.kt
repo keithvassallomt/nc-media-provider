@@ -2,7 +2,7 @@ package com.keithvassallo.ncmediaprovider.data
 
 /** What a listing changes in the stored library. */
 internal data class LibraryChanges(
-    /** New rows and rows whose content changed (any field but the generation). */
+    /** New rows and rows whose content changed (any field but the generation and the local match). */
     val upserts: List<MediaItem>,
     val deletedIds: List<String>,
 ) {
@@ -11,13 +11,18 @@ internal data class LibraryChanges(
 
 /**
  * Compares a listing with the stored rows. Only a [complete] listing can prove a file is gone: a
- * partial one (a first-import page, say) never deletes anything.
+ * partial one (a first-import page, say) never deletes anything. Listings know nothing of the
+ * phone's copies, so a changed row keeps its stored local match until matching runs again.
  */
 internal fun diffLibrary(stored: Collection<MediaItem>, listed: Collection<MediaItem>, complete: Boolean): LibraryChanges {
     val storedById = stored.associateBy(MediaItem::id)
-    val upserts = listed.filter { item ->
+    val upserts = listed.mapNotNull { item ->
         val old = storedById[item.id]
-        old == null || !old.sameContentAs(item)
+        when {
+            old == null -> item
+            old.sameContentAs(item) -> null
+            else -> item.copy(mediaStoreUri = old.mediaStoreUri)
+        }
     }
     val deletedIds = if (complete) {
         val listedIds = listed.mapTo(HashSet(), MediaItem::id)
@@ -28,7 +33,10 @@ internal fun diffLibrary(stored: Collection<MediaItem>, listed: Collection<Media
     return LibraryChanges(upserts, deletedIds)
 }
 
-/** Equal in everything but the generation. Compared field by field: no copies for 20,000 rows. */
+/**
+ * Equal in everything but the generation and the local match. Compared field by field: no copies
+ * for 20,000 rows.
+ */
 internal fun MediaItem.sameContentAs(other: MediaItem): Boolean =
     id == other.id && href == other.href && etag == other.etag && fileName == other.fileName &&
         mimeType == other.mimeType && sizeBytes == other.sizeBytes && lastModifiedMillis == other.lastModifiedMillis &&

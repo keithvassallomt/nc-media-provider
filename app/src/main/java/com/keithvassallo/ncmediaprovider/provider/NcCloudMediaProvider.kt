@@ -35,9 +35,7 @@ class NcCloudMediaProvider : CloudMediaProvider() {
     override fun onCreate(): Boolean {
         val context = context ?: return false
         // The picker's first onQueryMedia lands within milliseconds of process start, and the
-        // process is routinely killed between sessions. Without a head start the local-media
-        // snapshot is never ready in time, so every row goes out without a MEDIA_STORE_URI and
-        // MediaProvider caches it that way.
+        // process is routinely killed between sessions, so the database opens straight away.
         SYNC_EXECUTOR.execute {
             runCatching {
                 val repository = LibraryRepository.get(context)
@@ -199,7 +197,9 @@ class NcCloudMediaProvider : CloudMediaProvider() {
     private fun mediaCursor(page: Page<MediaItem>): MatrixCursor =
         MatrixCursor(MEDIA_PROJECTION).apply {
             page.items.forEach { item ->
-                val localUri = runCatching { repository.localUri(item) }.getOrNull()?.toString()
+                // Matched ahead of time and stored with the row (PLAN 3.2): MediaProvider keeps rows
+                // as sent, so a match worked out here, when the picker asks, could never be revised.
+                val localUri = item.mediaStoreUri
                 PickerRowCheck.problem(item, localUri)?.let { problem ->
                     Log.w(TAG, "Dropped row ${item.id}: $problem")
                     return@forEach

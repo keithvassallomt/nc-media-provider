@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.keithvassallo.ncmediaprovider.data.db.LibraryDatabase
 import org.junit.After
+import com.keithvassallo.ncmediaprovider.local.LocalPhoto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -173,6 +174,48 @@ class LibraryStoreTest {
         assertEquals(1, store.mediaCount())
         assertEquals("/a/", store.media("1")!!.folder)
         assertTrue(store.state().duplicatePaths)
+    }
+
+    @Test
+    fun `a new or lost phone copy moves the row to the next generation`() {
+        store.commit((1..3).map(::item), complete = true)
+        val phone = "content://media/external/images/media/7"
+        assertEquals(1, store.applyLocalMatches(mapOf("2" to phone)))
+        assertEquals(phone, store.media("2")!!.mediaStoreUri)
+        assertEquals(listOf("2"), allMedia(since = 1).map(MediaItem::id))
+        assertEquals(0, store.applyLocalMatches(mapOf("2" to phone)))
+        assertEquals(2L, store.state().generation)
+        assertEquals(1, store.applyLocalMatches(emptyMap()))
+        assertEquals(null, store.media("2")!!.mediaStoreUri)
+        assertEquals(3L, store.media("2")!!.generation)
+    }
+
+    @Test
+    fun `listings keep the phone copy, changed or not`() {
+        store.commit((1..2).map(::item), complete = true)
+        val phone = "content://media/external/images/media/7"
+        store.applyLocalMatches(mapOf("1" to phone, "2" to phone.replace('7', '8')))
+        assertFalse(store.commit((1..2).map(::item), complete = true))
+        assertTrue(store.commit(listOf(item(1, etag = "changed"), item(2)), complete = true))
+        assertEquals(phone, store.media("1")!!.mediaStoreUri)
+        assertEquals(phone, store.matchCandidates(emptyList()).single { it.id == "1" }.mediaStoreUri)
+    }
+
+    @Test
+    fun `match candidates are rows with a phone item's size or name, and matched rows`() {
+        store.commit(
+            listOf(
+                item(1).copy(fileName = "PXL_1.JPG", sizeBytes = 500),
+                item(2).copy(fileName = "other.jpg", sizeBytes = 700),
+                item(3).copy(fileName = "renamed.jpg", sizeBytes = 900),
+                item(4).copy(fileName = "unrelated.jpg", sizeBytes = 999),
+            ),
+            complete = true,
+        )
+        store.applyLocalMatches(mapOf("2" to "content://media/external/images/media/5"))
+        fun photo(name: String, size: Long) = LocalPhoto(1, "content://media/external/images/media/1", name, size, 0, "image/jpeg")
+        val candidates = store.matchCandidates(listOf(photo("pxl_1.jpg", 1), photo("x.jpg", 900)))
+        assertEquals(listOf("1", "2", "3"), candidates.map { it.id }.sorted())
     }
 
     @Test

@@ -4,6 +4,9 @@ import com.keithvassallo.ncmediaprovider.data.db.DeletedMedia
 import com.keithvassallo.ncmediaprovider.data.db.FolderEtag
 import com.keithvassallo.ncmediaprovider.data.db.LibraryDatabase
 import com.keithvassallo.ncmediaprovider.data.db.SyncState
+import com.keithvassallo.ncmediaprovider.local.CloudPhoto
+import com.keithvassallo.ncmediaprovider.local.LocalMatcher
+import com.keithvassallo.ncmediaprovider.local.LocalPhoto
 import java.util.UUID
 
 /**
@@ -93,6 +96,32 @@ class LibraryStore(
 
     /** Etags at the last check, by [folderKey]. */
     fun folderEtags(): Map<String, String> = dao.folders().associate { it.path to it.etag }
+
+    /**
+     * The rows [LocalMatcher] could pair with any of [local], plus every row matched before (PLAN
+     * 3.2). Every rule needs the same size or the same name, so SQLite skips the rest: reading and
+     * checking all 16,895 rows of Keith's library took 8 s on a dozing phone.
+     */
+    fun matchCandidates(local: Collection<LocalPhoto>): List<CloudPhoto> {
+        val sizes = local.map(LocalPhoto::sizeBytes).distinct().chunked(MATCH_BATCH)
+        val names = local.map { LocalMatcher.nameKey(it.name) }.distinct().chunked(MATCH_BATCH)
+        return (0 until maxOf(sizes.size, names.size, 1))
+            .flatMap { dao.matchCandidates(sizes.getOrElse(it) { emptyList() }, names.getOrElse(it) { emptyList() }) }
+            .distinctBy(CloudPhoto::id)
+    }
+
+    /**
+     * Stores the phone copies [LocalMatcher] found, keyed by row ID; rows missing from [matches]
+     * lose any match. MediaProvider keeps rows as they were sent, so each changed row moves to the
+     * next generation. Returns how many rows changed.
+     */
+    fun applyLocalMatches(matches: Map<String, String>): Int = database.runInTransaction<Int> {
+        val current = dao.localMatches().associate { it.id to it.mediaStoreUri }
+        val changedIds = (current.keys + matches.keys).filter { current[it] != matches[it] }
+        val upserts = changedIds.chunked(SQL_BATCH).flatMap(dao::mediaWithIds).map { it.copy(mediaStoreUri = matches[it.id]) }
+        applyChanges(LibraryChanges(upserts, emptyList()), fullListing = false)
+        upserts.size
+    }
 
     /** Folders hidden by a marker file at the last check, by [folderKey]. */
     fun hiddenFolders(): Set<String> = state().hiddenFolders.split('\n').filterTo(HashSet(), String::isNotEmpty)
@@ -198,5 +227,8 @@ class LibraryStore(
     private companion object {
         /** Stays under SQLite's limit on bound parameters per statement. */
         const val SQL_BATCH = 500
+
+        /** Sizes and names each, so one statement binds at most 800 parameters. */
+        const val MATCH_BATCH = 400
     }
 }

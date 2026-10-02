@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.CancellationSignal
 import android.os.OperationCanceledException
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.util.Log
 import androidx.work.Constraints
@@ -20,11 +21,14 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.keithvassallo.ncmediaprovider.data.db.LibraryDatabase
+import com.keithvassallo.ncmediaprovider.local.LocalMatcher
 import com.keithvassallo.ncmediaprovider.local.LocalMediaIndex
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.security.MessageDigest
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.Flow
@@ -53,7 +57,11 @@ class LibraryRepository private constructor(context: Context) {
     private val settings = LibrarySettings(appContext)
     private val client = NextcloudClient()
     private val diskCache = MediaDiskCache(appContext)
-    private val localMedia = LocalMediaIndex(appContext)
+    private val localMatchExecutor = Executors.newSingleThreadScheduledExecutor { runnable ->
+        Thread(runnable, "nc-local-match").apply { isDaemon = true }
+    }
+    private var pendingLocalMatch: ScheduledFuture<*>? = null
+    private val localMedia = LocalMediaIndex(appContext) { scheduleLocalMatch() }
     private val store by lazy { LibraryStore(LibraryDatabase.open(appContext)) }
     private val syncLock = Any()
 
@@ -79,7 +87,6 @@ class LibraryRepository private constructor(context: Context) {
     /** Reads the database once; afterwards its state comes from memory. Call off the main thread. */
     fun warm() {
         if (hasAccount) store.state()
-        warmLocalMediaIndex()
     }
 
     /**
@@ -166,9 +173,53 @@ class LibraryRepository private constructor(context: Context) {
         val needsFull = full || !state.imported || due || state.rootEtag.isEmpty() ||
             state.respectsNoMedia != settings.respectNoMedia
         val changed = if (needsFull) fullSync(account, folders, onProgress) else changeSync(account, folders, onProgress)
+        val rematched = matchLocally()
         store.pruneDeletions(DELETION_RETENTION_MS)
         store.markChecked()
-        if (changed) notifyPickerOfChanges()
+        if (changed || rematched > 0) notifyPickerOfChanges()
+        return changed
+    }
+
+    /**
+     * Matches again once MediaStore has been quiet for [delayMillis]: taking one photo fires several
+     * change notifications. Needs no network, so it runs on a plain thread.
+     */
+    fun scheduleLocalMatch(delayMillis: Long = LOCAL_MATCH_DELAY_MS) = synchronized(localMatchExecutor) {
+        if (!hasAccount) return
+        pendingLocalMatch?.cancel(false)
+        pendingLocalMatch = localMatchExecutor.schedule(
+            {
+                runCatching { if (matchLocally() > 0) notifyPickerOfChanges() }
+                    .onFailure { Log.w(TAG, "Matching phone copies failed: ${it.javaClass.simpleName}: ${it.message.orEmpty()}") }
+            },
+            delayMillis,
+            TimeUnit.MILLISECONDS,
+        )
+    }
+
+    /** After the user grants or changes media access. */
+    fun onLocalMediaAccessChanged() {
+        localMedia.invalidate()
+        scheduleLocalMatch(delayMillis = 0L)
+    }
+
+    /**
+     * Brings every row's phone copy up to date (PLAN 3.2) and returns how many rows changed. Without
+     * permission to read the phone's media, matches stay as they are: there is nothing to check
+     * them against.
+     */
+    private fun matchLocally(): Int = synchronized(syncLock) {
+        if (!hasAccount) return 0
+        val started = SystemClock.elapsedRealtime()
+        val local = localMedia.photos() ?: return 0
+        val candidates = store.matchCandidates(local)
+        val matches = LocalMatcher.match(candidates, local)
+        val changed = store.applyLocalMatches(matches)
+        Log.i(
+            TAG,
+            "Matched ${matches.size} rows (of ${candidates.size} candidates) to ${local.size} phone items in " +
+                "${SystemClock.elapsedRealtime() - started} ms: $changed rows changed",
+        )
         return changed
     }
 
@@ -196,6 +247,8 @@ class LibraryRepository private constructor(context: Context) {
             if (pending.size >= IMPORT_BATCH) {
                 if (store.commit(pending, complete = false)) {
                     changed = true
+                    // Matched before the picker hears of the batch, so phone copies never show twice.
+                    matchLocally()
                     notifyPickerOfChanges()
                 }
                 pending.clear()
@@ -324,13 +377,6 @@ class LibraryRepository private constructor(context: Context) {
         }
     }
 
-    fun localUri(item: MediaItem): Uri? =
-        localMedia.find(item.fileName, item.sizeBytes, item.dateTakenMillis, item.mimeType)
-
-    fun invalidateLocalMedia() = localMedia.invalidate()
-
-    fun warmLocalMediaIndex() = localMedia.warm()
-
     fun cacheStats(): CacheStats = diskCache.stats()
 
     @Throws(FileNotFoundException::class)
@@ -340,8 +386,9 @@ class LibraryRepository private constructor(context: Context) {
         diskCache.peek(MediaDiskCache.Area.ORIGINAL, key)?.let {
             return ParcelFileDescriptor.open(it, ParcelFileDescriptor.MODE_READ_ONLY)
         }
-        localUri(item)?.let { uri ->
-            runCatching { appContext.contentResolver.openFileDescriptor(uri, "r", cancellationSignal) }
+        // The phone's own copy needs no download (PLAN 3.3).
+        item.mediaStoreUri?.let { uri ->
+            runCatching { appContext.contentResolver.openFileDescriptor(Uri.parse(uri), "r", cancellationSignal) }
                 .getOrNull()
                 ?.let { return it }
         }
@@ -473,6 +520,7 @@ class LibraryRepository private constructor(context: Context) {
         private val NETWORK = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
         private const val IMPORT_BATCH = 2_000
+        private const val LOCAL_MATCH_DELAY_MS = 5_000L
 
         /** Images only until video arrives in Phase 5. */
         private const val MIME_PREFIX = "image/"

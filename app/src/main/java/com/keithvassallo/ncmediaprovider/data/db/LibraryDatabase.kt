@@ -13,6 +13,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Upsert
 import com.keithvassallo.ncmediaprovider.data.MediaItem
+import com.keithvassallo.ncmediaprovider.local.CloudPhoto
 
 /** A file removed from the library, and the generation that removed it (the deletion journal). */
 @Entity(tableName = "deleted", indices = [Index(value = ["generation", "id"])])
@@ -21,6 +22,9 @@ data class DeletedMedia(
     val generation: Long,
     val deletedAtMillis: Long,
 )
+
+/** A row's match to the phone's own copy (PLAN 3.2). */
+data class LocalMatch(val id: String, val mediaStoreUri: String)
 
 /** The etag a folder had at the last check (PLAN 2.4); keyed by its decoded path ending in '/'. */
 @Entity(tableName = "folder")
@@ -87,6 +91,16 @@ interface LibraryDao {
     @Query("SELECT id FROM media WHERE isFavorite = 1")
     fun favoriteIds(): List<String>
 
+    /** Rows that could match a phone item with one of [sizes] or [names], plus every matched row. */
+    @Query(
+        "SELECT id, fileName, sizeBytes, dateTakenMillis, mimeType, mediaStoreUri FROM media " +
+            "WHERE sizeBytes IN (:sizes) OR lower(fileName) IN (:names) OR mediaStoreUri IS NOT NULL",
+    )
+    fun matchCandidates(sizes: List<Long>, names: List<String>): List<CloudPhoto>
+
+    @Query("SELECT id, mediaStoreUri FROM media WHERE mediaStoreUri IS NOT NULL")
+    fun localMatches(): List<LocalMatch>
+
     @Query("SELECT * FROM folder")
     fun folders(): List<FolderEtag>
 
@@ -141,8 +155,8 @@ interface LibraryDao {
 
 @Database(
     entities = [MediaItem::class, DeletedMedia::class, SyncState::class, FolderEtag::class],
-    version = 3,
-    autoMigrations = [AutoMigration(from = 2, to = 3)],
+    version = 4,
+    autoMigrations = [AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4)],
 )
 abstract class LibraryDatabase : RoomDatabase() {
     abstract fun dao(): LibraryDao

@@ -10,139 +10,61 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import androidx.core.content.ContextCompat
-import java.util.Locale
-import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.math.abs
 
-class LocalMediaIndex(context: Context) {
+/**
+ * The phone's own photos and videos, read from MediaStore for [LocalMatcher] (PLAN 3.1). The list is
+ * cached until MediaStore reports a change, which is also passed on to [onChange] so the matches can
+ * be brought up to date.
+ */
+class LocalMediaIndex(context: Context, private val onChange: () -> Unit = {}) {
     private val appContext = context.applicationContext
     private val lock = Any()
-    private val warmScheduled = AtomicBoolean(false)
-    private val warmExecutor = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "nc-local-media-index").apply {
-            isDaemon = true
-            priority = Thread.MIN_PRIORITY
-        }
-    }
 
     @Volatile
-    private var snapshot: Snapshot? = null
+    private var cached: List<LocalPhoto>? = null
 
     private val mediaObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
-        override fun onChange(selfChange: Boolean) {
-            invalidate()
-        }
+        override fun onChange(selfChange: Boolean) = changed()
 
-        override fun onChange(selfChange: Boolean, uri: Uri?) {
-            invalidate()
-        }
+        override fun onChange(selfChange: Boolean, uri: Uri?) = changed()
     }
 
     init {
-        appContext.contentResolver.registerContentObserver(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            true,
-            mediaObserver,
-        )
-        appContext.contentResolver.registerContentObserver(
-            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-            true,
-            mediaObserver,
-        )
+        appContext.contentResolver.registerContentObserver(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, mediaObserver)
+        appContext.contentResolver.registerContentObserver(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, true, mediaObserver)
     }
 
-    fun hasFullAccess(): Boolean =
-        ContextCompat.checkSelfPermission(appContext, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED &&
-            ContextCompat.checkSelfPermission(appContext, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
+    fun hasFullAccess(): Boolean = canRead(Manifest.permission.READ_MEDIA_IMAGES) && canRead(Manifest.permission.READ_MEDIA_VIDEO)
 
+    fun hasAnyAccess(): Boolean = canRead(Manifest.permission.READ_MEDIA_IMAGES) || canRead(Manifest.permission.READ_MEDIA_VIDEO)
+
+    /** Drops the cached list, after a permission change for instance. */
     fun invalidate() {
-        snapshot = null
+        cached = null
     }
 
-    fun warm() {
-        if (!hasAnyMediaPermission() || !warmScheduled.compareAndSet(false, true)) return
-        warmExecutor.execute {
-            try {
-                currentSnapshot()
-            } finally {
-                warmScheduled.set(false)
-            }
-        }
-    }
-
-    /**
-     * Finds the phone's own copy of a server file. Phone uploads keep their original file name, so
-     * name and size settle most cases; a renamed upload still matches on type and a capture time
-     * within [DATE_TOLERANCE_MS]. Ambiguous candidates never match.
-     */
-    fun find(fileName: String, sizeBytes: Long, dateTakenMillis: Long, mimeType: String): Uri? {
-        // Checked before the permission lookup: find() runs once per row of every media cursor, and
-        // the snapshot check is a plain field read while a permission check is not.
-        val index = readySnapshot() ?: run {
-            warm()
-            return null
-        }
-        if (!hasPermissionFor(mimeType)) return null
-        val name = fileName.trim().takeIf(String::isNotEmpty) ?: return null
-        if (sizeBytes > 1L) {
-            val exactMatches = index.exact[ExactKey(name.normalized(), sizeBytes)].orEmpty()
-            if (exactMatches.size == 1) return exactMatches.single().uri
-            selectByDate(exactMatches, dateTakenMillis)?.let { return it.uri }
-        }
-        val sameName = index.byName[name.normalized()].orEmpty()
-            .filter { it.mimeType.substringBefore('/') == mimeType.substringBefore('/') }
-        return selectByDate(sameName, dateTakenMillis)?.uri
-    }
-
-    private fun hasPermissionFor(mimeType: String): Boolean {
-        val permission = if (mimeType.startsWith("video/")) Manifest.permission.READ_MEDIA_VIDEO else Manifest.permission.READ_MEDIA_IMAGES
-        return ContextCompat.checkSelfPermission(appContext, permission) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun hasAnyMediaPermission(): Boolean =
-        ContextCompat.checkSelfPermission(appContext, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(appContext, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
-
-    private fun currentSnapshot(): Snapshot {
-        val now = System.currentTimeMillis()
-        snapshot?.takeIf { now - it.createdAtMillis < CACHE_TTL_MS }?.let { return it }
+    /** Everything this app may read, or null without any media permission. Call off the main thread. */
+    fun photos(): List<LocalPhoto>? {
+        if (!hasAnyAccess()) return null
+        cached?.let { return it }
         synchronized(lock) {
-            snapshot?.takeIf { now - it.createdAtMillis < CACHE_TTL_MS }?.let { return it }
-            return buildSnapshot(now).also { snapshot = it }
+            cached?.let { return it }
+            val photos = ArrayList<LocalPhoto>()
+            if (canRead(Manifest.permission.READ_MEDIA_IMAGES)) query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, photos)
+            if (canRead(Manifest.permission.READ_MEDIA_VIDEO)) query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, photos)
+            return photos.also { cached = it }
         }
     }
 
-    private fun readySnapshot(): Snapshot? {
-        val current = snapshot ?: return null
-        if (System.currentTimeMillis() - current.createdAtMillis >= CACHE_TTL_MS) warm()
-        return current
+    private fun changed() {
+        invalidate()
+        onChange()
     }
 
-    private fun buildSnapshot(createdAtMillis: Long): Snapshot {
-        val items = mutableListOf<LocalItem>()
-        if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED) {
-            queryCollection(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, items)
-        }
-        if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED) {
-            queryCollection(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, items)
-        }
-        return Snapshot(
-            createdAtMillis = createdAtMillis,
-            exact = items.groupBy { ExactKey(it.name.normalized(), it.sizeBytes) },
-            byName = items.groupBy { it.name.normalized() },
-        )
-    }
+    private fun canRead(permission: String) =
+        ContextCompat.checkSelfPermission(appContext, permission) == PackageManager.PERMISSION_GRANTED
 
-    private fun selectByDate(candidates: List<LocalItem>, dateTakenMillis: Long): LocalItem? {
-        if (dateTakenMillis <= 0L) return null
-        val matches = candidates.filter {
-            it.dateTakenMillis > 0L && abs(it.dateTakenMillis - dateTakenMillis) <= DATE_TOLERANCE_MS
-        }
-        return matches.singleOrNull()
-    }
-
-    private fun queryCollection(collection: Uri, destination: MutableList<LocalItem>) {
+    private fun query(collection: Uri, destination: MutableList<LocalPhoto>) {
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DISPLAY_NAME,
@@ -151,13 +73,7 @@ class LocalMediaIndex(context: Context) {
             MediaStore.MediaColumns.MIME_TYPE,
         )
         try {
-            appContext.contentResolver.query(
-                collection,
-                projection,
-                "${MediaStore.MediaColumns.IS_PENDING}=0",
-                null,
-                null,
-            )?.use { cursor ->
+            appContext.contentResolver.query(collection, projection, "${MediaStore.MediaColumns.IS_PENDING}=0", null, null)?.use { cursor ->
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
                 val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
                 val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
@@ -168,9 +84,9 @@ class LocalMediaIndex(context: Context) {
                     val size = cursor.getLong(sizeColumn)
                     if (size <= 0L) continue
                     val id = cursor.getLong(idColumn)
-                    destination += LocalItem(
+                    destination += LocalPhoto(
                         id = id,
-                        uri = ContentUris.withAppendedId(collection, id),
+                        uri = ContentUris.withAppendedId(collection, id).toString(),
                         name = name,
                         sizeBytes = size,
                         dateTakenMillis = cursor.getLong(dateColumn),
@@ -179,31 +95,7 @@ class LocalMediaIndex(context: Context) {
                 }
             }
         } catch (_: SecurityException) {
-            // The user may switch from full to selected-photo access while the provider is alive.
+            // The user may switch from full to selected-photo access while the app is running.
         }
-    }
-
-    private fun String.normalized() = lowercase(Locale.ROOT)
-
-    private data class ExactKey(val name: String, val size: Long)
-
-    private data class LocalItem(
-        val id: Long,
-        val uri: Uri,
-        val name: String,
-        val sizeBytes: Long,
-        val dateTakenMillis: Long,
-        val mimeType: String,
-    )
-
-    private data class Snapshot(
-        val createdAtMillis: Long,
-        val exact: Map<ExactKey, List<LocalItem>>,
-        val byName: Map<String, List<LocalItem>>,
-    )
-
-    private companion object {
-        const val CACHE_TTL_MS = 30L * 60L * 1_000L
-        const val DATE_TOLERANCE_MS = 2_000L
     }
 }

@@ -200,6 +200,27 @@ Keith changed files in a subfolder (`Photos/2026/09`) from his computer, with th
 
 The only reset in the log came first: `MEDIA_FULL_WITH_RESET` when Keith reselected the provider after reinstalling, which is expected. A move was not tried on the phone; the move logic is covered by unit tests and the integration test.
 
+## Phase 3 matching (GrapheneOS, 2026-10-02)
+
+### What is on the phone
+
+MediaStore lists 158 images and 18 videos (161 of them visible to the app). Most are screenshots, ChatGPT and messaging-app images. Of the 26 camera photos (`DCIM/Camera`), 24 are in the library: the Nextcloud app uploaded them to `Photos/2026/09` with their name and size unchanged.
+
+### Dates are an hour apart
+
+For all 24, Nextcloud's date taken was 3,599 or 3,600 s later than MediaStore's. Both come from the same EXIF date, read in different time zones (Nextcloud also drops the milliseconds). A "date within 2 seconds" rule would never have fired, so date rules allow whole time-zone offsets.
+
+Screenshots and most messaging-app images have no date taken in MediaStore, so only name and size can match them.
+
+### Timing
+
+| Matching run (phone dozing, debug build) | Time |
+|---|---|
+| All 16,895 rows read and checked in Kotlin | 8.4 s (1.3 s reading, 6.9 s matching) |
+| SQLite picks out rows with a phone item's size or name (24) | 0.6 s |
+
+The first run matched the 24 photos and moved each to a new generation; later runs changed nothing.
+
 ## Photo keyboard prototype (GrapheneOS, 2026-10-02)
 
 A keyboard showing the 30 newest Nextcloud photos, inserting the tapped one through the keyboard content API (branch `proto/photo-keyboard`, debug builds only). Tested in Messenger, whose own photo grid never sees a cloud provider:

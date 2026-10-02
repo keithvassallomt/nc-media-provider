@@ -108,9 +108,8 @@ class SetupActivity : AppCompatActivity() {
     private val permissionRequest = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
-        repository.invalidateLocalMedia()
+        repository.onLocalMediaAccessChanged()
         updateMediaPermissionUi()
-        lifecycleScope.launch(Dispatchers.IO) { repository.warmLocalMediaIndex() }
     }
 
     private val localNetworkRequest = registerForActivityResult(

@@ -282,11 +282,19 @@ Server test matrix:
 
 Moved up to straight after the sync engine, because an auto-uploading phone has most recent photos both locally and in Nextcloud.
 
-**3.1 Local index.** Adapt the base repo's local MediaStore index. This needs permission to read the device's photos and videos.
+**3.1 Local index.** Done: the base repo's MediaStore index now returns the phone's photo list for matching, cached until MediaStore reports a change. A change schedules a new match 5 s after MediaStore goes quiet. Adapt the base repo's local MediaStore index. This needs permission to read the device's photos and videos.
 
 **3.2 Matching.** The Nextcloud Android app keeps the original file name when it auto-uploads, so a match on name and size covers most cases. For renamed uploads, the fallback is the same size plus a date taken within 2 seconds. The match goes into `media_store_uri`, which makes the picker hide the cloud copy. The URI must be well-formed (see 2.9). MediaProvider caches rows as sent, so a match found after a row went out must bump that row's generation.
 
-**3.3 Local delivery.** When a matched item is selected, `onOpenMedia` hands over the local file with no download.
+Done, with these changes (findings in [docs/device-notes.md](docs/device-notes.md)):
+
+- **Stored, not worked out per query.** The base matched when the picker asked, against a snapshot that was often not ready, and MediaProvider kept whatever went out. Each row now stores its match (schema 4); `LocalMatcher` runs after every sync, after each first-import batch, and when the phone's media changes, and a row whose match changes moves to the next generation.
+- **One phone item per row.** Two rows naming one local item made MediaProvider log `UNIQUE constraint failed: media.local_id, media.is_visible` 24 times in Phase 1.5. Each phone item is now claimed once, and a row keeps its match while it still fits, so matches don't flip.
+- **Rules, strongest first:** name (ASCII case ignored) and size; then size and date taken; then name, kind and date taken, for copies edited on one side.
+- **Dates allow a time-zone offset.** On Keith's phone every match was exactly an hour apart: Nextcloud and Android read the camera's date in different zones. Dates count as equal within 2 s of any whole offset (15-minute steps, up to 14 hours).
+- **Fast enough to run every sync.** SQLite picks out rows with a phone item's size or name (every rule needs one or the other), plus rows already matched. Checking all 16,895 rows took 8.4 s on a dozing phone; the filtered match takes 0.6 s.
+
+**3.3 Local delivery.** Done: `onOpenMedia` opens the stored match first and downloads only if the phone copy can't be opened. When a matched item is selected, `onOpenMedia` hands over the local file with no download.
 
 **Exit:** photos that are also on the phone appear once in the picker, and selecting one doesn't download anything.
 
