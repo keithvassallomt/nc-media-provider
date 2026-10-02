@@ -453,17 +453,17 @@ Onboarding says plainly that only one cloud source can be active at a time, and 
 ## Risks
 
 - **Activation on a stock Pixel is only partly proven.** Phase 0.1 showed that adb can change the allow-list on both phones without root, and that a user-installed provider becomes selectable on GrapheneOS. A third-party provider appearing in the stock Pixel's picker is still untested (Phase 1.5). One Pixel 9 Pro on Android 17 using Shizuku reportedly showed only Google Photos, and that was never resolved.
-- **Local network permission.** Confirmed in Phase 1.5: Android 17 blocks apps targeting 37 from LAN addresses unless they hold the runtime permission `ACCESS_LOCAL_NETWORK`. The app now declares and requests it; 4.1 must make the request part of sign-in.
-- **Background network restriction.** Confirmed in Phase 1.5: no network outside the foreground or MediaProvider's calls (2.5a).
-- **Updates deselect the provider.** Every app update switches the picker back to no cloud provider (4.6).
+- **Local network permission.** Confirmed in Phase 1.5: Android 17 blocks apps targeting 37 from LAN addresses unless they hold the runtime permission `ACCESS_LOCAL_NETWORK`. Sign-in asks for it when the server is on the local network (4.1).
+- **Background network restriction.** Confirmed in Phase 1.5: no network outside the foreground or MediaProvider's calls (2.5a). Two consequences found in Phase 5: streaming a file to another app needs a foreground service, which Android allows to start only because the picker has the app bound while on screen; and WorkManager can run a job inside the app's own process without the job's network exemption, so long sync steps must stop when their job is stopped.
+- **The streaming service may not start everywhere.** If a picker opens a file after it has closed, or another build refuses the start, a large video can't stream (5.2). Check on the stock Pixel's newer picker.
+- **Updates deselect the provider.** Every app update switches the picker back to no cloud provider. The app selects itself again through Shizuku, or notifies the user (4.6).
 - **Google could close the door.** A future Android or MediaProvider module update could remove these flags from what adb may write. Nothing in the app could work around that.
-- **Video previews may break** in the Android 17 picker until Phase 5.4 lands.
-- **HEIC and video thumbnails** depend on server settings (Phase 0.2, with fallbacks in Phase 5).
+- **Video previews are silent.** Android 17's audio hardening mutes a cloud provider's preview, Google Photos' included; nothing in the app can change that (5.4).
+- **HEIC and video thumbnails** depend on server settings (Phase 0.2). Without them the phone makes them (5.1): video frames cheaply through Range requests, HEIC only by downloading the photo, so the pre-cache skips HEIC.
 - **Bad rows** can be silently dropped or abort a sync (Phase 2.9).
 - **An unreachable server** could get the provider deselected (Phases 2.6 and 8).
 - **Research claims not yet verified:**
   - whether column order matters to the picker (Phase 1);
-  - how big each read through the streamed file handle is (Phase 5.2);
   - whether the picker's full-size preview path rotates twice (Phase 5.1; the server side was confirmed in 0.2);
   - how albums with photos outside the library behave (Phase 7.1).
 
