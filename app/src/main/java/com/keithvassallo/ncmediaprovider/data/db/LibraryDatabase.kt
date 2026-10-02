@@ -104,6 +104,14 @@ interface LibraryDao {
     @Query("SELECT COUNT(*) FROM media WHERE mediaStoreUri IS NOT NULL")
     fun matchedCount(): Int
 
+    /** Newest first by date taken, after the keyset position ([beforeDate], [beforeId]) (PLAN 4.8). */
+    @Query(
+        "SELECT * FROM media WHERE mimeType LIKE :mimePrefix || '%' " +
+            "AND (dateTakenMillis < :beforeDate OR (dateTakenMillis = :beforeDate AND id < :beforeId)) " +
+            "ORDER BY dateTakenMillis DESC, id DESC LIMIT :limit",
+    )
+    fun newestPage(mimePrefix: String, beforeDate: Long, beforeId: String, limit: Int): List<MediaItem>
+
     @Query("SELECT * FROM folder")
     fun folders(): List<FolderEtag>
 
@@ -158,8 +166,8 @@ interface LibraryDao {
 
 @Database(
     entities = [MediaItem::class, DeletedMedia::class, SyncState::class, FolderEtag::class],
-    version = 4,
-    autoMigrations = [AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4)],
+    version = 5,
+    autoMigrations = [AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5)],
 )
 abstract class LibraryDatabase : RoomDatabase() {
     abstract fun dao(): LibraryDao

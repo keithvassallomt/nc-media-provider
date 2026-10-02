@@ -8,7 +8,11 @@ import androidx.room.PrimaryKey
  * One photo or video in the user's Nextcloud library, keyed by its Nextcloud file ID. Stored as a
  * row of the `media` table with the generation it last changed in (PLAN 2.1).
  */
-@Entity(tableName = "media", indices = [Index(value = ["generation", "id"]), Index(value = ["folder"])])
+@Entity(
+    tableName = "media",
+    // The last index serves the photo keyboard's newest-first browsing (PLAN 4.8).
+    indices = [Index(value = ["generation", "id"]), Index(value = ["folder"]), Index(value = ["dateTakenMillis", "id"])],
+)
 data class MediaItem(
     @PrimaryKey val id: String,
     /** Percent-encoded WebDAV path, as the server returned it. */

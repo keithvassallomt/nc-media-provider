@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Photos the keyboard hands to other apps (PLAN 4.8). -->
+<paths>
+    <cache-path name="keyboard" path="keyboard/" />
+</paths>

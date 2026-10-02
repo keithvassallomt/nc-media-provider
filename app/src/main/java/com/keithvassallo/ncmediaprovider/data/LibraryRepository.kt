@@ -123,6 +123,10 @@ class LibraryRepository private constructor(context: Context) {
         }
     }
 
+    /** A page of photos for the keyboard, newest taken first (PLAN 4.8). Call off the main thread. */
+    fun newestPhotos(after: MediaItem?, limit: Int): List<MediaItem> =
+        if (hasAccount) store.newestPage(MIME_PREFIX, after, limit) else emptyList()
+
     /** What the diagnostics show (PLAN 4.6). Call off the main thread. */
     fun diagnostics(): Diagnostics {
         val state = if (hasAccount) store.state() else null

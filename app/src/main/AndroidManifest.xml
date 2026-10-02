@@ -69,6 +69,30 @@
             android:name=".ui.FolderPickerActivity"
             android:exported="false" />
 
+        <!-- The photo keyboard (PLAN 4.8), for apps with their own photo grid. -->
+        <service
+            android:name=".keyboard.PhotoKeyboardService"
+            android:exported="true"
+            android:label="@string/keyboard_label"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/photo_keyboard_method" />
+        </service>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.keyboardfiles"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/keyboard_file_paths" />
+        </provider>
+
         <!-- Reselects the provider after an update deselects it (PLAN 4.6). -->
         <receiver
             android:name=".activation.PackageReplacedReceiver"

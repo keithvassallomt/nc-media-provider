@@ -11,9 +11,11 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.IBinder
 import android.provider.MediaStore
+import android.provider.Settings
 import android.text.format.DateUtils
 import android.text.format.Formatter
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -153,6 +155,7 @@ class SetupActivity : AppCompatActivity() {
         binding.foldersButton.setOnClickListener { startActivity(Intent(this, FolderPickerActivity::class.java)) }
         binding.signOutButton.setOnClickListener { confirmSignOut() }
         binding.sendButton.setOnClickListener { startActivity(Intent(this, SendFromNextcloudActivity::class.java)) }
+        binding.keyboardSettingsButton.setOnClickListener { startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 repository.syncJobs().collect(::showSyncJobs)
@@ -174,6 +177,7 @@ class SetupActivity : AppCompatActivity() {
         super.onResume()
         updateConnectionUi()
         maybeAskForNotifications()
+        updateKeyboardUi()
         updateLocalNetworkUi()
         updateMediaPermissionUi()
         updateActivationUi()
@@ -233,6 +237,12 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private fun folderList(): String = repository.folders().joinToString(", ")
+
+    /** Whether the photo keyboard (PLAN 4.8) is turned on in Android's keyboard settings. */
+    private fun updateKeyboardUi() {
+        val enabled = getSystemService(InputMethodManager::class.java).enabledInputMethodList.any { it.packageName == packageName }
+        binding.keyboardStatus.setText(if (enabled) R.string.keyboard_setup_enabled else R.string.keyboard_setup_disabled)
+    }
 
     private fun confirmSignOut() {
         MaterialAlertDialogBuilder(this)

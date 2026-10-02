@@ -30,6 +30,13 @@ class LibraryStore(
 
     fun mediaCount(): Int = dao.mediaCount()
 
+    /**
+     * Rows whose MIME type starts with [mimePrefix], newest taken first, after [after] (the last
+     * row of the previous page) for the photo keyboard (PLAN 4.8).
+     */
+    fun newestPage(mimePrefix: String, after: MediaItem?, limit: Int): List<MediaItem> =
+        dao.newestPage(mimePrefix, after?.dateTakenMillis ?: Long.MAX_VALUE, after?.id ?: "", limit)
+
     /** Rows with a copy on the phone (PLAN 3.2). */
     fun matchedCount(): Int = dao.matchedCount()
 
