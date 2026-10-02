@@ -4,6 +4,7 @@ import android.os.CancellationSignal
 import android.os.SystemClock
 import android.util.Log
 import com.keithvassallo.ncmediaprovider.BuildConfig
+import okhttp3.Call
 import okhttp3.Credentials
 import okhttp3.FormBody
 import okhttp3.HttpUrl
@@ -154,6 +155,17 @@ class NextcloudClient {
             }
         }
     }
+
+    /**
+     * Makes calls signed in as [account], for a player that streams through this client (PLAN
+     * 5.4); credentials still go only to the account's server.
+     */
+    fun callFactory(account: NextcloudAccount): Call.Factory = Call.Factory { request ->
+        client.newCall(authenticated(request.newBuilder(), account).build())
+    }
+
+    /** The full URL of a file the server listed by [href]. */
+    fun fileUrl(account: NextcloudAccount, href: String): HttpUrl? = account.server().resolve(href)
 
     /** The folders directly inside [folder], for the folder picker (PLAN 4.3). */
     fun listChildFolders(account: NextcloudAccount, folder: String): List<DavEntry> {

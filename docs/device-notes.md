@@ -260,6 +260,24 @@ The picker downloads the originals of the selected items before returning (`Sele
 - **Revoking the app in Nextcloud's "Devices & sessions"**: the next sync's first request was refused (one 401, after about 5 s), the app stopped all requests and cancelled its syncs, the remote-wipe check ran in its own job and found no wipe, and the "Sign in to Nextcloud again" notification appeared. Signing in again as the same user resumed with a change check, without reimporting.
 - **Vanadium wedged twice**, once after each sign-in: neither the sign-in tab nor the full browser would load the server (blank page) while a laptop could, and only a force stop of Vanadium fixed it. The app made no failed requests that could have triggered Nextcloud's throttling. Both times the user left the sign-in tab by going home rather than closing it. Worth checking with other browsers (PLAN 8).
 
+## Phase 5 checks (GrapheneOS, 2026-10-02)
+
+### Streaming needs a foreground service
+
+The first send of a 1 GB video to Element X failed. The picker's preload opened the stream and returned in 3 s, and Element's transcoder read about 70 MB, then every read failed with `Unable to resolve host`. The firewall log shows why: while MediaProvider or the visible picker is calling the app it is bound-foreground or bound-top and its network is allowed; 5 s after the last call the rule flips to blocked (`10221-background-default`). A dataSync foreground service, started from inside the open call, keeps it open: the second send read the whole 1,083 MiB in 125 s, 542 requests, no failed reads. Android allowed the start because the app was bound-top (the picker on screen, bound to it); the picker opens files during its preparing step, while it is still on screen.
+
+### WorkManager can run a job without the job's network exemption
+
+Straight after an install, WorkManager ran a sync job inside the app's own process rather than through JobScheduler. Android blocked the app's network 3 s in and WorkManager stopped the job, but the duration reads kept going until they timed out. Long sync steps now stop when their job is stopped; the rescheduled run went through JobScheduler and had network.
+
+### Video durations
+
+Core Nextcloud keeps none, so the picker showed 00:00. Reading the `moov`/`mvhd` box: 4 small requests a video took 0.7 s each (about 180 ms per request on Keith's server); 64 KiB windows, four videos at a time, read 500 in 39 s, none unreadable. `PXL_20260315_154241316.mp4`: 199 s.
+
+### Preview playback is silent
+
+Previews play quickly, the large video included, from the server or the phone's copy. Sound doesn't: Android logs `AudioHardening background playback muted` for the app although the picker has it bound and on top, and refuses its audio focus requests (`Audio focus request blocked by hardening`), after which ExoPlayer paused the video. A media-playback foreground service started from the picker's call didn't change that; Android noted that a foreground service started from the background gets no camera, microphone or location access, and audio control seems to be withheld the same way. The picker requests audio focus itself when the user unmutes, so the player no longer does.
+
 ## Photo keyboard prototype (GrapheneOS, 2026-10-02)
 
 A keyboard showing the 30 newest Nextcloud photos, inserting the tapped one through the keyboard content API (branch `proto/photo-keyboard`, debug builds only). Tested in Messenger, whose own photo grid never sees a cloud provider:

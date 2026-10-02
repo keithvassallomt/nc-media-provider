@@ -14,6 +14,8 @@ import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
 import android.os.Process
 import android.provider.CloudMediaProvider
+import android.provider.CloudMediaProvider.CloudMediaSurfaceController
+import android.provider.CloudMediaProvider.CloudMediaSurfaceStateChangedCallback
 import android.provider.CloudMediaProviderContract
 import android.util.Log
 import com.keithvassallo.ncmediaprovider.data.LibraryRepository
@@ -81,6 +83,17 @@ class NcCloudMediaProvider : CloudMediaProvider() {
         // hasAccount reads plain preferences: this call has a 100 ms budget, so no Keystore here.
         if (repository.hasAccount) scheduleSyncCheck()
         return result
+    }
+
+    /** Video playback in the picker's preview (PLAN 5.4); none until the library is set up. */
+    override fun onCreateCloudMediaSurfaceController(
+        config: Bundle,
+        callback: CloudMediaSurfaceStateChangedCallback,
+    ): CloudMediaSurfaceController? {
+        enforceSystemCaller()
+        if (!repository.isReady) return null
+        Log.d(TAG, "onCreateCloudMediaSurfaceController")
+        return VideoPreviewController(requireNotNull(context), config, callback, repository)
     }
 
     override fun onQueryMedia(extras: Bundle): Cursor {

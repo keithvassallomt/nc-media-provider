@@ -140,6 +140,22 @@ class LibraryRepository private constructor(context: Context) {
         }
     }
 
+    /** The account for the preview player, unless signed out or refused (PLAN 5.4). */
+    fun accountForPlayback(): NextcloudAccount? = if (credentials.signInRequired) null else credentials.load()
+
+    fun callFactory(account: NextcloudAccount): okhttp3.Call.Factory = client.callFactory(account)
+
+    /**
+     * Where the preview plays [mediaId] from (PLAN 5.4): the phone's own copy when there is one and
+     * the app may read it, otherwise the file on the server. Null for unknown media.
+     */
+    fun playbackUri(mediaId: String): Uri? {
+        val item = store.media(mediaId) ?: return null
+        item.mediaStoreUri?.takeIf { localMedia.hasAnyAccess() }?.let { return Uri.parse(it) }
+        val account = accountForPlayback() ?: return null
+        return client.fileUrl(account, item.href)?.let { Uri.parse(it.toString()) }
+    }
+
     /** A page of photos for the keyboard, newest taken first (PLAN 4.8). Call off the main thread. */
     fun newestPhotos(after: MediaItem?, limit: Int): List<MediaItem> =
         if (hasAccount) store.newestPage(IMAGE_PREFIX, after, limit) else emptyList()

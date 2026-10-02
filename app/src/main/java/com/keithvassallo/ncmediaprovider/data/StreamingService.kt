@@ -15,64 +15,84 @@ import com.keithvassallo.ncmediaprovider.R
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Keeps the network open while another app reads a streamed video (PLAN 5.2). Android 17 allows
- * this app's network only while it is in the foreground or MediaProvider is calling it; a stream is
- * read after that call returns, and the phone test saw every read fail 5 s later with "Unable to
- * resolve host" (Phase 5). A foreground service lifts that for as long as any stream is open.
- *
- * It is started from inside MediaProvider's call to open the file, while the app is bound by
- * MediaProvider, which is one of the states in which Android lets an app start a foreground
- * service. It lingers briefly after the last stream closes, because apps reopen a video several
- * times while preparing it.
+ * A foreground service that only exists to keep this app's network open: Android 17 allows it
+ * only while the app is in the foreground or MediaProvider is calling it (Phase 5 phone tests). It
+ * is started from inside MediaProvider's call, while Android counts the app as bound by it, which
+ * is one of the states in which a foreground service may start.
  */
-class StreamingService : Service() {
+abstract class KeepAliveService : Service() {
+    protected abstract val notificationId: Int
+    protected abstract val serviceType: Int
+    protected abstract val title: Int
+    protected abstract val text: Int
+
     override fun onCreate() {
         super.onCreate()
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
+        getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL, getString(R.string.streaming_channel), NotificationManager.IMPORTANCE_LOW),
         )
         val notification = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(getString(R.string.streaming_title))
-            .setContentText(getString(R.string.streaming_text))
+            .setContentTitle(getString(title))
+            .setContentText(getString(text))
             .setOngoing(true)
             .setSilent(true)
             .build()
-        startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        startForeground(notificationId, notification, serviceType)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_NOT_STICKY
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    companion object {
-        private const val TAG = "StreamingService"
-        private const val CHANNEL = "streaming"
-        private const val NOTIFICATION_ID = 10
-        private const val LINGER_MS = 20_000L
+    private companion object {
+        const val CHANNEL = "streaming"
+    }
+}
 
-        private val openStreams = AtomicInteger()
-        private val main = Handler(Looper.getMainLooper())
-        private var pendingStop: Runnable? = null
+/**
+ * Starts [service] with its first user and stops it once none has been active for [lingerMillis]:
+ * apps reopen a video several times while preparing it, and the picker recreates its player.
+ */
+class KeepAlive(private val service: Class<out KeepAliveService>, private val lingerMillis: Long = 20_000L) {
+    private val users = AtomicInteger()
+    private val main = Handler(Looper.getMainLooper())
+    private var pendingStop: Runnable? = null
+
+    fun acquire(context: Context) {
+        users.incrementAndGet()
+        main.post { pendingStop?.let(main::removeCallbacks) }
+        runCatching { context.startForegroundService(Intent(context, service)) }
+            .onFailure { Log.w(TAG, "Couldn't start ${service.simpleName}: ${it.javaClass.simpleName}: ${it.message.orEmpty()}") }
+    }
+
+    fun release(context: Context) {
+        if (users.decrementAndGet() > 0) return
+        main.post {
+            pendingStop?.let(main::removeCallbacks)
+            pendingStop = Runnable { if (users.get() == 0) context.stopService(Intent(context, service)) }
+                .also { main.postDelayed(it, lingerMillis) }
+        }
+    }
+
+    private companion object {
+        const val TAG = "KeepAlive"
+    }
+}
+
+/** Keeps the network open while another app reads a streamed video (PLAN 5.2). */
+class StreamingService : KeepAliveService() {
+    override val notificationId = 10
+    override val serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+    override val title = R.string.streaming_title
+    override val text = R.string.streaming_text
+
+    companion object {
+        private val keepAlive = KeepAlive(StreamingService::class.java)
 
         /** Call when a stream opens, from inside MediaProvider's call. */
-        fun streamOpened(context: Context) {
-            openStreams.incrementAndGet()
-            main.post { pendingStop?.let(main::removeCallbacks) }
-            runCatching { context.startForegroundService(Intent(context, StreamingService::class.java)) }
-                .onFailure { Log.w(TAG, "Couldn't start the streaming service: ${it.javaClass.simpleName}: ${it.message.orEmpty()}") }
-        }
+        fun streamOpened(context: Context) = keepAlive.acquire(context)
 
-        /** Call when a stream closes; the service stops once none has been open for a while. */
-        fun streamClosed(context: Context) {
-            if (openStreams.decrementAndGet() > 0) return
-            main.post {
-                pendingStop?.let(main::removeCallbacks)
-                pendingStop = Runnable {
-                    if (openStreams.get() == 0) context.stopService(Intent(context, StreamingService::class.java))
-                }.also { main.postDelayed(it, LINGER_MS) }
-            }
-        }
+        fun streamClosed(context: Context) = keepAlive.release(context)
     }
 }

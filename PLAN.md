@@ -352,16 +352,16 @@ Onboarding says plainly that only one cloud source can be active at a time, and 
 - When HEIC previews are off, read the HEIC's built-in thumbnail through small Range requests and cache it. Any other 404 shows a blank tile.
 - Orientation: Phase 0.2 confirmed that Nextcloud previews are already rotated and carry no EXIF, and that `metadata-photos-size` is in display orientation. Report orientation 0. Check on a device that the picker's full-size preview, which gets the original file with its EXIF tag, isn't rotated twice.
 
-**5.2 Streaming large files.**
+**5.2 Streaming large files.** Done: videos open as a proxy file descriptor whose reads are 2 MiB Range requests with one chunk read ahead and the etag pinned (`If-Match`). A dataSync foreground service runs while a stream is open: without it Android 17 blocked every read 5 s after MediaProvider's call returned (see the device notes). Element X read a 1 GB video in 125 s with no failed reads, and the picker's preload step returned in seconds.
 
 - For videos and large files, return a file handle whose reads become HTTP Range requests (`openProxyFileDescriptor`).
 - Reads are buffered 1 to 4 MiB ahead. The GPL fork makes one request per read, which is slow.
 - The size comes from the listing, and the etag is pinned so a file that changes mid-read fails cleanly.
 - Images keep the download-to-cache path. The originals cache is keyed by fileId and etag (the base keys by ID only, so an edited file is served stale) and gets a size cap the user can change (8.2).
 
-**5.3 Videos in the library.** Include videos in the SEARCH. Their thumbnails need the server's Movie preview provider. If it's missing, grab a frame on the phone from the streamed file and cache it.
+**5.3 Videos in the library.** Done: one SEARCH for images and videos, hidden live-photo halves left out (5,945 on Keith's server), a listing version that triggers one full listing. Durations are read from each video's `moov` box after each sync, up to 500 a time (core Nextcloud has none). Frame-grab thumbnails for servers without the Movie preview provider are still to do. Include videos in the SEARCH. Their thumbnails need the server's Movie preview provider. If it's missing, grab a frame on the phone from the streamed file and cache it.
 
-**5.4 Video playback in the picker.** A `CloudMediaSurfaceController` built on Media3 ExoPlayer streams the WebDAV file with the user's credentials. It handles the display surface, play and pause, mute and loop, and reports playback states to the picker. Dreaming-Codes' version shows how to map those states. Study it, don't copy it: it's GPL. Test on both phones, since the stock Pixel uses the newer picker and GrapheneOS the older one built into MediaProvider.
+**5.4 Video playback in the picker.** Built and working on the GrapheneOS phone without sound: Android's audio hardening mutes the app's playback and refuses its audio focus, even with a media-playback foreground service, because the app isn't the visible one (see the device notes). The picker handles audio focus itself, so the player doesn't ask for it. Still to test on the stock Pixel's newer picker. A `CloudMediaSurfaceController` built on Media3 ExoPlayer streams the WebDAV file with the user's credentials. It handles the display surface, play and pause, mute and loop, and reports playback states to the picker. Dreaming-Codes' version shows how to map those states. Study it, don't copy it: it's GPL. Test on both phones, since the stock Pixel uses the newer picker and GrapheneOS the older one built into MediaProvider.
 
 **5.5 Live photos.** Hide the hidden MOV half of each pair. Optionally, pair an image and a MOV with the same name in the same folder, for live photos uploaded by clients other than iOS. Testing needs a real iPhone live photo with a licence that allows committing it: neither Nextcloud 33 nor 35 detected the synthetic pair in Phase 0.2.
 
