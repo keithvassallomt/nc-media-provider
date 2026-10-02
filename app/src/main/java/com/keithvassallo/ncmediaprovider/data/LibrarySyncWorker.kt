@@ -29,7 +29,7 @@ class LibrarySyncWorker(context: Context, parameters: WorkerParameters) : Worker
         if (inputData.getBoolean(KEY_WIPE_CHECK, false)) {
             repository.checkRemoteWipe()
         } else {
-            repository.syncNow(inputData.getBoolean(KEY_FULL, false)) { setProgressAsync(it.toData()) }
+            repository.syncNow(inputData.getBoolean(KEY_FULL, false), onProgress = { setProgressAsync(it.toData()) }, isStopped = { isStopped })
             repository.noteSelectedProvider(repository.isSelectedProvider())
         }
         Result.success()

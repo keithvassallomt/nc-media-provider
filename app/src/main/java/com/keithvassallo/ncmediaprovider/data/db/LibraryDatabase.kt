@@ -107,6 +107,10 @@ interface LibraryDao {
     @Query("SELECT COUNT(*) FROM media WHERE mediaStoreUri IS NOT NULL")
     fun matchedCount(): Int
 
+    /** Videos whose duration hasn't been read yet (0), newest first (PLAN 5.3). */
+    @Query("SELECT * FROM media WHERE mimeType LIKE 'video/%' AND durationMillis = 0 ORDER BY dateTakenMillis DESC LIMIT :limit")
+    fun videosWithoutDuration(limit: Int): List<MediaItem>
+
     /** Newest first by date taken, after the keyset position ([beforeDate], [beforeId]) (PLAN 4.8). */
     @Query(
         "SELECT * FROM media WHERE mimeType LIKE :mimePrefix || '%' " +

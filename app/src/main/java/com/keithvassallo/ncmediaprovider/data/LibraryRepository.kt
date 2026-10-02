@@ -35,7 +35,10 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
@@ -361,10 +364,14 @@ class LibraryRepository private constructor(context: Context) {
      * folder etags to compare, and when the `.nomedia` setting changed.
      */
     @Throws(IOException::class, SignInRequiredException::class)
-    fun syncNow(full: Boolean = false, onProgress: (SyncProgress) -> Unit = {}): Boolean = synchronized(syncLock) {
+    fun syncNow(
+        full: Boolean = false,
+        onProgress: (SyncProgress) -> Unit = {},
+        isStopped: () -> Boolean = { false },
+    ): Boolean = synchronized(syncLock) {
         if (!isReady) return false
         try {
-            sync(full, onProgress).also { settings.lastSyncError = null }
+            sync(full, onProgress, isStopped).also { settings.lastSyncError = null }
         } catch (error: NextcloudHttpException) {
             when {
                 error.statusCode == 401 -> {
@@ -383,7 +390,7 @@ class LibraryRepository private constructor(context: Context) {
         }
     }
 
-    private fun sync(full: Boolean, onProgress: (SyncProgress) -> Unit): Boolean {
+    private fun sync(full: Boolean, onProgress: (SyncProgress) -> Unit, isStopped: () -> Boolean): Boolean {
         val account = credentials.load() ?: return false
         val source = sourceKey() ?: return false
         if (store.state().sourceKey != source) {
@@ -397,10 +404,63 @@ class LibraryRepository private constructor(context: Context) {
             state.respectsNoMedia != settings.respectNoMedia || state.listingVersion != LISTING_VERSION
         val changed = if (needsFull) fullSync(account, folders, onProgress) else changeSync(account, folders, onProgress)
         val rematched = matchLocally()
+        val durations = readVideoDurations(account, isStopped)
         store.pruneDeletions(DELETION_RETENTION_MS)
         store.markChecked()
-        if (changed || rematched > 0) notifyPickerOfChanges()
+        if (changed || rematched > 0 || durations) notifyPickerOfChanges()
         return changed
+    }
+
+    /**
+     * Reads the durations of videos that have none yet from their headers (PLAN 5.3), newest first
+     * and a batch per sync. Each video costs one or two 64 KiB Range requests, read four at a time:
+     * a request costs Keith's server about 180 ms, and four small requests one after another took
+     * 0.7 s a video. Stops as soon as the job is stopped: WorkManager can run a job inside the app's
+     * own process, where Android 17 cut the network 3 s in (Phase 5). Returns true when any were stored.
+     */
+    private fun readVideoDurations(account: NextcloudAccount, isStopped: () -> Boolean): Boolean {
+        val videos = store.videosWithoutDuration(DURATION_BATCH)
+        if (videos.isEmpty()) return false
+        val started = SystemClock.elapsedRealtime()
+        val durations = ConcurrentHashMap<String, Long>()
+        val stop = AtomicBoolean(false)
+        val unauthorized = AtomicReference<NextcloudHttpException>()
+        val pool = Executors.newFixedThreadPool(DURATION_PARALLEL)
+        try {
+            videos.map { video ->
+                pool.submit {
+                    if (stop.get() || isStopped() || SystemClock.elapsedRealtime() - started > DURATION_TIME_BUDGET_MS) return@submit
+                    val reader = RangeReader(video.sizeBytes, DURATION_WINDOW_BYTES) { offset, length ->
+                        client.fetchRange(account, video.href, video.etag, offset, length)
+                    }
+                    try {
+                        val duration = VideoHeader.durationMillis(video.sizeBytes) { offset, length ->
+                            ByteArray(length).also { reader.read(offset, it, 0, length) }
+                        }
+                        durations[video.id] = duration ?: DURATION_UNREADABLE
+                    } catch (error: NextcloudHttpException) {
+                        // A file that changed or vanished is picked up by the next listing.
+                        if (error.statusCode == 401) {
+                            unauthorized.set(error)
+                            stop.set(true)
+                        }
+                    } catch (error: IOException) {
+                        // The network went: keep what was read, and carry on at the next sync.
+                        if (!stop.getAndSet(true)) Log.d(TAG, "Stopped reading video durations: ${error.javaClass.simpleName}: ${error.message.orEmpty()}")
+                    }
+                }
+            }.forEach { it.get() }
+        } finally {
+            pool.shutdownNow()
+        }
+        unauthorized.get()?.let { throw it }
+        val stored = store.applyDurations(durations)
+        Log.i(
+            TAG,
+            "Read ${durations.count { it.value > 0 }} video durations (${durations.count { it.value < 0 }} unreadable) " +
+                "of ${videos.size} in ${SystemClock.elapsedRealtime() - started} ms",
+        )
+        return stored
     }
 
     /**
@@ -830,6 +890,15 @@ class LibraryRepository private constructor(context: Context) {
         private val NETWORK = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
         private const val IMPORT_BATCH = 2_000
+
+        /** Video durations read per sync; a WorkManager job may run for 10 minutes in all. */
+        private const val DURATION_BATCH = 500
+        private const val DURATION_TIME_BUDGET_MS = 3L * 60L * 1_000L
+        private const val DURATION_PARALLEL = 4
+        private const val DURATION_WINDOW_BYTES = 64 * 1024
+
+        /** Stored for a video whose header couldn't be read, so it isn't tried at every sync. */
+        private const val DURATION_UNREADABLE = -1L
         private const val LOCAL_MATCH_DELAY_MS = 5_000L
         private const val SELECTED_SEEN_RESOLUTION_MS = 5L * 60L * 1_000L
 

@@ -11,18 +11,19 @@ internal data class LibraryChanges(
 
 /**
  * Compares a listing with the stored rows. Only a [complete] listing can prove a file is gone: a
- * partial one (a first-import page, say) never deletes anything. Listings know nothing of the
- * phone's copies, so a changed row keeps its stored local match until matching runs again.
+ * partial one (a first-import page, say) never deletes anything. Listings know nothing of what the
+ * phone works out itself: a row keeps its local match until matching runs again, and a video its
+ * duration while its etag is unchanged (PLAN 5.3).
  */
 internal fun diffLibrary(stored: Collection<MediaItem>, listed: Collection<MediaItem>, complete: Boolean): LibraryChanges {
     val storedById = stored.associateBy(MediaItem::id)
-    val upserts = listed.mapNotNull { item ->
-        val old = storedById[item.id]
-        when {
-            old == null -> item
-            old.sameContentAs(item) -> null
-            else -> item.copy(mediaStoreUri = old.mediaStoreUri)
-        }
+    val upserts = listed.mapNotNull { listedItem ->
+        val old = storedById[listedItem.id] ?: return@mapNotNull listedItem
+        val item = listedItem.copy(
+            mediaStoreUri = old.mediaStoreUri,
+            durationMillis = if (old.etag == listedItem.etag) old.durationMillis else listedItem.durationMillis,
+        )
+        if (old.sameContentAs(item)) null else item
     }
     val deletedIds = if (complete) {
         val listedIds = listed.mapTo(HashSet(), MediaItem::id)

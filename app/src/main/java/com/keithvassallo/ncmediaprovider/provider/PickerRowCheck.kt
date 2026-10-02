@@ -17,7 +17,7 @@ internal object PickerRowCheck {
         item.sizeBytes <= 0L -> "size ${item.sizeBytes}"
         !item.mimeType.startsWith("image/") && !item.mimeType.startsWith("video/") -> "MIME type ${item.mimeType}"
         item.generation <= 0L -> "generation ${item.generation}"
-        item.durationMillis < 0L -> "duration ${item.durationMillis}"
+        // A negative duration marks a video whose header couldn't be read; rows send none for it.
         mediaStoreUri != null && !MEDIA_STORE_URI.matches(mediaStoreUri) -> "media_store_uri $mediaStoreUri"
         else -> null
     }

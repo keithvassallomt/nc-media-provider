@@ -37,6 +37,19 @@ class LibraryStore(
     fun newestPage(mimePrefix: String, after: MediaItem?, limit: Int): List<MediaItem> =
         dao.newestPage(mimePrefix, after?.dateTakenMillis ?: Long.MAX_VALUE, after?.id ?: "", limit)
 
+    fun videosWithoutDuration(limit: Int): List<MediaItem> = dao.videosWithoutDuration(limit)
+
+    /**
+     * Stores durations read from the files (PLAN 5.3), negative for files that couldn't be read,
+     * under the next generation so the picker picks them up. Rows that changed meanwhile are left.
+     */
+    fun applyDurations(durations: Map<String, Long>): Boolean = database.runInTransaction<Boolean> {
+        val upserts = durations.keys.toList().chunked(SQL_BATCH).flatMap(dao::mediaWithIds)
+            .filter { it.durationMillis == 0L }
+            .map { it.copy(durationMillis = durations.getValue(it.id)) }
+        applyChanges(LibraryChanges(upserts, emptyList()), fullListing = false)
+    }
+
     /** Rows with a copy on the phone (PLAN 3.2). */
     fun matchedCount(): Int = dao.matchedCount()
 
