@@ -127,7 +127,7 @@ object SearchRequest {
         .replace("\"", "&quot;")
 }
 
-/** PROPFIND bodies: a folder's own etag (depth 0), and the files directly inside it (depth 1). */
+/** PROPFIND bodies: a folder's own etag (depth 0), the files directly inside it, and its subfolders (depth 1). */
 object PropfindRequest {
     val ETAG = """<?xml version="1.0" encoding="UTF-8"?>
 <d:propfind $NAMESPACES><d:prop><d:getetag/><d:resourcetype/></d:prop></d:propfind>"""
@@ -136,12 +136,25 @@ object PropfindRequest {
 <d:propfind $NAMESPACES><d:prop><oc:fileid/><d:getetag/><d:getcontenttype/><d:getcontentlength/>
 <d:getlastmodified/><oc:favorite/><nc:hidden/><nc:metadata-photos-original_date_time/>
 <nc:metadata-photos-size/><d:resourcetype/></d:prop></d:propfind>"""
+
+    /** Folder entries for the folder picker; end-to-end encrypted folders are flagged. */
+    val FOLDERS = """<?xml version="1.0" encoding="UTF-8"?>
+<d:propfind $NAMESPACES><d:prop><d:resourcetype/><oc:fileid/><nc:is-encrypted/></d:prop></d:propfind>"""
 }
 
 private const val NAMESPACES = """xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns""""
 
 /** A folder or file seen in a listing, with just enough to compare it (PLAN 2.4). */
-data class DavEntry(val href: String, val etag: String, val isFolder: Boolean, val fileId: String?)
+data class DavEntry(
+    val href: String,
+    val etag: String,
+    val isFolder: Boolean,
+    val fileId: String?,
+    /** End-to-end encrypted: the server can't read it, so it can't list or preview its photos. */
+    val isEncrypted: Boolean = false,
+) {
+    val name: String get() = percentDecode(href.trimEnd('/').substringAfterLast('/'))
+}
 
 /** Decoded folder path ending in '/': the key folders and their files are matched on (PLAN 2.4). */
 internal fun folderKey(folderHref: String): String = percentDecode(folderHref).let { if (it.endsWith('/')) it else "$it/" }
@@ -226,6 +239,7 @@ object MultistatusParser {
                 etag = props[key(DAV, "getetag")]?.trim('"').orEmpty(),
                 isFolder = key(DAV, "resourcetype") + "/collection" in props,
                 fileId = props[key(OC, "fileid")]?.takeIf(String::isNotEmpty),
+                isEncrypted = props[key(NC, "is-encrypted")] == "1",
             )
         }
     }

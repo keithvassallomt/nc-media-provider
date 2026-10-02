@@ -1,27 +1,8 @@
-import java.util.Properties
-
 plugins {
     id("com.android.application")
     id("com.google.devtools.ksp")
     id("androidx.room")
 }
-
-// Debug builds sign in with the server details in the git-ignored local.properties (PLAN 1.2).
-// The app password ends up inside the debug APK, so debug builds must never leave Keith's devices.
-// Release builds and CI (no local.properties) get empty values and no account.
-val localProperties = Properties().apply {
-    val file = rootProject.file("local.properties")
-    if (file.exists()) file.inputStream().use { load(it) }
-}
-val debugAccount = listOf(
-    "NC_DEBUG_URL" to "nextcloud.url",
-    "NC_DEBUG_LOGIN" to "nextcloud.login",
-    "NC_DEBUG_USER_ID" to "nextcloud.userId",
-    "NC_DEBUG_APP_PASSWORD" to "nextcloud.appPassword",
-    "NC_DEBUG_FOLDER" to "nextcloud.folder",
-)
-
-fun String.asBuildConfigString() = "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
 val releaseKeystorePath = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull
 val releaseKeystorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull
@@ -51,8 +32,6 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        debugAccount.forEach { (field, _) -> buildConfigField("String", field, "\"\"") }
     }
 
     signingConfigs {
@@ -70,9 +49,6 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
-            debugAccount.forEach { (field, key) ->
-                buildConfigField("String", field, localProperties.getProperty(key, "").trim().asBuildConfigString())
-            }
         }
         release {
             signingConfig = signingConfigs.findByName("release")
@@ -125,6 +101,7 @@ room {
 dependencies {
     implementation("androidx.activity:activity-ktx:1.13.0")
     implementation("androidx.appcompat:appcompat:1.8.0")
+    implementation("androidx.browser:browser:1.9.0")
     implementation("androidx.core:core-ktx:1.19.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
     implementation("com.google.android.material:material:1.14.0")
@@ -137,6 +114,8 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.12.0")
 
     testImplementation("junit:junit:4.13.2")
+    // Android's org.json is only a stub in JVM unit tests.
+    testImplementation("org.json:json:20250517")
     testImplementation("org.robolectric:robolectric:4.17")
     testImplementation("androidx.test:core:1.7.0")
 }

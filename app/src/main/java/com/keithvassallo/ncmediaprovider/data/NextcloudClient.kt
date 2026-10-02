@@ -5,6 +5,7 @@ import android.os.SystemClock
 import android.util.Log
 import com.keithvassallo.ncmediaprovider.BuildConfig
 import okhttp3.Credentials
+import okhttp3.FormBody
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -23,6 +24,12 @@ class NextcloudClient {
         // Credentials go only to the configured server's origin, never to a redirect elsewhere.
         .addNetworkInterceptor { chain ->
             val request = chain.request()
+            // The network security config permits cleartext so that LAN servers work; this keeps
+            // it to them (PLAN 4.2). The check runs once connected, before anything is sent.
+            if (!request.url.isHttps) {
+                val address = chain.connection()?.route()?.socketAddress?.address
+                if (address == null || !isLocalNetworkAddress(address)) throw PlainHttpNotAllowedException()
+            }
             val auth = request.tag(ServerAuth::class.java)
             val authenticated = request.newBuilder().removeHeader("Authorization").apply {
                 if (auth != null && request.url.hasSameOrigin(auth.origin)) {
@@ -128,6 +135,110 @@ class NextcloudClient {
         }
     }
 
+    /** The folders directly inside [folder], for the folder picker (PLAN 4.3). */
+    fun listChildFolders(account: NextcloudAccount, folder: String): List<DavEntry> {
+        val request = Request.Builder()
+            .url(account.userFolderUrl(folder))
+            .method("PROPFIND", PropfindRequest.FOLDERS.toRequestBody(XML))
+            .header("Depth", "1")
+        return execute(request, account, SEARCH_TIMEOUT_SECONDS).use { response ->
+            if (response.code != 207) throw response.toException()
+            val own = folderKey(account.userFolderUrl(folder).encodedPath)
+            MultistatusParser.parseEntries(response.body.byteStream()).filter { it.isFolder && folderKey(it.href) != own }
+        }
+    }
+
+    /** `status.php`: whether a Nextcloud answers at [baseUrl], and its version. Needs no sign-in. */
+    fun serverStatus(baseUrl: String): ServerStatus {
+        val request = Request.Builder().url(baseUrl.toHttpUrl().newBuilder().addPathSegment("status.php").build())
+        return client.newCall(request.header("User-Agent", USER_AGENT).build()).execute().use { response ->
+            if (!response.isSuccessful) throw response.toException()
+            ServerApi.parseStatus(response.body.string())
+        }
+    }
+
+    /**
+     * Starts Login Flow v2 (PLAN 4.1). Nextcloud names the new app password after the User-Agent,
+     * which is what the user later sees in their security settings.
+     */
+    fun startLogin(baseUrl: String): LoginFlow {
+        val request = Request.Builder()
+            .url(baseUrl.toHttpUrl().newBuilder().addPathSegments("index.php/login/v2").build())
+            .post(FormBody.Builder().build())
+            .header("User-Agent", LOGIN_USER_AGENT)
+        return client.newCall(request.build()).execute().use { response ->
+            if (!response.isSuccessful) throw response.toException()
+            ServerApi.parseLoginFlow(response.body.string())
+        }
+    }
+
+    /** The grant once the user has approved this app, or null while they haven't yet. */
+    fun pollLogin(baseUrl: String, flow: LoginFlow): LoginGrant? {
+        val url = ServerApi.pollUrl(baseUrl, flow.pollEndpoint) ?: throw IOException("Unusable poll address from the server")
+        val request = Request.Builder().url(url).post(FormBody.Builder().add("token", flow.token).build())
+        return client.newCall(request.header("User-Agent", LOGIN_USER_AGENT).build()).execute().use { response ->
+            when {
+                response.code == 404 -> null
+                !response.isSuccessful -> throw response.toException()
+                else -> ServerApi.parseLoginGrant(response.body.string())
+            }
+        }
+    }
+
+    /** The user ID WebDAV paths use; the login name may be an email address (PLAN 4.1). */
+    fun userId(account: NextcloudAccount): String {
+        val url = account.server().newBuilder().addPathSegments("ocs/v2.php/cloud/user").addQueryParameter("format", "json").build()
+        return execute(Request.Builder().url(url).header("Accept", "application/json"), account, SEARCH_TIMEOUT_SECONDS).use { response ->
+            if (!response.isSuccessful) throw response.toException()
+            ServerApi.parseUserId(response.body.string())
+        }
+    }
+
+    /** Memories' timeline folders, or null when Memories isn't installed (PLAN 4.3). */
+    fun memoriesTimelinePaths(account: NextcloudAccount): List<String>? {
+        val url = account.server().newBuilder().addPathSegments("index.php/apps/memories/api/config").build()
+        return execute(Request.Builder().url(url).header("Accept", "application/json"), account, SEARCH_TIMEOUT_SECONDS).use { response ->
+            when {
+                response.code == 404 -> null
+                !response.isSuccessful -> throw response.toException()
+                else -> ServerApi.parseTimelinePaths(response.body.string())
+            }
+        }
+    }
+
+    /**
+     * Whether the user asked the server to wipe this device (PLAN 4.4). The app password is the
+     * token; the call needs no other sign-in, so it still works once the password is refused.
+     */
+    fun wipeRequested(baseUrl: String, appPassword: String): Boolean {
+        val request = Request.Builder()
+            .url(baseUrl.toHttpUrl().newBuilder().addPathSegments("index.php/core/wipe/check").build())
+            .post(FormBody.Builder().add("token", appPassword).build())
+        return client.newCall(request.header("User-Agent", USER_AGENT).build()).execute().use { response ->
+            when {
+                response.code == 404 -> false
+                !response.isSuccessful -> throw response.toException()
+                else -> ServerApi.parseWipe(response.body.string())
+            }
+        }
+    }
+
+    /** Tells the server the requested wipe is done, which also deletes the app password. */
+    fun confirmWipe(baseUrl: String, appPassword: String) {
+        val request = Request.Builder()
+            .url(baseUrl.toHttpUrl().newBuilder().addPathSegments("index.php/core/wipe/success").build())
+            .post(FormBody.Builder().add("token", appPassword).build())
+        client.newCall(request.header("User-Agent", USER_AGENT).build()).execute().close()
+    }
+
+    /** Deletes this app's app password on the server, on sign-out (PLAN 4.5). */
+    fun revokeAppPassword(account: NextcloudAccount) {
+        val url = account.server().newBuilder().addPathSegments("ocs/v2.php/core/apppassword").build()
+        execute(Request.Builder().url(url).delete(), account, SEARCH_TIMEOUT_SECONDS).use { response ->
+            if (!response.isSuccessful) throw response.toException()
+        }
+    }
+
     /** Server-rendered preview, already rotated, cropped to cover a [sizePx] square. */
     fun downloadPreview(
         account: NextcloudAccount,
@@ -198,7 +309,7 @@ class NextcloudClient {
 
     private fun authenticated(request: Request.Builder, account: NextcloudAccount): Request.Builder = request
         .tag(ServerAuth::class.java, ServerAuth(account.server(), Credentials.basic(account.loginName, account.appPassword)))
-        .header("User-Agent", "NcMediaProvider/${BuildConfig.VERSION_NAME} Android")
+        .header("User-Agent", USER_AGENT)
         .header("OCS-APIRequest", "true")
 
     private fun Response.toException() = NextcloudHttpException(code, "Server returned HTTP $code")
@@ -220,6 +331,10 @@ class NextcloudClient {
 
     companion object {
         private const val TAG = "NextcloudClient"
+        private val USER_AGENT = "NcMediaProvider/${BuildConfig.VERSION_NAME} Android"
+
+        /** The app password's name in the user's Nextcloud security settings. */
+        private const val LOGIN_USER_AGENT = "NC Media Provider (Android)"
         private val XML = "application/xml; charset=utf-8".toMediaType()
         private const val LIST_PAGE_SIZE = 1000
 

@@ -45,11 +45,20 @@ class CredentialStore(context: Context) {
                 .putString(KEY_USER_ID, account.userId)
                 .putString(KEY_PASSWORD_CIPHER, Base64.encodeToString(encrypted, Base64.NO_WRAP))
                 .putString(KEY_PASSWORD_IV, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+                .putBoolean(KEY_SIGN_IN_REQUIRED, false)
                 .commit(),
         ) { "Unable to save the Nextcloud account" }
     }
 
     fun load(): NextcloudAccount? = cached ?: decrypt()?.also { cached = it }
+
+    /**
+     * Set when the server refused the app password (PLAN 4.4). Nothing talks to the server until the
+     * user signs in again: each refused request counts towards Nextcloud's brute-force throttling.
+     */
+    var signInRequired: Boolean
+        get() = preferences.getBoolean(KEY_SIGN_IN_REQUIRED, false)
+        set(value) = preferences.edit { putBoolean(KEY_SIGN_IN_REQUIRED, value) }
 
     /**
      * The saved account, read without touching the Keystore, so it is safe on the picker's 100 ms
@@ -125,5 +134,6 @@ class CredentialStore(context: Context) {
         const val KEY_USER_ID = "user_id"
         const val KEY_PASSWORD_CIPHER = "app_password_cipher"
         const val KEY_PASSWORD_IV = "app_password_iv"
+        const val KEY_SIGN_IN_REQUIRED = "sign_in_required"
     }
 }

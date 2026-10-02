@@ -25,9 +25,17 @@ sealed interface SyncProgress {
  */
 class LibrarySyncWorker(context: Context, parameters: WorkerParameters) : Worker(context, parameters) {
     override fun doWork(): Result = try {
-        val full = inputData.getBoolean(KEY_FULL, false)
-        LibraryRepository.get(applicationContext).syncNow(full) { setProgressAsync(it.toData()) }
+        val repository = LibraryRepository.get(applicationContext)
+        if (inputData.getBoolean(KEY_WIPE_CHECK, false)) {
+            repository.checkRemoteWipe()
+        } else {
+            repository.syncNow(inputData.getBoolean(KEY_FULL, false)) { setProgressAsync(it.toData()) }
+        }
         Result.success()
+    } catch (error: SignInRequiredException) {
+        // Never retried: each refused request counts towards Nextcloud's brute-force throttling.
+        Log.w(TAG, "Sync stopped: ${error.message}")
+        Result.failure()
     } catch (error: IOException) {
         Log.w(TAG, "Sync failed, will retry: ${error.javaClass.simpleName}: ${error.message.orEmpty()}")
         Result.retry()
@@ -41,6 +49,9 @@ class LibrarySyncWorker(context: Context, parameters: WorkerParameters) : Worker
 
         /** Input: true for a full listing rather than a change check. */
         const val KEY_FULL = "full"
+
+        /** Input: true to only check whether the server asked to wipe this device (PLAN 4.4). */
+        const val KEY_WIPE_CHECK = "wipe_check"
 
         private const val KEY_PHASE = "phase"
         private const val KEY_FILES = "files"

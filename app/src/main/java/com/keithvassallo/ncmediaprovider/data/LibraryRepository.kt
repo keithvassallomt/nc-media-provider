@@ -10,6 +10,7 @@ import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.provider.MediaStore
 import android.util.Log
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
@@ -23,6 +24,7 @@ import androidx.work.workDataOf
 import com.keithvassallo.ncmediaprovider.data.db.LibraryDatabase
 import com.keithvassallo.ncmediaprovider.local.LocalMatcher
 import com.keithvassallo.ncmediaprovider.local.LocalMediaIndex
+import com.keithvassallo.ncmediaprovider.ui.Notifications
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
@@ -51,6 +53,9 @@ internal fun isReachabilityFailure(error: Exception): Boolean = when (error) {
  * (PLAN 2.1) and never wait on the network; listing runs in [LibrarySyncWorker], because Android 17
  * cuts this app's network off once MediaProvider's call returns (PLAN 2.5a).
  */
+/** The server refused the app password; the user has to sign in again (PLAN 4.4). */
+class SignInRequiredException : Exception("The server refused this app's password")
+
 class LibraryRepository private constructor(context: Context) {
     private val appContext = context.applicationContext
     private val credentials = CredentialStore(appContext)
@@ -78,11 +83,140 @@ class LibraryRepository private constructor(context: Context) {
     /** Plain preferences only, never the Keystore: safe on the picker's 100 ms collection-info path. */
     val hasAccount: Boolean get() = credentials.account() != null
 
+    /** The server refused the app password; see [CredentialStore.signInRequired]. */
+    val signInRequired: Boolean get() = credentials.signInRequired
+
+    val foldersChosen: Boolean get() = settings.foldersChosen
+
+    /** Signed in, folders chosen and the password still accepted: the only state that syncs. */
+    val isReady: Boolean get() = hasAccount && settings.foldersChosen && !credentials.signInRequired
+
     val hasFullLocalMediaAccess: Boolean get() = localMedia.hasFullAccess()
 
     fun account(): CredentialStore.SavedAccount? = credentials.account()
 
     fun folders(): List<String> = settings.folders
+
+    fun lastSyncError(): String? = settings.lastSyncError
+
+    // Signing in (PLAN 4.1) and choosing folders (PLAN 4.3). Network calls: run them off the main thread.
+
+    fun serverStatus(baseUrl: String): ServerStatus = client.serverStatus(baseUrl)
+
+    fun startLogin(baseUrl: String): LoginFlow = client.startLogin(baseUrl)
+
+    fun pollLogin(baseUrl: String, flow: LoginFlow): LoginGrant? = client.pollLogin(baseUrl, flow)
+
+    /**
+     * Completes a sign-in: looks up the user ID (the login name may be an email address) and saves
+     * the account. Signing in again as the same user keeps the library and folders; anyone else
+     * starts over and chooses folders. Returns the saved account.
+     */
+    fun completeSignIn(typedUrl: String, grant: LoginGrant): NextcloudAccount {
+        val baseUrl = ServerApi.chooseBaseUrl(typedUrl, grant.server)
+        val provisional = NextcloudAccount(baseUrl, grant.loginName, grant.loginName, grant.appPassword)
+        val account = provisional.copy(userId = client.userId(provisional))
+        val previous = credentials.account()
+        if (previous == null || previous.baseUrl != account.baseUrl || previous.userId != account.userId) settings.clearFolders()
+        credentials.save(account)
+        settings.lastSyncError = null
+        Notifications.cancelSignInRequired(appContext)
+        schedulePeriodicSync()
+        requestSync(expedited = true)
+        return account
+    }
+
+    /** The folders directly inside [folder], without end-to-end encrypted ones (PLAN 4.3). */
+    fun childFolders(folder: String): List<DavEntry> =
+        client.listChildFolders(requireAccount(), folder).filterNot(DavEntry::isEncrypted).sortedBy { it.name.lowercase() }
+
+    /**
+     * A first selection for the folder picker: Memories' timeline folders when it is installed,
+     * plus `/Photos` and `/InstantUpload` where they exist (PLAN 4.3).
+     */
+    fun suggestedFolders(): List<String> {
+        val account = requireAccount()
+        val memories = runCatching { client.memoriesTimelinePaths(account) }.getOrNull().orEmpty()
+        val common = COMMON_PHOTO_FOLDERS.filter { folder -> runCatching { client.folderEntry(account, folder) }.isSuccess }
+        return LibrarySettings.normalizeFolders(memories + common).filter { it != "/" }
+    }
+
+    /** Saves the folder choice; a different set starts a new library at the next sync (PLAN 2.7). */
+    fun chooseFolders(folders: List<String>) {
+        settings.folders = folders
+        schedulePeriodicSync()
+        requestSync(expedited = true)
+    }
+
+    /**
+     * Signs out (PLAN 4.5): deletes the app password on the server, then everything on the phone.
+     * Returns false when the server couldn't be told; the phone is cleared anyway. Call off the
+     * main thread.
+     */
+    fun signOut(): Boolean {
+        val account = credentials.load()
+        val revoked = account != null && !credentials.signInRequired &&
+            runCatching { client.revokeAppPassword(account) }
+                .onFailure { Log.w(TAG, "Couldn't revoke the app password: ${it.javaClass.simpleName}: ${it.message.orEmpty()}") }
+                .isSuccess
+        clearLocalData()
+        return revoked
+    }
+
+    /**
+     * Called on any 401 (PLAN 4.4). Stops all requests at once, since Nextcloud counts each refused
+     * one towards its brute-force throttling, then checks for a remote wipe in a job (the network
+     * may be off on this thread) and asks the user to sign in again.
+     */
+    private fun onUnauthorized() {
+        if (credentials.signInRequired) return
+        Log.w(TAG, "The server refused the app password: no more requests until the user signs in again")
+        credentials.signInRequired = true
+        settings.lastSyncError = "The server refused this app's password"
+        WorkManager.getInstance(appContext).run {
+            cancelUniqueWork(SYNC_WORK)
+            cancelUniqueWork(PERIODIC_SYNC_WORK)
+            enqueueUniqueWork(
+                WIPE_CHECK_WORK,
+                ExistingWorkPolicy.KEEP,
+                OneTimeWorkRequestBuilder<LibrarySyncWorker>()
+                    .setConstraints(NETWORK)
+                    .setInputData(workDataOf(LibrarySyncWorker.KEY_WIPE_CHECK to true))
+                    .build(),
+            )
+        }
+        Notifications.showSignInRequired(appContext)
+    }
+
+    /**
+     * Asks the server whether the user requested a wipe of this device, using the refused app
+     * password as the token, and if so clears everything and confirms (PLAN 4.4).
+     */
+    @Throws(IOException::class)
+    fun checkRemoteWipe() {
+        val account = credentials.load() ?: return
+        if (!client.wipeRequested(account.baseUrl, account.appPassword)) return
+        Log.w(TAG, "The server asked to wipe this device")
+        clearLocalData()
+        runCatching { client.confirmWipe(account.baseUrl, account.appPassword) }
+        Notifications.cancelSignInRequired(appContext)
+        Notifications.showWiped(appContext)
+    }
+
+    /** Forgets the account, folders, library and caches; the picker sees an empty, new collection. */
+    private fun clearLocalData() = synchronized(syncLock) {
+        WorkManager.getInstance(appContext).run {
+            cancelUniqueWork(SYNC_WORK)
+            cancelUniqueWork(PERIODIC_SYNC_WORK)
+        }
+        credentials.clear()
+        settings.clearFolders()
+        settings.lastSyncError = null
+        // A new instance ID gives a new collection ID, so MediaProvider drops what it had.
+        store.resetFor("")
+        diskCache.clear()
+        notifyPickerOfChanges()
+    }
 
     /** Reads the database once; afterwards its state comes from memory. Call off the main thread. */
     fun warm() {
@@ -111,10 +245,11 @@ class LibraryRepository private constructor(context: Context) {
 
     /** Asks for a sync as soon as the network allows. Requests made while one is queued are dropped. */
     fun requestSync(expedited: Boolean = false) {
-        if (!hasAccount) return
+        if (!isReady) return
         val request = OneTimeWorkRequestBuilder<LibrarySyncWorker>()
             .setConstraints(NETWORK)
             .addTag(SYNC_TAG)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, SYNC_BACKOFF_MINUTES, TimeUnit.MINUTES)
             .apply { if (expedited) setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST) }
             .build()
         WorkManager.getInstance(appContext).enqueueUniqueWork(SYNC_WORK, ExistingWorkPolicy.KEEP, request)
@@ -126,10 +261,11 @@ class LibraryRepository private constructor(context: Context) {
      * needs is what change checks miss, such as files on external storage.
      */
     fun refreshNow() {
-        if (!hasAccount) return
+        if (!isReady) return
         val request = OneTimeWorkRequestBuilder<LibrarySyncWorker>()
             .setConstraints(NETWORK)
             .addTag(SYNC_TAG)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, SYNC_BACKOFF_MINUTES, TimeUnit.MINUTES)
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .setInputData(workDataOf(LibrarySyncWorker.KEY_FULL to true))
             .build()
@@ -141,7 +277,7 @@ class LibraryRepository private constructor(context: Context) {
 
     /** A sync every few hours, whatever the picker does (PLAN 2.6). */
     fun schedulePeriodicSync() {
-        if (!hasAccount) return
+        if (!isReady) return
         val request = PeriodicWorkRequestBuilder<LibrarySyncWorker>(PERIODIC_SYNC_HOURS, TimeUnit.HOURS)
             .setConstraints(NETWORK)
             .addTag(SYNC_TAG)
@@ -159,8 +295,30 @@ class LibraryRepository private constructor(context: Context) {
      * listing when [full] asks for one, on the first import, once a week, whenever there are no
      * folder etags to compare, and when the `.nomedia` setting changed.
      */
-    @Throws(IOException::class)
+    @Throws(IOException::class, SignInRequiredException::class)
     fun syncNow(full: Boolean = false, onProgress: (SyncProgress) -> Unit = {}): Boolean = synchronized(syncLock) {
+        if (!isReady) return false
+        try {
+            sync(full, onProgress).also { settings.lastSyncError = null }
+        } catch (error: NextcloudHttpException) {
+            when {
+                error.statusCode == 401 -> {
+                    onUnauthorized()
+                    throw SignInRequiredException()
+                }
+                // A 503 is often maintenance mode, which status.php confirms (PLAN 4.4).
+                error.statusCode == 503 && runCatching { client.serverStatus(requireAccount().baseUrl).maintenance }.getOrDefault(false) ->
+                    settings.lastSyncError = "The server is in maintenance mode"
+                else -> settings.lastSyncError = "Server error ${error.statusCode}"
+            }
+            throw error
+        } catch (error: IOException) {
+            settings.lastSyncError = error.message ?: error.javaClass.simpleName
+            throw error
+        }
+    }
+
+    private fun sync(full: Boolean, onProgress: (SyncProgress) -> Unit): Boolean {
         val account = credentials.load() ?: return false
         val source = sourceKey() ?: return false
         if (store.state().sourceKey != source) {
@@ -392,10 +550,10 @@ class LibraryRepository private constructor(context: Context) {
                 .getOrNull()
                 ?.let { return it }
         }
-        val account = requireAccount()
+        val account = requireAuthorizedAccount()
         val file = withSlot(originalSlots, ORIGINAL_SLOT_WAIT_MS, "original") {
             diskCache.getOrDownload(MediaDiskCache.Area.ORIGINAL, key, cancellationSignal) { target ->
-                client.downloadFile(account, item.href, target, cancellationSignal)
+                unauthorizedStops { client.downloadFile(account, item.href, target, cancellationSignal) }
             }
         }
         return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
@@ -420,12 +578,12 @@ class LibraryRepository private constructor(context: Context) {
         val sizePx = if (maxOf(requestedSize.x, requestedSize.y) <= SMALL_PREVIEW_PX) SMALL_PREVIEW_PX else LARGE_PREVIEW_PX
         val key = "preview:${item.id}:${item.etag}:$sizePx"
         diskCache.peek(MediaDiskCache.Area.PREVIEW, key)?.let { return it.asAssetFileDescriptor() }
-        val account = requireAccount()
+        val account = requireAuthorizedAccount()
         val file = withSlot(previewSlots, PREVIEW_SLOT_WAIT_MS, "preview") {
             previewGate.query {
                 diskCache.getOrDownload(MediaDiskCache.Area.PREVIEW, key, cancellationSignal) { target ->
                     try {
-                        client.downloadPreview(account, item.id, sizePx, target, cancellationSignal)
+                        unauthorizedStops { client.downloadPreview(account, item.id, sizePx, target, cancellationSignal) }
                     } catch (error: NextcloudHttpException) {
                         // The server has no preview for this file (HEIC or video without a server
                         // provider, say): a blank tile, not a failure.
@@ -482,6 +640,21 @@ class LibraryRepository private constructor(context: Context) {
     private fun requireAccount(): NextcloudAccount =
         credentials.load() ?: throw FileNotFoundException("No Nextcloud account is set up")
 
+    /** The account, unless the server refused its password: then no request is even tried (PLAN 4.4). */
+    private fun requireAuthorizedAccount(): NextcloudAccount {
+        if (credentials.signInRequired) throw FileNotFoundException("Sign in to Nextcloud again")
+        return requireAccount()
+    }
+
+    /** Runs a download; a 401 stops everything (see [onUnauthorized]) and fails it as not found. */
+    private fun <T> unauthorizedStops(block: () -> T): T = try {
+        block()
+    } catch (error: NextcloudHttpException) {
+        if (error.statusCode != 401) throw error
+        onUnauthorized()
+        throw FileNotFoundException("Sign in to Nextcloud again")
+    }
+
     /**
      * Runs [block] only if a download slot frees up quickly. Giving up leaves a blank tile that the
      * picker re-requests on the next scroll, which is far better than holding a binder thread.
@@ -514,6 +687,11 @@ class LibraryRepository private constructor(context: Context) {
         private const val COLLECTION_FORMAT = "v2"
 
         private const val SYNC_WORK = "library-sync"
+        private const val WIPE_CHECK_WORK = "remote-wipe-check"
+        private const val SYNC_BACKOFF_MINUTES = 1L
+
+        /** Where photos usually live, for the folder picker's first selection (PLAN 4.3). */
+        private val COMMON_PHOTO_FOLDERS = listOf("/Photos", "/InstantUpload")
         private const val SYNC_TAG = "library-sync-job"
         private const val PERIODIC_SYNC_WORK = "library-sync-periodic"
         private const val PERIODIC_SYNC_HOURS = 6L

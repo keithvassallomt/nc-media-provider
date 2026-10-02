@@ -4,8 +4,12 @@ import okhttp3.Credentials
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
@@ -133,6 +137,44 @@ class NextcloudClientIntegrationTest {
             assertEquals(listOf("$home$base/b/inner/"), subfolders)
         } finally {
             call(Request.Builder().url(davUrl(base)).delete())
+        }
+    }
+
+    @Test
+    fun `sign-in endpoints answer before approval`() {
+        val status = client.serverStatus(account.baseUrl)
+        assertTrue(status.installed)
+        assertTrue("version ${status.version}", status.majorVersion >= 30)
+        val flow = client.startLogin(account.baseUrl)
+        assertTrue(flow.loginUrl, flow.loginUrl.contains("/login/v2/flow/"))
+        assertNull(client.pollLogin(account.baseUrl, flow))
+        assertEquals(account.userId, client.userId(account))
+        // Memories may or may not be installed; either answer is fine, an error is not.
+        client.memoriesTimelinePaths(account)
+        val children = client.listChildFolders(account, folder)
+        assertTrue(children.isNotEmpty())
+        assertTrue(children.none { folderKey(it.href).endsWith("$folder/") })
+    }
+
+    @Test
+    fun `an app password checks for a wipe and can be revoked`() {
+        // Nextcloud's own endpoint turns the test password into an app password.
+        val url = "${account.baseUrl.trimEnd('/')}/ocs/v2.php/core/getapppassword?format=json"
+        val appPassword = http.newCall(
+            Request.Builder().url(url)
+                .header("Authorization", Credentials.basic(account.loginName, account.appPassword))
+                .header("OCS-APIRequest", "true")
+                .build(),
+        ).execute().use { JSONObject(it.body.string()).getJSONObject("ocs").getJSONObject("data").getString("apppassword") }
+        val appAccount = account.copy(appPassword = appPassword)
+        assertEquals(account.userId, client.userId(appAccount))
+        assertFalse(client.wipeRequested(account.baseUrl, appPassword))
+        client.revokeAppPassword(appAccount)
+        try {
+            client.userId(appAccount)
+            fail("a revoked app password still worked")
+        } catch (error: NextcloudHttpException) {
+            assertEquals(401, error.statusCode)
         }
     }
 

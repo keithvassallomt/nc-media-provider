@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The launcher's cloud as a silhouette, for the status bar. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="72"
+    android:viewportHeight="52"
+    android:tint="?attr/colorControlNormal">
+    <group android:translateX="-18" android:translateY="-22">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M31,37C31,29.27 37.27,23 45,23C51.57,23 57.08,27.52 58.59,33.62C60.63,32.57 62.94,32 65.4,32C73.46,32 80,38.54 80,46.6C80,47.08 79.98,47.55 79.93,48.02C85.17,49.65 89,54.55 89,60.35C89,67.43 83.26,73.17 76.18,73.17H35.34C26.32,73.17 19,65.85 19,56.83C19,48.94 24.59,42.36 32.03,40.83C31.36,39.66 31,38.36 31,37Z" />
+    </group>
+</vector>

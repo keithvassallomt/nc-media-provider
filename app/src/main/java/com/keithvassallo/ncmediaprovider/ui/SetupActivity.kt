@@ -17,6 +17,7 @@ import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -116,6 +117,8 @@ class SetupActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission(),
     ) { updateLocalNetworkUi() }
 
+    private val notificationRequest = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     private val pickerTest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -139,6 +142,9 @@ class SetupActivity : AppCompatActivity() {
         binding.pickerSettingsButton.setOnClickListener { openPickerSettings() }
         binding.shizukuButton.setOnClickListener { handleShizukuAction() }
         binding.refreshButton.setOnClickListener { repository.refreshNow() }
+        binding.signInButton.setOnClickListener { startActivity(Intent(this, SignInActivity::class.java)) }
+        binding.foldersButton.setOnClickListener { startActivity(Intent(this, FolderPickerActivity::class.java)) }
+        binding.signOutButton.setOnClickListener { confirmSignOut() }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 repository.syncJobs().collect(::showSyncJobs)
@@ -159,6 +165,7 @@ class SetupActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateConnectionUi()
+        maybeAskForNotifications()
         updateLocalNetworkUi()
         updateMediaPermissionUi()
         updateActivationUi()
@@ -184,11 +191,22 @@ class SetupActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    /** Sign-in arrives with Phase 4; until then the account comes from a debug build (PLAN 1.2). */
+    /** The Server card: what the account needs next, and the actions that fit (PLAN 4.1 to 4.5). */
     private fun updateConnectionUi() {
         val account: CredentialStore.SavedAccount? = repository.account()
+        val ready = repository.isReady
+        binding.signInButton.visibility = if (account == null || repository.signInRequired) View.VISIBLE else View.GONE
+        binding.signInButton.setText(if (account == null) R.string.action_sign_in else R.string.action_sign_in_again)
+        binding.foldersButton.visibility = if (account != null && !repository.signInRequired) View.VISIBLE else View.GONE
+        binding.foldersButton.setText(if (repository.foldersChosen) R.string.action_change_folders else R.string.action_choose_folders)
+        binding.refreshButton.visibility = if (ready) View.VISIBLE else View.GONE
+        binding.signOutButton.visibility = if (account != null) View.VISIBLE else View.GONE
         if (account == null) {
             binding.connectionStatus.setText(R.string.not_connected)
+        } else if (repository.signInRequired) {
+            binding.connectionStatus.setText(R.string.sign_in_required_status)
+        } else if (!repository.foldersChosen) {
+            binding.connectionStatus.text = getString(R.string.folders_needed_status, account.userId, account.baseUrl)
         } else {
             binding.connectionStatus.text = getString(
                 R.string.connection_ready, account.userId, account.baseUrl, folderList(), getString(R.string.library_counting),
@@ -208,12 +226,41 @@ class SetupActivity : AppCompatActivity() {
 
     private fun folderList(): String = repository.folders().joinToString(", ")
 
+    private fun confirmSignOut() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.sign_out_title)
+            .setMessage(R.string.sign_out_message)
+            .setPositiveButton(R.string.action_sign_out) { _, _ ->
+                lifecycleScope.launch {
+                    val revoked = withContext(Dispatchers.IO) { repository.signOut() }
+                    Toast.makeText(this@SetupActivity, if (revoked) R.string.sign_out_done else R.string.sign_out_offline, Toast.LENGTH_LONG).show()
+                    updateConnectionUi()
+                    updateCacheUi()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /**
+     * Notifications say when to sign in again or reselect the provider (PLAN 4.4, 4.6), so the
+     * permission is asked for once, when there is an account to be told about.
+     */
+    private fun maybeAskForNotifications() {
+        if (!repository.isReady || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+        val preferences = getSharedPreferences(UI_PREFERENCES, MODE_PRIVATE)
+        if (preferences.getBoolean(KEY_ASKED_NOTIFICATIONS, false)) return
+        preferences.edit { putBoolean(KEY_ASKED_NOTIFICATIONS, true) }
+        notificationRequest.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
     /** Sync progress and the last check (PLAN 2.5), from the sync jobs' WorkManager state. */
     private suspend fun showSyncJobs(jobs: List<WorkInfo>) {
-        val visibility = if (repository.hasAccount) View.VISIBLE else View.GONE
-        binding.syncStatus.visibility = visibility
-        binding.refreshButton.visibility = visibility
-        if (!repository.hasAccount) return
+        binding.syncStatus.visibility = if (repository.isReady) View.VISIBLE else View.GONE
+        if (!repository.isReady) {
+            binding.syncProgress.visibility = View.GONE
+            return
+        }
         val running = jobs.firstOrNull { it.state == WorkInfo.State.RUNNING }
         binding.syncProgress.visibility = if (running != null) View.VISIBLE else View.GONE
         binding.refreshButton.isEnabled = running == null
@@ -456,6 +503,8 @@ class SetupActivity : AppCompatActivity() {
 
     companion object {
         private const val ACCESS_LOCAL_NETWORK = "android.permission.ACCESS_LOCAL_NETWORK"
+        private const val UI_PREFERENCES = "ui"
+        private const val KEY_ASKED_NOTIFICATIONS = "asked_notifications"
         private const val SHIZUKU_PERMISSION_REQUEST = 41
         private const val SHIZUKU_BIND_TIMEOUT_MS = 20_000L
         private const val SHIZUKU_PACKAGE_NAME = "moe.shizuku.privileged.api"

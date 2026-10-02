@@ -9,7 +9,7 @@ class LibrarySettings(context: Context) {
 
     /**
      * The library folders, as [normalizeFolders] returns them. Changing them starts a new library
-     * (PLAN 2.7). The folder picker arrives in 4.3; until then debug builds set them.
+     * (PLAN 2.7). Chosen in the folder picker (PLAN 4.3); see [foldersChosen].
      */
     var folders: List<String>
         get() {
@@ -22,6 +22,15 @@ class LibrarySettings(context: Context) {
             remove(KEY_FOLDER)
         }
 
+    /** False until the user picks folders; nothing syncs before then. */
+    val foldersChosen: Boolean get() = preferences.contains(KEY_FOLDERS) || preferences.contains(KEY_FOLDER)
+
+    /** Forgets the folders, after signing in as someone else or signing out. */
+    fun clearFolders() = preferences.edit {
+        remove(KEY_FOLDERS)
+        remove(KEY_FOLDER)
+    }
+
     /**
      * Hide folders holding a `.nomedia` file or another of [SearchRequest.HIDING_MARKERS], as Nextcloud
      * Photos and Memories do. A change takes effect at the next sync, which then lists everything.
@@ -30,16 +39,17 @@ class LibrarySettings(context: Context) {
         get() = preferences.getBoolean(KEY_RESPECT_NO_MEDIA, true)
         set(value) = preferences.edit { putBoolean(KEY_RESPECT_NO_MEDIA, value) }
 
-    var debugSeed: String?
-        get() = preferences.getString(KEY_DEBUG_SEED, null)
-        set(value) = preferences.edit { putString(KEY_DEBUG_SEED, value) }
+    /** Why the last sync failed, for the diagnostics (PLAN 4.6); null after a sync succeeds. */
+    var lastSyncError: String?
+        get() = preferences.getString(KEY_LAST_SYNC_ERROR, null)
+        set(value) = preferences.edit { putString(KEY_LAST_SYNC_ERROR, value) }
 
     companion object {
         private const val PREFERENCES = "library"
         private const val KEY_FOLDER = "folder"
         private const val KEY_FOLDERS = "folders"
         private const val KEY_RESPECT_NO_MEDIA = "respect_no_media"
-        private const val KEY_DEBUG_SEED = "debug_seed"
+        private const val KEY_LAST_SYNC_ERROR = "last_sync_error"
 
         /** Nextcloud refuses control characters in file names, so no folder path holds one. */
         private const val FOLDER_SEPARATOR = '\n'

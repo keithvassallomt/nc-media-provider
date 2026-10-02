@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config xmlns:tools="http://schemas.android.com/tools">
-    <!-- HTTPS only for now. Self-hosted servers often use a private CA, so user-installed
-         certificates are trusted alongside the system ones (PLAN 4.2). Whether to allow plain
-         HTTP for LAN addresses is still to be decided there. -->
-    <base-config cleartextTrafficPermitted="false">
+    <!-- Self-hosted servers often use a private CA, so user-installed certificates are trusted
+         alongside the system ones (PLAN 4.2). Cleartext is permitted here only because this file
+         can't name address ranges: NextcloudClient refuses plain HTTP to anything outside the
+         local network before a request is sent. -->
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
             <certificates
