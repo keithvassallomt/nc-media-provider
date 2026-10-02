@@ -373,6 +373,8 @@ Onboarding says plainly that only one cloud source can be active at a time, and 
 
 **6.1 Detection.** Use `/api/describe` and `/api/config`, sending the `OCS-APIRequest` header, and only switch the layer on for Memories versions known to work.
 
+**6.0 Video dates from the file (before the Memories work).** The `mvhd` box that 5.3 already reads for durations also holds the recording time (`creation_time`, seconds since 1904, UTC). Reading it costs no extra request and gives videos a real capture date on any server, where core Nextcloud uses the file name or the upload time. Memories then mainly fixes HEIC photos.
+
 **6.2 Enrichment, not listing.** WebDAV still decides what's in the library. Memories only overrides, by fileId, the date taken, dimensions, video duration and live-photo pairs. This keeps a single sync model, so a Memories outage can't break the library.
 
 **6.3 Isolation.** Any Memories error silently falls back to the core values. Tests against saved responses catch changes to its API, which is undocumented and internal.
