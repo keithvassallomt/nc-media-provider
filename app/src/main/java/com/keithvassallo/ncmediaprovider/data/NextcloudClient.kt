@@ -1,7 +1,6 @@
 package com.keithvassallo.ncmediaprovider.data
 
 import android.os.CancellationSignal
-import android.util.Log
 import com.keithvassallo.ncmediaprovider.BuildConfig
 import okhttp3.Credentials
 import okhttp3.HttpUrl
@@ -36,41 +35,24 @@ class NextcloudClient {
         .callTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    /**
-     * Lists every file under [folder] whose MIME type starts with [mimePrefix], newest first. Pages
-     * walk backwards through modification times; the overlap at each page boundary is removed by
-     * file ID.
-     */
+    /** Lists every file under [folder] whose MIME type starts with [mimePrefix], newest first. */
     fun listFolder(
         account: NextcloudAccount,
         folder: String,
         mimePrefix: String,
         pageSize: Int = LIST_PAGE_SIZE,
-    ): List<RemoteFile> {
-        val seen = LinkedHashMap<String, RemoteFile>()
-        var before: Long? = null
-        while (true) {
-            val page = search(account, folder, mimePrefix, before, pageSize)
-            val added = page.count { seen.putIfAbsent(it.fileId, it) == null }
-            if (page.size < pageSize) break
-            if (added == 0) {
-                // More than a page of files share one modification second. PLAN 2.2 handles this.
-                Log.w(TAG, "Listing stopped early: a full page shared one modification time")
-                break
-            }
-            before = page.minOf { it.lastModifiedMillis } / 1000L
-        }
-        return seen.values.toList()
+    ): List<RemoteFile> = listByModifiedWindows(pageSize) { filter, limit ->
+        search(account, folder, mimePrefix, filter, limit)
     }
 
     fun search(
         account: NextcloudAccount,
         folder: String,
         mimePrefix: String,
-        modifiedAtOrBeforeSeconds: Long?,
-        pageSize: Int,
+        modified: ModifiedFilter?,
+        limit: Int,
     ): List<RemoteFile> {
-        val body = SearchRequest.body(account.userId, folder, mimePrefix, modifiedAtOrBeforeSeconds, pageSize)
+        val body = SearchRequest.body(account.userId, folder, mimePrefix, modified, limit)
         val request = Request.Builder()
             .url(account.server().newBuilder().addPathSegments("remote.php/dav/").build())
             .method("SEARCH", body.toRequestBody(XML))
@@ -164,7 +146,6 @@ class NextcloudClient {
     private data class ServerAuth(val origin: HttpUrl, val credentials: String)
 
     companion object {
-        private const val TAG = "NextcloudClient"
         private val XML = "application/xml; charset=utf-8".toMediaType()
         private const val LIST_PAGE_SIZE = 1000
 

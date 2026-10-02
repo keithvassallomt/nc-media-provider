@@ -24,11 +24,13 @@ class SearchRequestTest {
     }
 
     @Test
-    fun `date window filters on modification time in seconds`() {
+    fun `modification filters use whole seconds`() {
         val first = SearchRequest.body("alice", "/Photos", "image/", null, 1000)
-        val next = SearchRequest.body("alice", "/Photos", "image/", 1706781600L, 1000)
+        val next = SearchRequest.body("alice", "/Photos", "image/", ModifiedFilter.AtOrBefore(1706781600L), 1000)
+        val second = SearchRequest.body("alice", "/Photos", "image/", ModifiedFilter.Exactly(1706781600L), 1000)
         assertFalse(first.contains("<d:lte>"))
         assertTrue(next.contains("<d:lte><d:prop><d:getlastmodified/></d:prop><d:literal>1706781600</d:literal></d:lte>"))
+        assertTrue(second.contains("<d:eq><d:prop><d:getlastmodified/></d:prop><d:literal>1706781600</d:literal></d:eq>"))
         assertTrue(next.contains("<d:literal>image/%</d:literal>"))
     }
 }

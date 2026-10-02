@@ -242,7 +242,7 @@ Server test matrix:
 
 - One SEARCH request covers all selected folders (Nextcloud 30 and later). Older servers get one SEARCH per folder.
 - Paging uses date windows: each page asks for items modified at or before the last date seen, deduplicated by fileId. Already in place from Phase 1.3.
-- **Must handle more than a page of files sharing one modification second.** Phase 1.5 hit this on Keith's server (over 1,000 files in one second), which stops the date-window listing early. Options to evaluate on the test servers: a second window on `nc:upload_time` or `nc:creation_time` within that second, or bounded offset paging inside a single-second window.
+- **More than a page of files sharing one modification second: done.** Phase 1.5 hit 2,677 files in one second on Keith's server. Results are newest first, so a full page holds every file newer than its oldest second; that second is then fetched whole with an exact-match query (Nextcloud doesn't cap `nresults`), and the next page starts strictly below it. Unit-tested on a fake server, live-tested on Nextcloud 33 and 35 with a burst of files sharing one second, and on Keith's server the paged listing matches one unpaged request (16,896 images). The response parser streams (SAX), so a large page never sits in memory as a document tree.
 - Pages hold 500 to 1000 items.
 - Drop hidden items, remove duplicates of files reachable through two mounts, and optionally respect `.nomedia` files. SEARCH over the home folder also returns files from folders other users share, from `.nomedia` folders and from outside the photo folders (confirmed in 0.2), so filtering by the selected folders is the app's job.
 
