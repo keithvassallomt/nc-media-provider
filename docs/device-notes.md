@@ -278,6 +278,28 @@ Core Nextcloud keeps none, so the picker showed 00:00. Reading the `moov`/`mvhd`
 
 Previews play quickly, the large video included, from the server or the phone's copy. Sound doesn't: Android logs `AudioHardening background playback muted` for the app although the picker has it bound and on top, and refuses its audio focus requests (`Audio focus request blocked by hardening`), after which ExoPlayer paused the video. A media-playback foreground service started from the picker's call didn't change that; Android noted that a foreground service started from the background gets no camera, microphone or location access, and audio control seems to be withheld the same way. The picker requests audio focus itself when the user unmutes, so the player no longer does.
 
+### Google Photos previews are silent too
+
+With Google Photos as the picker's cloud source, its cloud videos also play muted, and unmuting doesn't bring sound (nor pause them); videos on the phone play with sound, because the picker plays those itself. So the silence is Android's rule for every cloud provider, not something this app does wrong.
+
+### Thumbnail sizes
+
+The picker's grid asks for 264 to 291 px tiles on the Pixel Fold (both screens), and the full-screen preview for 2076 by 1913. Tiles above 256 px went to the 1024 px bucket, ten times the data per tile; tiles up to 300 px now get 256 px previews, which looked sharp enough on the inner screen. The pre-cache fetched about 28 thumbnails a second at first, 15 KB each.
+
+### Thumbnails made on the phone
+
+For servers without HEIC or video previews, `PhoneThumbnailsDeviceTest` checks on the phone that a video frame read through Range requests and a HEIC decoded from its download both give 256 px squares (passed). It runs against the default test server through an adb tunnel, with `am instrument` so the app and its data stay installed (Gradle's connected tests uninstall the app afterwards):
+
+```
+tools/testserver/up.sh 35 default
+adb reverse tcp:8035 tcp:8035
+./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb shell am instrument -w com.keithvassallo.ncmediaprovider.debug.test/androidx.test.runner.AndroidJUnitRunner
+adb reverse --remove tcp:8035
+```
+
 ## Photo keyboard prototype (GrapheneOS, 2026-10-02)
 
 A keyboard showing the 30 newest Nextcloud photos, inserting the tapped one through the keyboard content API (branch `proto/photo-keyboard`, debug builds only). Tested in Messenger, whose own photo grid never sees a cloud provider:

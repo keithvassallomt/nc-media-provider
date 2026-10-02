@@ -116,6 +116,10 @@ dependencies {
     ksp("androidx.room:room-compiler:2.8.5")
     implementation("androidx.work:work-runtime-ktx:2.12.0")
 
+    // On-phone tests against a test server (PLAN 5.1); run with `am instrument`, see docs/device-notes.md.
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+
     testImplementation("junit:junit:4.13.2")
     // Android's org.json is only a stub in JVM unit tests.
     testImplementation("org.json:json:20250517")

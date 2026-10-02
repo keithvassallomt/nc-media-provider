@@ -2,6 +2,7 @@ package com.keithvassallo.ncmediaprovider.data
 
 import android.content.Context
 import android.content.res.AssetFileDescriptor
+import android.graphics.ImageDecoder
 import android.graphics.Point
 import android.net.Uri
 import android.os.CancellationSignal
@@ -242,11 +243,25 @@ class LibraryRepository private constructor(context: Context) {
                             fetched.incrementAndGet()
                         } catch (error: NextcloudHttpException) {
                             when (error.statusCode) {
-                                404 -> diskCache.markMissing(MediaDiskCache.Area.PRECACHE, key)
+                                // Videos get a frame read on the phone; images would mean downloading
+                                // every HEIC original, gigabytes for an iPhone library, so they are skipped.
+                                404 -> try {
+                                    diskCache.getOrDownload(MediaDiskCache.Area.PRECACHE, key, null) { target ->
+                                        thumbnailOnPhone(account, item, SMALL_PREVIEW_PX, target, null, imagesToo = false)
+                                    }
+                                    ready.incrementAndGet()
+                                    fetched.incrementAndGet()
+                                } catch (_: FileNotFoundException) {
+                                    diskCache.markMissing(MediaDiskCache.Area.PRECACHE, key)
+                                } catch (_: IOException) {
+                                    failed.set(true)
+                                }
                                 401 -> failed.set(true)
                             }
                         } catch (error: IOException) {
                             failed.set(true)
+                        } catch (error: Exception) {
+                            Log.w(TAG, "Pre-cache skipped ${item.id}: ${error.javaClass.simpleName}: ${error.message.orEmpty()}")
                         }
                     }
                 }.forEach { it.get() }
@@ -278,6 +293,57 @@ class LibraryRepository private constructor(context: Context) {
         if (months <= 0) Long.MIN_VALUE else System.currentTimeMillis() - months * 31L * 24L * 60L * 60L * 1_000L
 
     private fun previewKey(item: MediaItem, sizePx: Int) = "preview:${item.id}:${item.etag}:$sizePx"
+
+    /** The thumbnail of the phone's own copy, made by MediaStore and cached; null if there is none. */
+    private fun phoneCopyThumbnail(item: MediaItem, key: String, sizePx: Int, cancellationSignal: CancellationSignal?): File? {
+        val uri = item.mediaStoreUri?.takeIf { localMedia.hasAnyAccess() } ?: return null
+        return runCatching {
+            diskCache.getOrDownload(MediaDiskCache.Area.PREVIEW, key, cancellationSignal) { target ->
+                PhoneThumbnails.fromPhoneCopy(appContext.contentResolver, Uri.parse(uri), sizePx, target, cancellationSignal)
+            }
+        }.getOrNull()
+    }
+
+    /**
+     * Makes a thumbnail on the phone for a file the server can't preview (PLAN 5.1, 5.3): a video
+     * frame read through Range requests, or with [imagesToo] an image decoded from the downloaded
+     * original (2 to 4 MB for a HEIC, kept in the originals cache). Decoding failures leave a blank
+     * tile rather than counting against the server.
+     */
+    private fun thumbnailOnPhone(
+        account: NextcloudAccount,
+        item: MediaItem,
+        sizePx: Int,
+        target: File,
+        cancellationSignal: CancellationSignal?,
+        imagesToo: Boolean,
+    ) {
+        try {
+            when {
+                item.isVideo -> {
+                    val reader = RangeReader(item.sizeBytes, FRAME_WINDOW_BYTES) { offset, length ->
+                        client.fetchRange(account, item.href, item.etag, offset, length)
+                    }
+                    PhoneThumbnails.fromVideo(reader, item.durationMillis, sizePx, target)
+                }
+                imagesToo && item.mimeType.startsWith("image/") -> {
+                    val original = diskCache.getOrDownload(MediaDiskCache.Area.ORIGINAL, "original:${item.id}:${item.etag}", cancellationSignal) { file ->
+                        client.downloadFile(account, item.href, file, cancellationSignal)
+                    }
+                    PhoneThumbnails.fromImageFile(original, sizePx, target)
+                }
+                else -> throw FileNotFoundException("No server preview for ${item.id}")
+            }
+        } catch (error: NextcloudHttpException) {
+            throw error
+        } catch (error: FileNotFoundException) {
+            throw error
+        } catch (error: Exception) {
+            if (cancellationSignal?.isCanceled == true || isCancellation(error)) throw OperationCanceledException()
+            if (error is IOException && error !is ImageDecoder.DecodeException) throw error
+            throw FileNotFoundException("Couldn't make a thumbnail for ${item.id}: ${error.javaClass.simpleName}").apply { initCause(error) }
+        }
+    }
 
     /**
      * The preview size to fetch for a tile of [requestedPx]. The picker's grid asks for 264 to 291 px
@@ -902,6 +968,7 @@ class LibraryRepository private constructor(context: Context) {
         val key = previewKey(item, sizePx)
         diskCache.peek(MediaDiskCache.Area.PREVIEW, key)?.let { return it.asAssetFileDescriptor() }
         diskCache.peek(MediaDiskCache.Area.PRECACHE, key)?.let { return it.asAssetFileDescriptor() }
+        phoneCopyThumbnail(item, key, sizePx, cancellationSignal)?.let { return it.asAssetFileDescriptor() }
         val account = requireAuthorizedAccount()
         val file = withSlot(previewSlots, PREVIEW_SLOT_WAIT_MS, "preview") {
             previewGate.query {
@@ -910,9 +977,9 @@ class LibraryRepository private constructor(context: Context) {
                         unauthorizedStops { client.downloadPreview(account, item.id, sizePx, target, cancellationSignal) }
                     } catch (error: NextcloudHttpException) {
                         // The server has no preview for this file (HEIC or video without a server
-                        // provider, say): a blank tile, not a failure.
-                        if (error.statusCode == 404) throw FileNotFoundException("No server preview for ${item.id}")
-                        throw error
+                        // provider, say): the phone makes one.
+                        if (error.statusCode != 404) throw error
+                        thumbnailOnPhone(account, item, sizePx, target, cancellationSignal, imagesToo = true)
                     } catch (error: IOException) {
                         // OkHttp reports a cancelled call as IOException("Canceled"). The picker
                         // cancels every tile scrolled off screen, so this must not look like a
@@ -1072,6 +1139,9 @@ class LibraryRepository private constructor(context: Context) {
         private const val DELETION_RETENTION_MS = 180L * 24L * 60L * 60L * 1_000L
 
         private const val MEBIBYTE = 1024L * 1024L
+
+        /** Range window for reading a video's header and one keyframe. */
+        private const val FRAME_WINDOW_BYTES = 512 * 1024
         private const val STREAM_RETRIES = 3
         private const val STREAM_RETRY_DELAY_MS = 500L
         private const val SMALL_PREVIEW_PX = 256
