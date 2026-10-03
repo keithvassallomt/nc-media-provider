@@ -49,6 +49,7 @@ class StorageActivity : AppCompatActivity() {
     private var bytes = 0L
     private var dragging = false
     private var running: Pair<Int, Int>? = null
+    private var settingSwitch = false
     private lateinit var shortcuts: List<Pair<MaterialButton, Int>>
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -80,9 +81,21 @@ class StorageActivity : AppCompatActivity() {
         months = repository.precacheMonths
         bytes = repository.precacheBytes
         binding.precacheSwitch.isChecked = repository.precacheEnabled
-        binding.precacheSwitch.setOnCheckedChangeListener { _, _ ->
-            saveLimit()
-            showUsage()
+        binding.precacheSwitch.setOnCheckedChangeListener { _, checked ->
+            if (settingSwitch) return@setOnCheckedChangeListener
+            if (checked) {
+                saveLimit()
+                showUsage()
+                return@setOnCheckedChangeListener
+            }
+            // Off deletes every thumbnail: the switch stays on until that's confirmed.
+            setSwitch(true)
+            confirmPrecacheOff(repository) { turnOff ->
+                if (!turnOff) return@confirmPrecacheOff
+                setSwitch(false)
+                saveLimit()
+                showUsage()
+            }
         }
         shortcuts = listOf(binding.precacheMonth to 1, binding.precacheQuarter to 3, binding.precacheHalfYear to 6, binding.precacheAll to 0)
         shortcuts.forEach { (button, shortcut) ->
@@ -156,6 +169,12 @@ class StorageActivity : AppCompatActivity() {
         // Keyboard and accessibility changes have no touch to end them.
         handler.removeCallbacks(saveLater)
         if (!dragging) handler.postDelayed(saveLater, SAVE_DELAY_MS)
+    }
+
+    private fun setSwitch(on: Boolean) {
+        settingSwitch = true
+        binding.precacheSwitch.isChecked = on
+        settingSwitch = false
     }
 
     private fun saveLimit() {

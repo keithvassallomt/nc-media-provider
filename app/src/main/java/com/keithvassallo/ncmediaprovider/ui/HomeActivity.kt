@@ -68,8 +68,15 @@ class HomeActivity : AppCompatActivity() {
             render()
         }
         binding.tilePrecache.root.setOnClickListener {
-            repository.setPrecache(!repository.precacheEnabled, repository.precacheMonths, repository.precacheBytes)
-            render()
+            if (!repository.precacheEnabled) {
+                repository.setPrecache(true, repository.precacheMonths, repository.precacheBytes)
+                render()
+            } else {
+                confirmPrecacheOff(repository) { turnOff ->
+                    if (turnOff) repository.setPrecache(false, repository.precacheMonths, repository.precacheBytes)
+                    render()
+                }
+            }
         }
         binding.tileKeyboard.root.setOnClickListener { startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) }
         binding.tileLocal.root.setOnClickListener {

@@ -104,6 +104,9 @@
     <string name="precache_free_note">Thumbnails at %1$d px, the size this phone’s picker asks for. This phone has %2$s free; the pre-cache never takes more than half.</string>
     <string name="precache_capped">Your whole library needs %1$s, more than half of the %2$s free, so the newest %3$s is the most it keeps.</string>
     <string name="precache_ready">Ready: %1$d of %2$d.</string>
+    <string name="precache_off_title">Turn off the pre-cache?</string>
+    <string name="precache_off_message">This deletes the %1$s of thumbnails downloaded so far. Turning it back on downloads them all again over Wi-Fi.</string>
+    <string name="precache_off_confirm">Turn off and delete</string>
     <string name="memories_status_off">Off: the picker uses Nextcloud’s own dates.</string>
     <string name="memories_status_unchecked">Your server is checked for Memories at the next sync.</string>
     <string name="memories_status_absent">Memories isn’t installed on your server, or isn’t available to your account.</string>
