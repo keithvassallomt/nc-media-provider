@@ -32,13 +32,26 @@
         android:theme="@style/Theme.NcMediaProvider">
 
         <activity
-            android:name=".ui.SetupActivity"
+            android:name=".ui.HomeActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ui.OnboardingActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".ui.StorageActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.DetailsActivity"
+            android:exported="false" />
 
         <!-- "Send from Nextcloud" (PLAN 4.7): opens the system picker, then the share sheet. -->
         <activity

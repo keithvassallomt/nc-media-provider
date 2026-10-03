@@ -30,7 +30,7 @@ import com.keithvassallo.ncmediaprovider.databinding.ItemKeyboardMonthBinding
 import com.keithvassallo.ncmediaprovider.databinding.ItemKeyboardPhotoBinding
 import com.keithvassallo.ncmediaprovider.databinding.KeyboardViewBinding
 import com.keithvassallo.ncmediaprovider.share.SendFromNextcloudActivity
-import com.keithvassallo.ncmediaprovider.ui.SetupActivity
+import com.keithvassallo.ncmediaprovider.ui.HomeActivity
 import java.io.File
 import java.io.FileInputStream
 import java.time.Instant
@@ -115,7 +115,7 @@ class PhotoKeyboardService : InputMethodService() {
     }
 
     private fun onAction() {
-        val target = if (repository.isReady) SendFromNextcloudActivity::class.java else SetupActivity::class.java
+        val target = if (repository.isReady) SendFromNextcloudActivity::class.java else HomeActivity::class.java
         startActivity(Intent(this, target).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 

@@ -5,12 +5,15 @@ import android.content.Intent
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
+import com.google.android.material.color.DynamicColors
 import com.keithvassallo.ncmediaprovider.data.LibraryRepository
 import com.keithvassallo.ncmediaprovider.share.SendFromNextcloudActivity
 
 class NcMediaProviderApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        // The phone's Material You colours, from its wallpaper; the theme's own are the fallback.
+        DynamicColors.applyToActivitiesIfAvailable(this)
         LibraryRepository.get(this).schedulePeriodicSync()
         addSendShortcut()
     }

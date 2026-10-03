@@ -1,0 +1,655 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Onboarding (PLAN 9.3): four steps as a checklist; each finished step collapses to a summary. -->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/scroll"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurfaceContainer"
+    android:fillViewport="true"
+    android:fitsSystemWindows="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="16dp"
+        android:paddingTop="24dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="40dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp">
+
+            <ImageView
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:contentDescription="@null"
+                android:src="@mipmap/ic_launcher" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:text="@string/app_name"
+                android:textAppearance="?attr/textAppearanceTitleSmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:text="@string/onboarding_title"
+            android:textAppearance="?attr/textAppearanceHeadlineMedium"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:text="@string/onboarding_subtitle"
+            android:textAppearance="?attr/textAppearanceBodyLarge"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:layout_marginBottom="12dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp">
+
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/progress"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:max="4"
+                app:trackCornerRadius="3dp"
+                app:trackThickness="6dp" />
+
+            <TextView
+                android:id="@+id/progressLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:textAppearance="?attr/textAppearanceLabelLarge"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                tools:text="1 of 4 done" />
+        </LinearLayout>
+
+        <!-- Step 1: turn it on in the photo picker. -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/pickerCard"
+            style="@style/Widget.Material3.CardView.Filled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            app:cardBackgroundColor="?attr/colorSurfaceContainerLowest"
+            app:cardCornerRadius="22dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <include
+                    android:id="@+id/pickerHeader"
+                    layout="@layout/item_onboarding_step_header" />
+
+                <LinearLayout
+                    android:id="@+id/pickerContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/step_picker_explanation"
+                        android:textAppearance="?attr/textAppearanceBodyMedium"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+
+                    <LinearLayout
+                        android:id="@+id/routeChoice"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:orientation="vertical">
+
+                        <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/shizukuOption"
+                            style="@style/Widget.Material3.CardView.Outlined"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:checkable="false"
+                            android:clickable="true"
+                            android:focusable="true"
+                            app:cardBackgroundColor="?attr/colorSurfaceContainerLowest"
+                            app:cardCornerRadius="16dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:minHeight="64dp"
+                                android:orientation="horizontal"
+                                android:padding="14dp">
+
+                                <ImageView
+                                    android:layout_width="26dp"
+                                    android:layout_height="26dp"
+                                    android:contentDescription="@null"
+                                    android:src="@drawable/ic_phone"
+                                    app:tint="?attr/colorPrimary" />
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="12dp"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <LinearLayout
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:gravity="center_vertical"
+                                        android:orientation="horizontal">
+
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:text="@string/route_shizuku_title"
+                                            android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                                        <TextView
+                                            android:layout_width="wrap_content"
+                                            android:layout_height="wrap_content"
+                                            android:layout_marginStart="8dp"
+                                            android:background="@drawable/bg_pill"
+                                            android:backgroundTint="?attr/colorPrimaryContainer"
+                                            android:paddingStart="8dp"
+                                            android:paddingTop="2dp"
+                                            android:paddingEnd="8dp"
+                                            android:paddingBottom="2dp"
+                                            android:text="@string/route_easiest"
+                                            android:textAppearance="?attr/textAppearanceLabelMedium"
+                                            android:textColor="?attr/colorOnPrimaryContainer" />
+                                    </LinearLayout>
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="@string/route_shizuku_detail"
+                                        android:textAppearance="?attr/textAppearanceBodySmall"
+                                        android:textColor="?attr/colorOnSurfaceVariant" />
+                                </LinearLayout>
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/computerOption"
+                            style="@style/Widget.Material3.CardView.Outlined"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:clickable="true"
+                            android:focusable="true"
+                            app:cardBackgroundColor="?attr/colorSurfaceContainerLowest"
+                            app:cardCornerRadius="16dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:minHeight="64dp"
+                                android:orientation="horizontal"
+                                android:padding="14dp">
+
+                                <ImageView
+                                    android:layout_width="26dp"
+                                    android:layout_height="26dp"
+                                    android:contentDescription="@null"
+                                    android:src="@drawable/ic_computer"
+                                    app:tint="?attr/colorPrimary" />
+
+                                <LinearLayout
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="12dp"
+                                    android:layout_weight="1"
+                                    android:orientation="vertical">
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="@string/route_computer_title"
+                                        android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                                    <TextView
+                                        android:layout_width="wrap_content"
+                                        android:layout_height="wrap_content"
+                                        android:text="@string/route_computer_detail"
+                                        android:textAppearance="?attr/textAppearanceBodySmall"
+                                        android:textColor="?attr/colorOnSurfaceVariant" />
+                                </LinearLayout>
+                            </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <Button
+                            android:id="@+id/guideButton"
+                            style="@style/Widget.Material3.Button.TextButton.Icon"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="@string/guide_link"
+                            app:icon="@drawable/ic_guide" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/shizukuPanel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:lineSpacingMultiplier="1.2"
+                            android:text="@string/shizuku_steps"
+                            android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+                        <Button
+                            android:id="@+id/shizukuGuideButton"
+                            style="@style/Widget.Material3.Button.TextButton.Icon"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/guide_shizuku"
+                            app:icon="@drawable/ic_guide" />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/shizukuKeepGooglePhotos"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:minHeight="48dp"
+                            android:text="@string/keep_google_photos" />
+
+                        <TextView
+                            android:id="@+id/shizukuStatus"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:accessibilityLiveRegion="polite"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+
+                        <Button
+                            android:id="@+id/shizukuButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            tools:text="@string/turn_on_with_shizuku" />
+
+                        <Button
+                            android:id="@+id/useComputerButton"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/use_computer_instead" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/computerPanel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:lineSpacingMultiplier="1.2"
+                            android:text="@string/computer_steps"
+                            android:textAppearance="?attr/textAppearanceBodyMedium" />
+
+                        <TextView
+                            android:id="@+id/commands"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:background="@drawable/bg_pill"
+                            android:backgroundTint="?attr/colorSurfaceContainerHighest"
+                            android:fontFamily="monospace"
+                            android:padding="12dp"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textIsSelectable="true" />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/computerKeepGooglePhotos"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:minHeight="48dp"
+                            android:text="@string/keep_google_photos" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <Button
+                                android:id="@+id/copyCommandsButton"
+                                style="@style/Widget.Material3.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/copy_commands" />
+
+                            <Button
+                                android:id="@+id/sendCommandsButton"
+                                style="@style/Widget.Material3.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:text="@string/send_commands" />
+                        </LinearLayout>
+
+                        <Button
+                            android:id="@+id/computerGuideButton"
+                            style="@style/Widget.Material3.Button.TextButton.Icon"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/guide_computer"
+                            app:icon="@drawable/ic_guide" />
+
+                        <TextView
+                            android:id="@+id/computerStatus"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:accessibilityLiveRegion="polite"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textColor="?attr/colorOnSurfaceVariant"
+                            android:visibility="gone" />
+
+                        <Button
+                            android:id="@+id/checkActivationButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="@string/check_activation" />
+
+                        <Button
+                            android:id="@+id/useShizukuButton"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/use_shizuku_instead" />
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/selectInPickerButton"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/open_picker_settings"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Step 2: connect your Nextcloud. -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/connectCard"
+            style="@style/Widget.Material3.CardView.Filled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            app:cardBackgroundColor="?attr/colorSurfaceContainerLowest"
+            app:cardCornerRadius="22dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <include
+                    android:id="@+id/connectHeader"
+                    layout="@layout/item_onboarding_step_header" />
+
+                <LinearLayout
+                    android:id="@+id/connectContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/serverLayout"
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="@string/sign_in_server_hint"
+                        app:placeholderText="@string/sign_in_server_placeholder">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/serverField"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:imeOptions="actionGo"
+                            android:inputType="textUri"
+                            android:maxLines="1" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <TextView
+                        android:id="@+id/httpWarning"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/sign_in_http_warning"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
+                        android:textColor="?attr/colorError"
+                        android:visibility="gone" />
+
+                    <LinearLayout
+                        android:id="@+id/connectBusy"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:background="@drawable/bg_pill"
+                        android:backgroundTint="?attr/colorSecondaryContainer"
+                        android:orientation="vertical"
+                        android:padding="14dp"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.progressindicator.CircularProgressIndicator
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:indeterminate="true"
+                                app:indicatorSize="20dp"
+                                app:trackThickness="3dp" />
+
+                            <TextView
+                                android:id="@+id/connectStatus"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="10dp"
+                                android:layout_weight="1"
+                                android:accessibilityLiveRegion="polite"
+                                android:textAppearance="?attr/textAppearanceBodyMedium"
+                                android:textColor="?attr/colorOnSecondaryContainer"
+                                tools:text="@string/sign_in_waiting" />
+                        </LinearLayout>
+
+                        <Button
+                            android:id="@+id/reopenButton"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:text="@string/sign_in_reopen" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/connectError"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:accessibilityLiveRegion="polite"
+                        android:textAppearance="?attr/textAppearanceBodySmall"
+                        android:textColor="?attr/colorError"
+                        android:visibility="gone" />
+
+                    <Button
+                        android:id="@+id/connectButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/sign_in_continue" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Step 3: choose your photo folders. -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/foldersCard"
+            style="@style/Widget.Material3.CardView.Filled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            app:cardBackgroundColor="?attr/colorSurfaceContainerLowest"
+            app:cardCornerRadius="22dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <include
+                    android:id="@+id/foldersHeader"
+                    layout="@layout/item_onboarding_step_header" />
+
+                <LinearLayout
+                    android:id="@+id/foldersContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/step_folders_explanation"
+                        android:textAppearance="?attr/textAppearanceBodyMedium"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
+
+                    <com.google.android.material.progressindicator.LinearProgressIndicator
+                        android:id="@+id/foldersProgress"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:indeterminate="true"
+                        android:visibility="gone" />
+
+                    <LinearLayout
+                        android:id="@+id/folderList"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:orientation="vertical" />
+
+                    <Button
+                        android:id="@+id/browseFoldersButton"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/browse_all_folders" />
+
+                    <Button
+                        android:id="@+id/useFoldersButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        tools:text="Use 2 folders" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Step 4: a few extras. -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/extrasCard"
+            style="@style/Widget.Material3.CardView.Filled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            app:cardBackgroundColor="?attr/colorSurfaceContainerLowest"
+            app:cardCornerRadius="22dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <include
+                    android:id="@+id/extrasHeader"
+                    layout="@layout/item_onboarding_step_header" />
+
+                <LinearLayout
+                    android:id="@+id/extrasContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <include
+                        android:id="@+id/extraLocal"
+                        layout="@layout/item_switch_row" />
+
+                    <include
+                        android:id="@+id/extraNotifications"
+                        layout="@layout/item_switch_row" />
+
+                    <include
+                        android:id="@+id/extraKeyboard"
+                        layout="@layout/item_switch_row" />
+
+                    <Button
+                        android:id="@+id/finishButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="@string/onboarding_finish" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

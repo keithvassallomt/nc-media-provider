@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- A card's heading on the details screen. -->
+    <style name="DetailsHeading">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:accessibilityHeading">true</item>
+        <item name="android:textAppearance">?attr/textAppearanceTitleMedium</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- Shell commands to copy. -->
+    <style name="DetailsCommands">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:background">@drawable/bg_pill</item>
+        <item name="android:backgroundTint">?attr/colorSurfaceContainerHighest</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:padding">12dp</item>
+        <item name="android:textAppearance">?attr/textAppearanceBodySmall</item>
+        <item name="android:textIsSelectable">true</item>
+    </style>
+</resources>

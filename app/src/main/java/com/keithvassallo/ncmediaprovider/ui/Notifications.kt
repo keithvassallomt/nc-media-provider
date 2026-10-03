@@ -25,7 +25,7 @@ object Notifications {
 
     fun showWiped(context: Context) = show(
         context, WIPED, R.string.notify_wiped_title, R.string.notify_wiped_text,
-        Intent(context, SetupActivity::class.java),
+        Intent(context, HomeActivity::class.java),
     )
 
     fun showProviderDeselected(context: Context) = show(

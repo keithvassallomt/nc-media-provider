@@ -1,15 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NC Media Provider</string>
-    <string name="app_tagline">Your Nextcloud photos in Android’s system photo picker</string>
-    <string name="connection_title">Server</string>
-    <string name="not_connected">Not signed in. Sign in to your Nextcloud to see its photos in the photo picker.</string>
     <string name="sign_in_required_status">Nextcloud refused this app’s password, so the library has stopped updating. Sign in again to resume.</string>
-    <string name="folders_needed_status">Signed in as %1$s\n%2$s\nChoose the folders that hold your photos.</string>
-    <string name="action_sign_in">Sign in</string>
     <string name="action_sign_in_again">Sign in again</string>
-    <string name="action_choose_folders">Choose folders</string>
-    <string name="action_change_folders">Change folders</string>
     <string name="action_sign_out">Sign out</string>
     <string name="sign_out_title">Sign out of Nextcloud?</string>
     <string name="sign_out_message">This deletes the app’s password on your server and removes the library and cached photos from this phone. The picker’s Nextcloud tab stays empty until you sign in again.</string>
@@ -76,15 +69,9 @@
     <string name="keyboard_fetching">Getting %1$s…</string>
     <string name="keyboard_fetch_failed">Couldn’t get %1$s.</string>
     <string name="keyboard_insert_refused">The app didn’t take the photo.</string>
-    <string name="keyboard_setup_title">Photo keyboard</string>
-    <string name="keyboard_setup_explanation">Another way into apps with their own photo grid: a keyboard that shows your Nextcloud photos and inserts the one you tap, the way GIF keyboards work. Turn it on in Android’s keyboard settings, then switch to it with the keyboard button while typing. Android warns that a keyboard may collect what you type; this one never handles text, only photos.</string>
-    <string name="keyboard_setup_enabled">The photo keyboard is on.</string>
-    <string name="keyboard_setup_disabled">The photo keyboard is off.</string>
-    <string name="keyboard_setup_button">Keyboard settings</string>
     <string name="streaming_channel">Sending from Nextcloud</string>
     <string name="streaming_title">Sending from Nextcloud</string>
     <string name="streaming_text">An app is reading a video from your Nextcloud.</string>
-    <string name="precache_title">Thumbnails ahead of time</string>
     <string name="precache_explanation">Downloads your library’s thumbnails over Wi-Fi in the background, so the picker and Send from Nextcloud show them at once instead of one by one.</string>
     <string name="precache_switch">Download thumbnails in advance</string>
     <string name="precache_all">Everything</string>
@@ -92,9 +79,6 @@
     <string name="precache_quarter">3 months</string>
     <string name="precache_estimate">About %1$s for %2$d photos and videos, on Wi-Fi only. Up to %3$s is kept.</string>
     <string name="precache_ready">Ready: %1$d of %2$d.</string>
-    <string name="memories_title">Dates from Memories</string>
-    <string name="memories_explanation">Nextcloud on its own often dates HEIC photos and videos by when they were uploaded, and can be an hour or two out on others. When your server has the Memories app, the picker uses the dates and sizes Memories read from the files, and hides the video half of live photos.</string>
-    <string name="memories_switch">Use Memories</string>
     <string name="memories_status_off">Off: the picker uses Nextcloud’s own dates.</string>
     <string name="memories_status_unchecked">Your server is checked for Memories at the next sync.</string>
     <string name="memories_status_absent">Memories isn’t installed on your server, or isn’t available to your account.</string>
@@ -108,13 +92,7 @@
     <string name="notify_wiped_text">Your Nextcloud server asked to wipe this device, so the account, its library and its cached photos were removed from this phone.</string>
     <string name="notify_deselected_title">Select NC Media Provider again</string>
     <string name="notify_deselected_text">Updating the app deselected it in the photo picker. Tap to open the picker’s cloud settings and select it again.</string>
-    <string name="connection_ready">Signed in as %1$s\n%2$s\nFolders: %3$s\n%4$s</string>
-    <plurals name="library_listed">
-        <item quantity="one">%d image listed</item>
-        <item quantity="other">%d images listed</item>
-    </plurals>
     <string name="library_not_listed">Not listed yet. The first sync starts as soon as the network allows.</string>
-    <string name="library_counting">Counting photos…</string>
     <string name="refresh_now">Refresh now</string>
     <string name="sync_checking">Checking for changes…</string>
     <string name="sync_listing_started">Listing photos…</string>
@@ -130,11 +108,6 @@
     <string name="local_network_granted">Local network access allowed</string>
     <string name="local_network_missing">Local network access not allowed. A server on your home network can’t be reached without it.</string>
     <string name="grant_local_network">Allow local network access</string>
-    <string name="local_title">Prefer local originals</string>
-    <string name="local_explanation">Allow full photo and video access so files already on this phone are handed over directly instead of being downloaded again.</string>
-    <string name="grant_media_access">Grant media access</string>
-    <string name="media_access_granted">Full photo and video access granted</string>
-    <string name="media_access_missing">Full access not granted. Copies from your server still work over the network.</string>
     <string name="activation_title">Enable the cloud provider</string>
     <string name="activation_explanation">Android only lets allow-listed apps act as a cloud photo source, and only one can be selected at a time. The status below checks both.</string>
     <string name="activation_status_active">This app is allowed and selected as the picker’s cloud source.</string>
@@ -172,8 +145,6 @@
     <string name="open_picker">Test system picker</string>
     <string name="activation_footer">Only one cloud source can be active at a time. With Google Photos kept as a choice, you switch between it and this app in the photo picker’s cloud settings. On some phones, such as GrapheneOS, that settings screen only appears after a restart. Updating this app deselects it; with Shizuku it is selected again automatically, otherwise a notification takes you to the settings.</string>
     <string name="picker_unavailable">The system photo picker is unavailable</string>
-    <string name="cache_title">Storage and diagnostics</string>
-    <string name="cache_explanation">The library, the last sync and the downloaded media. Old downloads are removed automatically at the limits shown.</string>
     <string name="originals_limit_label">Space for downloaded photos and videos, so one picked again opens at once:</string>
     <string name="originals_limit_small">512 MB</string>
     <string name="originals_limit_default">2 GB</string>
@@ -186,5 +157,107 @@
     <string name="diagnostics_never">never</string>
     <string name="diagnostics_no_error">none</string>
     <string name="cache_loading">Calculating cache usage…</string>
-    <string name="cache_summary">Previews: %1$s of %2$s\nOriginals: %3$s of %4$s</string>
+
+    <!-- Onboarding (PLAN 9.3). -->
+    <string name="onboarding_title">Let’s get set up</string>
+    <string name="onboarding_subtitle">You only need to do this once.</string>
+    <string name="onboarding_progress">%1$d of 4 done</string>
+    <string name="onboarding_change">Change</string>
+    <string name="onboarding_finish">Finish</string>
+    <string name="step_done">Done</string>
+    <string name="step_picker_title">Turn it on in the photo picker</string>
+    <string name="step_picker_explanation">Android lets only approved apps add photos to its picker. Approving this one is a one-time job, and needs no root.</string>
+    <string name="step_picker_summary">On</string>
+    <string name="step_picker_summary_kept">On, with Google Photos kept as a choice</string>
+    <string name="route_shizuku_title">On this phone, with Shizuku</string>
+    <string name="route_shizuku_detail">Needs wireless debugging turned on once</string>
+    <string name="route_easiest">Easiest</string>
+    <string name="route_computer_title">With a computer</string>
+    <string name="route_computer_detail">Plug in the phone and paste a few commands</string>
+    <string name="guide_link">Not sure? Read the step-by-step guide</string>
+    <string name="guide_shizuku">Guide: setting up Shizuku</string>
+    <string name="guide_computer">Guide: USB debugging and adb</string>
+    <string name="shizuku_steps">1. Install Shizuku and start it with wireless debugging.\n2. Allow this app when Shizuku asks.</string>
+    <string name="turn_on_with_shizuku">Turn on with Shizuku</string>
+    <string name="use_computer_instead">Use a computer instead</string>
+    <string name="use_shizuku_instead">Use Shizuku instead</string>
+    <string name="computer_steps">1. Turn on USB debugging in Developer options.\n2. Plug this phone into your computer.\n3. Run these commands there:</string>
+    <string name="send_commands">Send to my computer</string>
+    <string name="check_activation">I’ve run them, check</string>
+    <string name="activation_select_needed">Approved. Now choose this app in the picker’s cloud settings.</string>
+    <string name="activation_not_yet">Android hasn’t approved this app yet. Check that the commands ran without errors, then try again.</string>
+    <string name="step_connect_title">Connect your Nextcloud</string>
+    <string name="step_connect_summary">%1$s on %2$s</string>
+    <string name="step_folders_title">Choose your photo folders</string>
+    <string name="step_folders_explanation">Suggested from your Memories timeline and the usual photo folders. Add or remove any.</string>
+    <string name="suggested_badge">Suggested</string>
+    <string name="browse_all_folders">Browse all folders</string>
+    <plurals name="use_folders">
+        <item quantity="one">Use %d folder</item>
+        <item quantity="other">Use %d folders</item>
+    </plurals>
+    <string name="step_extras_title">A few extras</string>
+    <string name="step_extras_summary">Done</string>
+    <string name="extra_local_title">Use photos already on this phone</string>
+    <string name="extra_local_detail">Hands over the phone’s own copy instead of downloading it</string>
+    <string name="extra_notifications_title">Enable notifications</string>
+    <string name="extra_notifications_detail">For example, after an update switches the app off in the picker</string>
+    <string name="extra_keyboard_title">Photo keyboard</string>
+    <string name="extra_keyboard_detail">Insert Nextcloud photos in apps that have no photo picker</string>
+
+    <!-- The home screen (PLAN 9.3). -->
+    <string name="home_in_picker">In the picker</string>
+    <plurals name="home_items">
+        <item quantity="one">photo or video</item>
+        <item quantity="other">photos and videos</item>
+    </plurals>
+    <string name="try_picker">Try the picker</string>
+    <string name="send_photo">Send a photo</string>
+    <string name="home_problem_sign_in_title">Sign in to Nextcloud again</string>
+    <string name="home_problem_not_allowed_title">Not turned on in the picker</string>
+    <string name="home_problem_not_allowed_text">Android no longer lists this app as a source for the photo picker. Your library is fine.</string>
+    <string name="home_problem_set_up_again">Set it up again</string>
+    <string name="home_problem_switched_off_title">Not in the picker right now</string>
+    <string name="home_problem_switched_off_text">The photo picker is showing another source, or an app update switched this one off. Your library is fine.</string>
+    <string name="home_problem_select_again">Select it again</string>
+    <string name="tile_on">On</string>
+    <string name="tile_off">Off</string>
+    <string name="tile_memories_title">Use Memories dates</string>
+    <string name="tile_memories_on">Real capture dates</string>
+    <string name="tile_memories_off">Nextcloud’s own dates</string>
+    <string name="tile_memories_unchecked">Checked at the next sync</string>
+    <string name="tile_memories_absent">Memories isn’t on your server</string>
+    <string name="tile_memories_untested">Memories %1$s isn’t supported yet</string>
+    <string name="tile_precache_title">Thumbnail pre-cache</string>
+    <string name="tile_precache_off">Thumbnails load as you scroll</string>
+    <string name="tile_precache_ready">Ready: %1$d of %2$d</string>
+    <string name="tile_precache_starting">Starts on Wi-Fi</string>
+    <string name="tile_keyboard_title">Photo keyboard</string>
+    <string name="tile_keyboard_on">In your keyboard list</string>
+    <string name="tile_keyboard_off">For apps without a picker</string>
+    <string name="tile_local_title">Use local photos</string>
+    <string name="tile_local_on">Shown once, not downloaded</string>
+    <string name="tile_local_off">Always from Nextcloud</string>
+    <string name="row_folders">Folders</string>
+    <string name="row_other_apps">Apps with their own photo grid</string>
+    <string name="row_other_apps_detail">Send from Nextcloud, shortcut and tile</string>
+    <string name="row_storage">Storage</string>
+    <string name="row_storage_detail">Up to %1$s of downloads</string>
+    <string name="row_account">Account</string>
+    <string name="row_account_detail">%1$s on %2$s</string>
+    <string name="row_guide">Setup guide</string>
+    <string name="row_guide_detail">On GitHub</string>
+    <string name="row_details">Details and troubleshooting</string>
+    <string name="row_details_detail">Diagnostics, activation, undo</string>
+    <string name="account_message">Signed in as %1$s on %2$s.</string>
+    <string name="close">Close</string>
+    <string name="navigate_up">Back</string>
+
+    <!-- Storage and details. -->
+    <string name="storage_downloads_title">Downloads</string>
+    <string name="storage_usage">Using %1$s of %2$s, plus %3$s of pre-cached thumbnails.</string>
+    <string name="details_sync_title">Sync</string>
+    <string name="details_local_network_title">Local network</string>
+    <string name="details_diagnostics_title">Diagnostics</string>
+    <string name="setup_again">Go through setup again</string>
 </resources>
