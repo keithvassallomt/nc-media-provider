@@ -239,7 +239,7 @@ class LibraryRepository private constructor(context: Context) {
                         if (isStopped() || failed.get() || diskCache.isMarkedMissing(MediaDiskCache.Area.PRECACHE, key)) return@submit
                         try {
                             diskCache.getOrDownload(MediaDiskCache.Area.PRECACHE, key, null) { target ->
-                                client.downloadPreview(account, item.id, SMALL_PREVIEW_PX, target, null)
+                                client.downloadPreview(account, item.id, SMALL_PREVIEW_PX, target, null, viaPhotos = Albums.isAlbumPath(item.href))
                             }
                             ready.incrementAndGet()
                             fetched.incrementAndGet()
@@ -643,6 +643,8 @@ class LibraryRepository private constructor(context: Context) {
         val needsFull = full || !state.imported || due || state.rootEtag.isEmpty() ||
             state.respectsNoMedia != settings.respectNoMedia || state.listingVersion != LISTING_VERSION
         val changed = if (needsFull) fullSync(account, folders, onProgress) else changeSync(account, folders, onProgress)
+        // After the listing, which decides which album files the folders already hold.
+        val albums = syncAlbums(account, full = needsFull) or store.applyAlbumRows()
         // Memories first: it fixes far more dates than the video headers do.
         val enriched = enrichFromMemories(account, fullRead = needsFull, isStopped)
         val headers = readVideoHeaders(account, isStopped)
@@ -650,7 +652,7 @@ class LibraryRepository private constructor(context: Context) {
         val rematched = matchLocally()
         store.pruneDeletions(DELETION_RETENTION_MS)
         store.markChecked()
-        if (changed || headers || enriched || rematched > 0) notifyPickerOfChanges()
+        if (changed || albums || headers || enriched || rematched > 0) notifyPickerOfChanges()
         if (changed || enriched) schedulePrecache()
         return changed
     }
@@ -709,6 +711,47 @@ class LibraryRepository private constructor(context: Context) {
                 "in ${SystemClock.elapsedRealtime() - started} ms",
         )
         return stored
+    }
+
+    /**
+     * Brings the Nextcloud Photos albums up to date (PLAN 7.1): the album list at every sync, and an
+     * album's files when Photos' count, cover or date range for it changed, or with a full listing.
+     * Albums come on top of the library, so an error keeps what was stored (a refused password
+     * still stops the sync), and a server without the Photos app has none. Returns true when
+     * anything the picker shows changed.
+     */
+    private fun syncAlbums(account: NextcloudAccount, full: Boolean): Boolean {
+        val started = SystemClock.elapsedRealtime()
+        return try {
+            val listed = client.listAlbums(account) ?: return store.clearAlbums()
+            val stored = store.albums().associateBy(Album::id)
+            val relisted = HashMap<String, List<AlbumItem>>()
+            val albums = listed.map { entry ->
+                val id = Albums.albumId(entry.href)
+                if (full || stored[id]?.signature != entry.signature) {
+                    relisted[id] = client.listDirectFiles(account, entry.href, MEDIA_PREFIXES)
+                        .filter { !it.isHidden && it.sizeBytes > 0L }
+                        .map { Albums.item(id, it) }
+                }
+                Album(id, entry.href, entry.name, entry.isShared, entry.lastPhotoId, entry.signature)
+            }
+            val changed = store.saveAlbums(albums, relisted)
+            if (relisted.isNotEmpty() || changed) {
+                Log.i(
+                    TAG,
+                    "Albums: ${albums.size} (${albums.count(Album::isShared)} shared), ${relisted.size} listed again " +
+                        "in ${SystemClock.elapsedRealtime() - started} ms, changed: $changed",
+                )
+            }
+            changed
+        } catch (error: NextcloudHttpException) {
+            if (error.statusCode == 401) throw error
+            Log.w(TAG, "Couldn't list albums, keeping what was stored: HTTP ${error.statusCode}")
+            false
+        } catch (error: IOException) {
+            Log.d(TAG, "Couldn't list albums, keeping what was stored: ${error.javaClass.simpleName}: ${error.message.orEmpty()}")
+            false
+        }
     }
 
     /**
@@ -941,6 +984,13 @@ class LibraryRepository private constructor(context: Context) {
         return store.mediaPage(sinceGeneration, pageToken, pageSize)
     }
 
+    /** The albums the picker can show (PLAN 7.1), from the database. */
+    fun queryAlbums(): List<PickerAlbum> = if (hasAccount) store.pickerAlbums() else emptyList()
+
+    /** A page of one album's photos and videos; the token is the last file ID of the previous page. */
+    fun queryAlbumMedia(albumId: String, pageSize: Int, pageToken: String?): Page<MediaItem> =
+        if (hasAccount) store.albumPage(albumId, pageToken, pageSize) else Page(emptyList(), null)
+
     fun deletedSince(sinceGeneration: Long, pageToken: String?, pageSize: Int): Page<String> {
         if (forcedRebuild(sinceGeneration)) return Page(emptyList(), null)
         return store.deletedPage(sinceGeneration, pageToken, pageSize)
@@ -1072,7 +1122,10 @@ class LibraryRepository private constructor(context: Context) {
             previewGate.query {
                 diskCache.getOrDownload(MediaDiskCache.Area.PREVIEW, key, cancellationSignal) { target ->
                     try {
-                        unauthorizedStops { client.downloadPreview(account, item.id, sizePx, target, cancellationSignal) }
+                        unauthorizedStops {
+                            // Core's preview endpoint can't see files shared only through an album.
+                            client.downloadPreview(account, item.id, sizePx, target, cancellationSignal, viaPhotos = Albums.isAlbumPath(item.href))
+                        }
                     } catch (error: NextcloudHttpException) {
                         // The server has no preview for this file (HEIC or video without a server
                         // provider, say): the phone makes one.
@@ -1091,8 +1144,9 @@ class LibraryRepository private constructor(context: Context) {
         return file.asAssetFileDescriptor()
     }
 
+    /** A library row, or a file only an album holds (PLAN 7.1). */
     private fun findItem(mediaId: String): MediaItem =
-        store.media(mediaId) ?: throw FileNotFoundException("Unknown media $mediaId")
+        store.media(mediaId) ?: store.albumOnlyItem(mediaId) ?: throw FileNotFoundException("Unknown media $mediaId")
 
     /** Drops hidden files (the video half of a live photo, say), empty ones, and anything in [hiddenFolders]. */
     private fun List<RemoteFile>.toMediaItems(hiddenFolders: Set<String>): List<MediaItem> =

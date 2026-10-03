@@ -76,6 +76,7 @@ if dav alice -X MKCOL "$BASE/remote.php/dav/photos/alice/albums/Holiday" 2>/dev/
     dav alice -X COPY -H "Destination: $BASE/remote.php/dav/photos/alice/albums/Holiday/$(enc "$(basename "$f")")" \
       "$BASE/remote.php/dav/files/alice/$(enc "$f")"
   done
+  "$HERE/shared_album.sh" "$BASE" "$PASS"
 fi
 
 dav alice -X PROPPATCH -H "Content-Type: text/xml" "$BASE/remote.php/dav/files/alice/$(enc Photos/2021/Summer/beach-exif.jpg)" \

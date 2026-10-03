@@ -15,6 +15,8 @@ import androidx.room.Upsert
 import androidx.room.migration.AutoMigrationSpec
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.execSQL
+import com.keithvassallo.ncmediaprovider.data.Album
+import com.keithvassallo.ncmediaprovider.data.AlbumItem
 import com.keithvassallo.ncmediaprovider.data.MediaItem
 import com.keithvassallo.ncmediaprovider.data.MemoriesDay
 import com.keithvassallo.ncmediaprovider.data.MemoriesFile
@@ -176,6 +178,42 @@ interface LibraryDao {
     @Query("DELETE FROM memories_file")
     fun clearMemoriesFiles()
 
+    @Query("SELECT * FROM album ORDER BY name")
+    fun albums(): List<Album>
+
+    @Query("SELECT * FROM album WHERE id = :id")
+    fun album(id: String): Album?
+
+    @Upsert
+    fun saveAlbums(rows: List<Album>)
+
+    @Query("DELETE FROM album WHERE id IN (:ids)")
+    fun deleteAlbums(ids: List<String>)
+
+    @Query("SELECT * FROM album_item WHERE albumId = :albumId")
+    fun albumItems(albumId: String): List<AlbumItem>
+
+    @Query("SELECT * FROM album_item WHERE id = :id LIMIT 1")
+    fun albumItem(id: String): AlbumItem?
+
+    @Query("SELECT * FROM album_item")
+    fun allAlbumItems(): List<AlbumItem>
+
+    @Query("SELECT * FROM media WHERE href LIKE :pattern")
+    fun mediaWithHrefLike(pattern: String): List<MediaItem>
+
+    @Upsert
+    fun saveAlbumItems(rows: List<AlbumItem>)
+
+    @Query("DELETE FROM album_item WHERE albumId IN (:albumIds)")
+    fun deleteAlbumItems(albumIds: List<String>)
+
+    @Query("DELETE FROM album")
+    fun clearAlbums()
+
+    @Query("DELETE FROM album_item")
+    fun clearAlbumItems()
+
     @Query("SELECT * FROM memories_day")
     fun memoriesDays(): List<MemoriesDay>
 
@@ -242,14 +280,18 @@ class ListedValuesMigration : AutoMigrationSpec {
 }
 
 @Database(
-    entities = [MediaItem::class, DeletedMedia::class, SyncState::class, FolderEtag::class, MemoriesFile::class, MemoriesDay::class],
-    version = 7,
+    entities = [
+        MediaItem::class, DeletedMedia::class, SyncState::class, FolderEtag::class, MemoriesFile::class, MemoriesDay::class,
+        Album::class, AlbumItem::class,
+    ],
+    version = 8,
     autoMigrations = [
         AutoMigration(from = 2, to = 3),
         AutoMigration(from = 3, to = 4),
         AutoMigration(from = 4, to = 5),
         AutoMigration(from = 5, to = 6),
         AutoMigration(from = 6, to = 7, spec = ListedValuesMigration::class),
+        AutoMigration(from = 7, to = 8),
     ],
 )
 abstract class LibraryDatabase : RoomDatabase() {

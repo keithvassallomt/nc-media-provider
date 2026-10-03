@@ -96,6 +96,74 @@ class LibraryStore(
         }
     }
 
+    // Albums (PLAN 7.1).
+
+    fun albums(): List<Album> = dao.albums()
+
+    /**
+     * Stores the album list as listed: albums no longer listed go with their files, and [relisted]
+     * replaces the files of the albums it holds. Returns true when anything the picker shows changed.
+     */
+    fun saveAlbums(albums: List<Album>, relisted: Map<String, List<AlbumItem>>): Boolean = database.runInTransaction<Boolean> {
+        val before = dao.albums()
+        val gone = before.map(Album::id) - albums.mapTo(HashSet(), Album::id)
+        val itemsBefore = relisted.keys.associateWith { dao.albumItems(it).toSet() }
+        gone.chunked(SQL_BATCH).forEach {
+            dao.deleteAlbumItems(it)
+            dao.deleteAlbums(it)
+        }
+        dao.saveAlbums(albums)
+        relisted.keys.toList().chunked(SQL_BATCH).forEach(dao::deleteAlbumItems)
+        relisted.values.flatten().chunked(SQL_BATCH).forEach(dao::saveAlbumItems)
+        gone.isNotEmpty() || albums.toSet() != before.toSet() || relisted.any { (id, items) -> items.toSet() != itemsBefore[id] }
+    }
+
+    /** Forgets every album, when the server has no Photos app. Returns true when there were any. */
+    fun clearAlbums(): Boolean = database.runInTransaction<Boolean> {
+        val had = dao.albums().isNotEmpty()
+        dao.clearAlbumItems()
+        dao.clearAlbums()
+        had
+    }
+
+    /**
+     * Brings the library's album rows in line with the albums (PLAN 7.1). The picker opens an
+     * album's photo only if the main sync returned it, so a file that only an album holds (in an
+     * album someone shared, say) joins the library under its album path, once however many albums
+     * hold it. A file the folders hold keeps its folder row. Returns true when anything changed.
+     */
+    fun applyAlbumRows(): Boolean = database.runInTransaction<Boolean> {
+        val stored = dao.mediaWithHrefLike(Albums.ALBUM_PATH_PATTERN)
+        val items = dao.allAlbumItems().groupBy(AlbumItem::id).mapValues { (_, copies) -> copies.minBy(AlbumItem::href) }
+        val inFolders = items.keys.toList().chunked(SQL_BATCH).flatMap(dao::mediaWithIds)
+            .filterNot { Albums.isAlbumPath(it.href) }
+            .mapTo(HashSet(), MediaItem::id)
+        val wanted = items.values.filterNot { it.id in inFolders }.map { with(Albums) { it.toMediaItem(generation = 0L) } }
+        val memories = memoriesFor(wanted)
+        applyChanges(diffLibrary(stored, markLiveVideos(wanted, memories), complete = true, memories::get), fullListing = false)
+    }
+
+    /** The albums the picker can show: those with a photo or video it can show. */
+    fun pickerAlbums(): List<PickerAlbum> = dao.albums().mapNotNull { Albums.forPicker(it, albumContents(it.id)) }
+
+    /**
+     * What the picker shows of an album, a page at a time in file ID order: [afterId] is the last ID
+     * of the previous page.
+     */
+    fun albumPage(albumId: String, afterId: String?, pageSize: Int): Page<MediaItem> {
+        val rows = albumContents(albumId).sortedBy(MediaItem::id).filter { afterId == null || it.id > afterId }.take(pageSize)
+        return Page(rows, rows.takeIf { it.size == pageSize }?.last()?.id)
+    }
+
+    /** A file that only an album holds, as a row, so it can be opened. */
+    fun albumOnlyItem(id: String): MediaItem? = dao.albumItem(id)?.let { with(Albums) { it.toMediaItem(state().generation) } }
+
+    private fun albumContents(albumId: String): List<MediaItem> {
+        val items = dao.albumItems(albumId)
+        val rows = items.map(AlbumItem::id).chunked(SQL_BATCH).flatMap(dao::mediaWithIds).associateBy(MediaItem::id)
+        return Albums.contents(items, rows, state().generation)
+    }
+
     /** Rows whose values come from Memories, and live-photo videos it paired (PLAN 6.2). */
     fun memoriesStats(): Pair<Int, Int> = dao.memoriesMatchedCount() to dao.liveVideoCount()
 
@@ -114,6 +182,8 @@ class LibraryStore(
         dao.clearFolders()
         dao.clearMemoriesFiles()
         dao.clearMemoriesDayCounts()
+        dao.clearAlbumItems()
+        dao.clearAlbums()
         val fresh = SyncState(instanceId = UUID.randomUUID().toString(), sourceKey = sourceKey)
         dao.saveState(fresh)
         cached = fresh
@@ -126,7 +196,11 @@ class LibraryStore(
      */
     fun commit(listed: Collection<MediaItem>, complete: Boolean): Boolean = database.runInTransaction<Boolean> {
         val memories = memoriesFor(listed)
-        applyChanges(diffLibrary(dao.allMedia(), markLiveVideos(listed, memories), complete, memories::get), fullListing = complete)
+        // Files that only an album holds aren't the folders' to delete (see applyAlbumRows); one the
+        // folders now hold too moves to its folder row.
+        val listedIds = listed.mapTo(HashSet(), MediaItem::id)
+        val stored = dao.allMedia().filter { !Albums.isAlbumPath(it.href) || it.id in listedIds }
+        applyChanges(diffLibrary(stored, markLiveVideos(listed, memories), complete, memories::get), fullListing = complete)
     }
 
     /**
@@ -148,11 +222,12 @@ class LibraryStore(
             val elsewhere = listed.map(MediaItem::id).filterNot(storedIds::contains).distinct()
                 .chunked(SQL_BATCH).flatMap(dao::mediaWithIds)
             val copies = (listed + elsewhere).groupBy(MediaItem::id).values
-            if (copies.any { it.distinctBy(MediaItem::href).size > 1 }) {
+            // An album row isn't a second path in the folders: the folder row replaces it.
+            if (copies.any { copy -> copy.filterNot { Albums.isAlbumPath(it.href) }.distinctBy(MediaItem::href).size > 1 }) {
                 val state = dao.state() ?: state()
                 dao.saveState(state.copy(duplicatePaths = true).also { cached = it })
             }
-            val kept = copies.map { it.minBy(MediaItem::href) }
+            val kept = copies.map { copy -> copy.filterNot { Albums.isAlbumPath(it.href) }.minByOrNull(MediaItem::href) ?: copy.minBy(MediaItem::href) }
             // A live photo's two halves share a folder, so each folder's listing holds both.
             val memories = memoriesFor(kept)
             applyChanges(diffLibrary(stored + elsewhere, markLiveVideos(kept, memories), complete = true, memories::get), fullListing = false)

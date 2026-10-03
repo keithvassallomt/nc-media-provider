@@ -108,11 +108,11 @@ class NcCloudMediaProvider : CloudMediaProvider() {
         val sinceGeneration = extras.takeIf { it.containsKey(CloudMediaProviderContract.EXTRA_SYNC_GENERATION) }
             ?.getLong(CloudMediaProviderContract.EXTRA_SYNC_GENERATION)
         val collection = queryCollection()
-        // No albums until Phase 7, so an album query is answered with an empty page.
+        // An album's photos and videos come whole each time, a page at a time (PLAN 7.1).
         val page = if (albumId == null) {
             safelyQuery { repository.queryMedia(pageSize, pageToken, sinceGeneration) }
         } else {
-            Page(emptyList(), null)
+            safelyQuery { repository.queryAlbumMedia(albumId, pageSize, pageToken) }
         }
         Log.d(TAG, "onQueryMedia since=$sinceGeneration token=$pageToken album=$albumId -> ${page.items.size} rows, next=${page.nextPageToken}")
         return mediaCursor(page).apply {
@@ -157,10 +157,19 @@ class NcCloudMediaProvider : CloudMediaProvider() {
         }
     }
 
+    /**
+     * The user's Nextcloud Photos albums, own and shared (PLAN 7.1), from the database. Only albums
+     * with something to show are listed, each with a cover, which the newer picker requires.
+     */
     override fun onQueryAlbums(extras: Bundle): Cursor {
         enforceSystemCaller()
         val collection = queryCollection()
+        val albums = runCatching { repository.queryAlbums() }.onFailure(::logProviderFailure).getOrDefault(emptyList())
+        Log.d(TAG, "onQueryAlbums -> ${albums.size} albums")
         return MatrixCursor(ALBUM_PROJECTION).apply {
+            albums.forEach { album ->
+                addRow(arrayOf<Any?>(album.id, album.name, album.count, album.coverId, album.dateTakenMillis))
+            }
             this.extras = collectionExtras(collection.id)
         }
     }

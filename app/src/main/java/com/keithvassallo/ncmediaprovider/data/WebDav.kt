@@ -141,6 +141,10 @@ object PropfindRequest {
 <d:getlastmodified/><oc:favorite/><nc:hidden/><nc:metadata-photos-original_date_time/>
 <nc:metadata-photos-size/><d:resourcetype/></d:prop></d:propfind>"""
 
+    /** Nextcloud Photos albums: how many files, the cover and the date range (PLAN 7.1). */
+    val ALBUMS = """<?xml version="1.0" encoding="UTF-8"?>
+<d:propfind $NAMESPACES><d:prop><nc:nbItems/><nc:last-photo/><nc:dateRange/></d:prop></d:propfind>"""
+
     /** Folder entries for the folder picker; end-to-end encrypted folders are flagged. */
     val FOLDERS = """<?xml version="1.0" encoding="UTF-8"?>
 <d:propfind $NAMESPACES><d:prop><d:resourcetype/><oc:fileid/><nc:is-encrypted/></d:prop></d:propfind>"""
@@ -244,6 +248,25 @@ object MultistatusParser {
                 isFolder = key(DAV, "resourcetype") + "/collection" in props,
                 fileId = props[key(OC, "fileid")]?.takeIf(String::isNotEmpty),
                 isEncrypted = props[key(NC, "is-encrypted")] == "1",
+            )
+        }
+    }
+
+    /** The albums in a Photos `albums` or `sharedalbums` listing; the listed collection itself is skipped. */
+    fun parseAlbums(input: InputStream, isShared: Boolean): List<PhotosAlbumEntry> = ArrayList<PhotosAlbumEntry>().also { albums ->
+        var first = true
+        parseResponses(input) { href, props ->
+            // The first response is the albums collection itself.
+            if (first) {
+                first = false
+                return@parseResponses
+            }
+            albums += PhotosAlbumEntry(
+                href = href,
+                itemCount = props[key(NC, "nbItems")]?.toIntOrNull() ?: 0,
+                lastPhotoId = props[key(NC, "last-photo")]?.takeIf { it.isNotEmpty() && it != "-1" },
+                dateRange = props[key(NC, "dateRange")].orEmpty(),
+                isShared = isShared,
             )
         }
     }

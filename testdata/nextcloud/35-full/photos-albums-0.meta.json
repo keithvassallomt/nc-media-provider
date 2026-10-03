@@ -1,10 +1,10 @@
 {
  "method": "PROPFIND",
- "path": "/remote.php/dav/photos/alice/albums",
+ "path": "/remote.php/dav/photos/alice/albums/Holiday/",
  "status": 207,
- "seconds": 0.4,
+ "seconds": 0.34,
  "headers": {
-  "Date": "Sat, 03 Oct 2026 07:59:29 GMT",
+  "Date": "Sat, 03 Oct 2026 07:59:30 GMT",
   "Server": "Apache/2.4.68 (Debian)",
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "SAMEORIGIN",
@@ -12,13 +12,13 @@
   "X-Robots-Tag": "noindex, nofollow",
   "Referrer-Policy": "no-referrer",
   "X-Powered-By": "PHP/8.5.11",
-  "Set-Cookie": "ocyxr4s3f621=0087042e6a28c133002c178032864da0; path=/; HttpOnly; SameSite=Lax",
+  "Set-Cookie": "ocyxr4s3f621=bd76370bfaf33d922664c4d52a389cfd; path=/; HttpOnly; SameSite=Lax",
   "Content-Security-Policy": "default-src 'none';",
   "X-User-Id": "alice",
   "Vary": "Brief,Prefer",
   "DAV": "1, 3, extended-mkcol, access-control, calendarserver-principal-property-search, nc-paginate, nextcloud-checksum-update, nc-calendar-search, nc-enable-birthday-calendar, 2",
-  "X-Request-Id": "B57t7IWtrLTpyGxTm3Bm",
-  "Content-Length": "779",
+  "X-Request-Id": "WEfpYsT33dk0ixs8DxIg",
+  "Content-Length": "3105",
   "Connection": "close",
   "Content-Type": "application/xml; charset=utf-8"
  }

@@ -347,6 +347,72 @@ class LibraryStoreTest {
         assertEquals(1_000L, unreadable.dateTakenMillis)
     }
 
+    private fun albumItem(albumId: String, id: Int, date: Long = 5_000L) = AlbumItem(
+        albumId, "$id", "/remote.php/dav/photos/alice/albums/$albumId/$id-$id.jpg", "e$id", "$id.jpg", "image/jpeg", 10, date, date, 0, 0, false,
+    )
+
+    @Test
+    fun `albums show library rows and album-only files, and only albums with something to show`() {
+        store.commit((1..3).map(::item), complete = true)
+        val trip = Album("nc-album-trip", "/remote.php/dav/photos/alice/albums/Trip/", "Trip", false, coverId = "9", signature = "s1")
+        val empty = Album("nc-album-empty", "/remote.php/dav/photos/alice/albums/Empty/", "Empty", false, coverId = null, signature = "s0")
+        assertTrue(store.saveAlbums(listOf(trip, empty), mapOf(trip.id to listOf(albumItem(trip.id, 1), albumItem(trip.id, 9)), empty.id to emptyList())))
+
+        val shown = store.pickerAlbums().single()
+        assertEquals(Triple("Trip", 2, "9"), Triple(shown.name, shown.count, shown.coverId))
+        val page = store.albumPage(trip.id, null, 1)
+        assertEquals(listOf("1"), page.items.map(MediaItem::id))
+        assertEquals("/f/1.jpg", page.items.single().href)
+        val rest = store.albumPage(trip.id, page.nextPageToken, 1)
+        assertEquals(listOf("9"), rest.items.map(MediaItem::id))
+        assertEquals(albumItem(trip.id, 9).href, store.albumOnlyItem("9")!!.href)
+        assertNull(store.albumOnlyItem("2"))
+
+        // The same listing again changes nothing; a removed album takes its files.
+        assertFalse(store.saveAlbums(listOf(trip, empty), mapOf(trip.id to listOf(albumItem(trip.id, 1), albumItem(trip.id, 9)))))
+        assertTrue(store.saveAlbums(listOf(empty), emptyMap()))
+        assertTrue(store.pickerAlbums().isEmpty())
+        assertNull(store.albumOnlyItem("9"))
+        assertTrue(store.clearAlbums())
+        assertTrue(store.albums().isEmpty())
+        assertFalse(store.clearAlbums())
+    }
+
+    @Test
+    fun `a file only an album holds joins the library once, and folder listings leave it alone`() {
+        store.commit((1..3).map { inFolder(it, "/a/") }, complete = true)
+        val trip = Album("nc-album-trip", "/remote.php/dav/photos/alice/albums/Trip/", "Trip", false, coverId = null, signature = "s1")
+        val other = Album("nc-album-other", "/remote.php/dav/photos/alice/sharedalbums/Other (bob)/", "Other (bob)", true, coverId = null, signature = "s1")
+        store.saveAlbums(
+            listOf(trip, other),
+            mapOf(trip.id to listOf(albumItem(trip.id, 1), albumItem(trip.id, 9)), other.id to listOf(albumItem(other.id, 9))),
+        )
+        assertTrue(store.applyAlbumRows())
+        assertEquals(setOf("1", "2", "3", "9"), allMedia(since = null).map(MediaItem::id).toSet())
+        assertTrue(Albums.isAlbumPath(store.media("9")!!.href))
+        assertEquals("/dav/a/1.jpg", store.media("1")!!.href)
+        assertFalse(store.applyAlbumRows())
+
+        // A full listing of the folders doesn't delete it; a folder listing that finds it there takes it over.
+        assertFalse(store.commit((1..3).map { inFolder(it, "/a/") }, complete = true))
+        assertTrue(store.commitFolders(mapOf("/b/" to listOf(inFolder(9, "/b/"))), emptySet()))
+        assertEquals("/dav/b/9.jpg", store.media("9")!!.href)
+        assertFalse(store.state().duplicatePaths)
+        assertFalse(store.applyAlbumRows())
+
+        // Gone from the folders but still in an album: back under the album path.
+        store.commit((1..3).map { inFolder(it, "/a/") }, complete = true)
+        assertTrue(store.applyAlbumRows())
+        assertTrue(Albums.isAlbumPath(store.media("9")!!.href))
+        assertTrue(store.deletedPage(store.state().generation - 1, null, 10).items.isEmpty())
+
+        // Out of every album: out of the library.
+        store.saveAlbums(listOf(trip, other), mapOf(trip.id to listOf(albumItem(trip.id, 1)), other.id to emptyList()))
+        assertTrue(store.applyAlbumRows())
+        assertNull(store.media("9"))
+        assertEquals(listOf("9"), store.deletedPage(store.state().generation - 1, null, 10).items)
+    }
+
     @Test
     fun `state survives a new store on the same database, and a reset starts over`() {
         store.commit((1..3).map(::item), complete = true)

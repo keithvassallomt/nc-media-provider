@@ -172,6 +172,35 @@ class NextcloudClientIntegrationTest {
     }
 
     @Test
+    fun `albums list, and their files open through the album, previews through Photos`() {
+        // Read-only, so it is also safe against a real server.
+        val albums = client.listAlbums(account)
+        assumeTrue("Photos app not available", albums != null)
+        for (album in albums!!) {
+            val files = client.listDirectFiles(account, album.href, listOf("image/", "video/"))
+            assertTrue(album.name, files.all { Albums.isAlbumPath(it.href) })
+            val photo = files.firstOrNull { it.mimeType == "image/jpeg" } ?: continue
+            val preview = File.createTempFile("album-preview", ".jpg").apply { deleteOnExit() }
+            client.downloadPreview(account, photo.fileId, 256, preview, null, viaPhotos = true)
+            assertEquals(0xFF.toByte(), preview.readBytes()[0])
+            val original = File.createTempFile("album-original", ".jpg").apply { deleteOnExit() }
+            client.downloadFile(account, photo.href, original, null)
+            assertEquals(photo.sizeBytes, original.length())
+            assertEquals(16, client.fetchRange(account, photo.href, photo.etag, 0, 16).size)
+        }
+        // The test servers' "Road trip": bob shares it, and one photo is only in the album, where
+        // core's preview endpoint can't see it.
+        val shared = albums.firstOrNull { it.isShared && it.name == "Road trip (bob)" } ?: return
+        val albumOnly = client.listDirectFiles(account, shared.href, listOf("image/")).single { it.fileName.endsWith("-bob-only.jpg") }
+        try {
+            client.downloadPreview(account, albumOnly.fileId, 256, File.createTempFile("core", ".jpg").apply { deleteOnExit() }, null)
+            fail("core's preview endpoint served a file shared only through an album")
+        } catch (error: NextcloudHttpException) {
+            assertEquals(404, error.statusCode)
+        }
+    }
+
+    @Test
     fun `an app password checks for a wipe and can be revoked`() {
         // Nextcloud's own endpoint turns the test password into an app password.
         val url = "${account.baseUrl.trimEnd('/')}/ocs/v2.php/core/getapppassword?format=json"

@@ -112,6 +112,32 @@ class NextcloudClient {
         davSearch(account, SearchRequest.markers(account.userId, folders)) { MultistatusParser.parseEntries(it) }
             .filterNot(DavEntry::isFolder)
 
+    /**
+     * The user's own Nextcloud Photos albums and those shared with them (PLAN 7.1), or null when
+     * the Photos app isn't there for this user. An album's files come from [listDirectFiles] on its href.
+     */
+    fun listAlbums(account: NextcloudAccount): List<PhotosAlbumEntry>? {
+        val albums = ArrayList<PhotosAlbumEntry>()
+        for ((collection, shared) in listOf("albums" to false, "sharedalbums" to true)) {
+            val url = account.server().newBuilder()
+                .addPathSegments("remote.php/dav/photos")
+                .addPathSegment(account.userId)
+                .addPathSegment(collection)
+                .addPathSegment("")
+                .build()
+            val request = Request.Builder().url(url).method("PROPFIND", PropfindRequest.ALBUMS.toRequestBody(XML)).header("Depth", "1")
+            execute(request, account, SEARCH_TIMEOUT_SECONDS).use { response ->
+                when {
+                    // No Photos app, or an older one without shared albums: what was found stands.
+                    response.code == 404 || response.code == 405 || response.code == 501 -> return if (shared) albums else null
+                    response.code != 207 -> throw response.toException()
+                    else -> albums += MultistatusParser.parseAlbums(response.body.byteStream(), shared)
+                }
+            }
+        }
+        return albums
+    }
+
     /** The files directly inside one folder (a depth-1 PROPFIND), whose MIME type starts with one of [mimePrefixes]. */
     fun listDirectFiles(account: NextcloudAccount, folderHref: String, mimePrefixes: List<String>): List<RemoteFile> {
         val url = account.server().resolve(folderHref) ?: throw IOException("Unusable folder path from the server")
@@ -145,7 +171,9 @@ class NextcloudClient {
         val request = Request.Builder()
             .url(url)
             .header("Range", "bytes=$offset-${offset + length - 1}")
-            .apply { if (etag.isNotEmpty()) header("If-Match", "\"$etag\"") }
+            // Photos' album files give their etag without quotes, and the server compares the
+            // header with it as it is (PLAN 7.1): quoted, every read through an album failed with 412.
+            .apply { if (etag.isNotEmpty()) header("If-Match", if (Albums.isAlbumPath(href)) etag else "\"$etag\"") }
         return execute(request, account, RANGE_TIMEOUT_SECONDS).use { response ->
             when (response.code) {
                 206 -> response.body.bytes()
@@ -302,22 +330,37 @@ class NextcloudClient {
     }
 
     /** Server-rendered preview, already rotated, cropped to cover a [sizePx] square. */
+    /**
+     * A preview of the file with [fileId]. [viaPhotos] uses the Photos app's endpoint, the one that
+     * can see files shared only through an album (PLAN 7.1; core's answers 404). It fits the image
+     * inside the box, where core's covers it.
+     */
     fun downloadPreview(
         account: NextcloudAccount,
         fileId: String,
         sizePx: Int,
         destination: File,
         cancellationSignal: CancellationSignal?,
+        viaPhotos: Boolean = false,
     ) {
-        val url = account.server().newBuilder()
-            .addPathSegments("index.php/core/preview")
-            .addQueryParameter("fileId", fileId)
-            .addQueryParameter("x", sizePx.toString())
-            .addQueryParameter("y", sizePx.toString())
-            .addQueryParameter("a", "1")
-            .addQueryParameter("mode", "cover")
-            .addQueryParameter("forceIcon", "0")
-            .build()
+        val url = if (viaPhotos) {
+            account.server().newBuilder()
+                .addPathSegments("index.php/apps/photos/api/v1/preview")
+                .addPathSegment(fileId)
+                .addQueryParameter("x", sizePx.toString())
+                .addQueryParameter("y", sizePx.toString())
+                .build()
+        } else {
+            account.server().newBuilder()
+                .addPathSegments("index.php/core/preview")
+                .addQueryParameter("fileId", fileId)
+                .addQueryParameter("x", sizePx.toString())
+                .addQueryParameter("y", sizePx.toString())
+                .addQueryParameter("a", "1")
+                .addQueryParameter("mode", "cover")
+                .addQueryParameter("forceIcon", "0")
+                .build()
+        }
         download(Request.Builder().url(url).header("Accept", "image/*"), account, destination, cancellationSignal, PREVIEW_TIMEOUT_SECONDS)
     }
 

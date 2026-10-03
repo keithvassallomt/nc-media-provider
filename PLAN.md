@@ -389,18 +389,25 @@ WebDAV still decides what's in the library. Memories only overrides, by fileId, 
 
 ### Phase 7: Albums
 
-**7.1 Photos albums.**
+**7.1 Photos albums.** Built: each sync lists `albums` and `sharedalbums` under `remote.php/dav/photos/<user>/` (one PROPFIND each), and lists an album's files again when Photos' count, cover or date range for it changes, or with a full listing. A file in the library is shown with its library row (Memories' date, the phone's copy, live-photo videos still hidden). A file only an album holds, as in an album someone shared, joins the library under its album path, once however many albums hold it (Keith's decision, 2026-10-03): both pickers open an album's photo only if the main sync returned it, so this is the only way such photos can be picked, and they also show in the main grid. Nothing changes on the server. Such files get thumbnails from Photos' preview endpoint and originals through the album path; folder listings leave their rows alone, and a file the folders take over moves to its folder row. Album IDs are `nc-album-` and a hash of the album's path. On the test servers a shared album with a photo the user can reach only through the album passes: core's preview endpoint returns 404 for it, Photos' serves it, and downloads and Range reads work through the album path once the etag in `If-Match` is sent without quotes (Photos' album files give it bare; quoted, every read failed with 412). Keith's server: one album, "Landscapes", 517 photos, all in the library.
 
 - Read the user's own albums and shared albums from Nextcloud Photos. If the Photos app is disabled, hide albums.
 - Prefix album IDs, so none can collide with names the picker reserves (Favorites, Camera and similar).
 - Every album needs a cover image, which the new picker requires. Empty albums are skipped.
 - Album contents come from listing the album folder.
 - Shared-album thumbnails need the Photos preview endpoint, because the core one returns 404 for files outside the user's own folders.
-- Check on a device how the picker handles album photos that sit outside the selected folders.
+- Check on a device how the picker handles album photos that sit outside the selected folders. Answered from the Android 17 source instead (below): it can't open them unless the main sync returns them.
 
-**7.2 Memories albums** need no separate path if Phase 0.2 confirms they're the same as Photos albums.
+What the pickers need (MediaProvider source, `android17-release`):
 
-**7.3 Stretch: People and other categories.** These use faces from Recognize or Memories, through the API 36 categories feature. The picker only shows them when certain system flags are on, so check the Android 17 builds before building this.
+- Both read the album list live from `onQueryAlbums` each time; nothing is cached. The older picker (GrapheneOS) ignores the count and date; the newer one throws on a null cover or name, which loses every cloud album, so every album needs both.
+- An album's contents are re-synced in full each time it opens (older picker) or once per picker session (newer), through `onQueryMedia` with `EXTRA_ALBUM_ID`, which must be listed in the honoured args or the sync fails.
+- An album item must also come through the main sync: the newer picker joins album rows to the main table and hides the rest; the older shows them but can't open them.
+- Favorites and Videos are built from the main sync's favourite flag and MIME types.
+
+**7.2 Memories albums** need no separate path if Phase 0.2 confirms they're the same as Photos albums. Confirmed in Phase 0.2: Memories 9 lists the same albums as Photos, so 7.1 covers them.
+
+**7.3 Stretch: People and other categories.** These use faces from Recognize or Memories, through the API 36 categories feature. The picker only shows them when certain system flags are on, so check the Android 17 builds before building this. Checked: only the newer picker uses categories, and only when `mediaprovider/enable_modern_picker` is on (default off in AOSP; GrapheneOS still routes the picker to MediaProvider's older one, though Keith's phone has the search and category flags on). A provider declares them with `onGetCapabilities` and serves `onQueryMediaCategories`, `onQueryMediaSets` and `onQueryMediaInMediaSet`, whose items must also come through the main sync. Testing needs the stock Pixel, or `enable_modern_picker` switched on for a test on Keith's phone. Not built.
 
 ### Phase 8: Robustness and offline
 

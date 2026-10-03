@@ -209,6 +209,17 @@ def main():
                                    album_props, {"Depth": "1", "Content-Type": "text/xml", "Accept": "*/*"})
         count = len(ET.fromstring(data).findall("d:response", NS)) - 1 if st == 207 else None
         s["photos_albums"][kind] = {"http": st, "count": count}
+        # Each album's files, with the properties the app's listing asks for (PLAN 7.1).
+        if st == 207:
+            hrefs = [r.findtext("d:href", namespaces=NS) for r in ET.fromstring(data).findall("d:response", NS)][1:]
+            file_props = ('<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" '
+                          'xmlns:nc="http://nextcloud.org/ns"><d:prop>' + "".join(f"<{x}/>" for x in PROPS) +
+                          "<d:resourcetype/></d:prop></d:propfind>")
+            for i, href in enumerate(hrefs):
+                ast, _, adata, _ = p.request(f"photos-{kind}-{i}", href, "PROPFIND", file_props,
+                                             {"Depth": "1", "Content-Type": "text/xml", "Accept": "*/*"})
+                files = len(ET.fromstring(adata).findall("d:response", NS)) - 1 if ast == 207 else None
+                s["photos_albums"][kind].setdefault("files", []).append({"http": ast, "count": files})
 
     print(json.dumps(s, indent=1))
     print(f"raw responses: {out}", file=sys.stderr)
