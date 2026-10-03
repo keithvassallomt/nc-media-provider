@@ -349,6 +349,12 @@ A keyboard showing the 30 newest Nextcloud photos, inserting the tapped one thro
 
 Keith opened the picker's Albums tab: `onQueryAlbums` returned the one album, "Landscapes"; opening it ran MediaProvider's album sync (`SyncAddAlbum`), which asked for 1,000 rows a page and got the 517 photos as 500 and 17; the photo he picked opened (2 MB in 0.3 s). The picker on this phone is still MediaProvider's own (`PhotoPickerActivity`), though `com.android.photopicker` is installed and the search and category flags are on.
 
+### People as albums in the older picker
+
+With People built (PLAN 7.3), the sync read 152 face groups from Memories, 133 of them named. The first run listed 151 groups' photos in 134 s and stopped at its 2-minute budget; the next sync listed the last one in 2 s. The older picker has no categories, so `onQueryAlbums` returned 134 albums: "Landscapes" and the 133 named people, with Memories' face crops as covers. A person with 271 photos synced in one page, one with 522 in two (500 and 22), and the photo Keith picked from a person opened (2.4 MB in 0.4 s).
+
+The picker first logged that 271-photo person with an item count of 2,102,161,456. MediaProvider wraps a provider's album cursor (`AlbumsCursorWrapper`) to map its columns to `AlbumColumns.ALL_PROJECTION`, but maps by name only in `getString` and `getType`; `getLong` and `getInt` read by position, so with our columns in another order the count came from the date column. The picker hides album counts, so nothing showed. The app now sends album columns in AOSP's order (f8e7516), and the count reads 271.
+
 ### The newer picker can't be switched on over adb
 
 To try People (PLAN 7.3) on this phone, `adb shell device_config override mediaprovider enable_modern_picker true` was refused: `SecurityException: Permission denial for flag 'mediaprovider/enable_modern_picker'; allowlist permission granted, but must add flag to the allowlist`. The shell can write only allow-listed device_config flags; `allowed_cloud_providers` and `cloud_media_feature_enabled` are on that list, this one isn't. Nothing changed (the flag still reads `null`, and `PICK_IMAGES` still resolves to MediaProvider's `PhotoPickerActivity`). Categories also check this flag inside the picker, so enabling `com.android.photopicker`'s activities with `pm` wouldn't bring them.
