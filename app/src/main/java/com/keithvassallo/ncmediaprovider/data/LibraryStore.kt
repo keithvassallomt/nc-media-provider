@@ -157,6 +157,29 @@ class LibraryStore(
         return Page(rows, rows.takeIf { it.size == pageSize }?.last()?.id)
     }
 
+    /**
+     * The photo keyboard's grid (PLAN 4.8): items of [mimePrefix] older than the keyset position
+     * ([date], [id]), newest first, or with [newer] the next newer ones, oldest first.
+     */
+    fun keyboardPage(source: KeyboardSource, mimePrefix: String, date: Long, id: String, newer: Boolean, limit: Int): List<MediaItem> = when (source) {
+        KeyboardSource.Library, KeyboardSource.Favourites -> {
+            val favourites = source == KeyboardSource.Favourites
+            if (newer) dao.keyboardNewer(mimePrefix, favourites, date, id, limit) else dao.keyboardOlder(mimePrefix, favourites, date, id, limit)
+        }
+        is KeyboardSource.Person ->
+            if (newer) dao.personNewer(source.id, mimePrefix, date, id, limit) else dao.personOlder(source.id, mimePrefix, date, id, limit)
+        is KeyboardSource.Album ->
+            KeyboardPages.page(albumContents(source.id).filter { it.mimeType.startsWith(mimePrefix) }, date, id, newer, limit)
+    }
+
+    /** The years [source] has items of [mimePrefix] from, newest first, for the keyboard's year rail. */
+    fun keyboardYears(source: KeyboardSource, mimePrefix: String, zone: java.time.ZoneId): List<Int> = when (source) {
+        KeyboardSource.Library -> dao.keyboardYears(mimePrefix, false)
+        KeyboardSource.Favourites -> dao.keyboardYears(mimePrefix, true)
+        is KeyboardSource.Person -> dao.personYears(source.id, mimePrefix)
+        is KeyboardSource.Album -> KeyboardPages.years(albumContents(source.id).filter { it.mimeType.startsWith(mimePrefix) }, zone)
+    }
+
     /** A file that only an album holds, as a row, so it can be opened. */
     fun albumOnlyItem(id: String): MediaItem? = dao.albumItem(id)?.let { with(Albums) { it.toMediaItem(state().generation) } }
 

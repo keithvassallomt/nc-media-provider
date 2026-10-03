@@ -2,8 +2,10 @@ package com.keithvassallo.ncmediaprovider.keyboard
 
 import android.content.ClipDescription
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.graphics.Point
 import android.inputmethodservice.InputMethodService
@@ -17,23 +19,38 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import android.widget.ImageView
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.core.content.FileProvider
 import androidx.core.view.inputmethod.EditorInfoCompat
 import androidx.core.view.inputmethod.InputConnectionCompat
 import androidx.core.view.inputmethod.InputContentInfoCompat
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.GridLayoutManager
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.color.MaterialColors
+import com.google.android.material.tabs.TabLayout
 import com.keithvassallo.ncmediaprovider.R
+import com.keithvassallo.ncmediaprovider.data.KeyboardSource
 import com.keithvassallo.ncmediaprovider.data.LibraryRepository
 import com.keithvassallo.ncmediaprovider.data.MediaItem
+import com.keithvassallo.ncmediaprovider.data.PickerAlbum
+import com.keithvassallo.ncmediaprovider.data.PickerPerson
+import com.keithvassallo.ncmediaprovider.databinding.ItemKeyboardAlbumBinding
 import com.keithvassallo.ncmediaprovider.databinding.ItemKeyboardMonthBinding
+import com.keithvassallo.ncmediaprovider.databinding.ItemKeyboardPersonBinding
 import com.keithvassallo.ncmediaprovider.databinding.ItemKeyboardPhotoBinding
+import com.keithvassallo.ncmediaprovider.databinding.ItemKeyboardYearBinding
 import com.keithvassallo.ncmediaprovider.databinding.KeyboardViewBinding
 import com.keithvassallo.ncmediaprovider.share.SendFromNextcloudActivity
 import com.keithvassallo.ncmediaprovider.ui.HomeActivity
 import java.io.File
 import java.io.FileInputStream
+import java.text.NumberFormat
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -41,9 +58,9 @@ import java.util.concurrent.Executors
 
 /**
  * A keyboard that inserts Nextcloud photos (PLAN 4.8), for apps with their own photo grid such as
- * Messenger, which never open the system picker. It browses the library newest first, by month, and
- * inserts the tapped photo through the keyboard content API, the way GIF keyboards work. It never
- * handles text.
+ * Messenger, which never open the system picker. Tabs show recent photos, albums, people and
+ * favourites; photos come by month with a rail of years to jump through, and the tapped one is
+ * inserted through the keyboard content API, the way GIF keyboards work. It never handles text.
  */
 class PhotoKeyboardService : InputMethodService() {
     private val repository by lazy { LibraryRepository.get(this) }
@@ -53,13 +70,47 @@ class PhotoKeyboardService : InputMethodService() {
     private val thumbnails = object : LruCache<String, Bitmap>(THUMBNAIL_CACHE_BYTES) {
         override fun sizeOf(key: String, value: Bitmap) = value.allocationByteCount
     }
-    private val rows = ArrayList<Row>()
-    private var lastLoaded: MediaItem? = null
-    private var loading = false
-    private var exhausted = false
     private var binding: KeyboardViewBinding? = null
-    private val adapter = PhotoAdapter()
     private val monthFormat = DateTimeFormatter.ofPattern("LLLL yyyy", Locale.getDefault())
+    private var accepting = false
+
+    private var tab = Tab.RECENT
+
+    /** An album or a person opened from its tab. */
+    private var opened: Opened? = null
+
+    /** The grid's photos: the library or favourites from their tabs, or what was opened. */
+    private val source: KeyboardSource?
+        get() = opened?.source ?: when (tab) {
+            Tab.RECENT -> KeyboardSource.Library
+            Tab.FAVOURITES -> KeyboardSource.Favourites
+            else -> null
+        }
+
+    // The grid holds the source from [newest] down to [oldest]; after a jump to a year, newer pages
+    // load as it scrolls up.
+    private val rows = ArrayList<Row>()
+    private var newest: MediaItem? = null
+    private var oldest: MediaItem? = null
+    private var startDate = Long.MAX_VALUE
+    private var olderDone = false
+    private var newerDone = true
+    private var loadingOlder = false
+    private var loadingNewer = false
+
+    /** Bumped whenever what is shown starts over, so pages for something earlier are dropped. */
+    private var generation = 0
+    private val photoAdapter = PhotoAdapter()
+    private var grid: GridLayoutManager? = null
+
+    private var years: List<Int> = emptyList()
+    private var shownYear: Int? = null
+    private val yearAdapter = YearAdapter()
+
+    private var albums: List<PickerAlbum> = emptyList()
+    private var people: List<PickerPerson> = emptyList()
+    private val albumAdapter = AlbumAdapter()
+    private val peopleAdapter = PeopleAdapter()
 
     override fun onCreateInputView(): View {
         // Material views need the app's theme; an input method's own context doesn't carry it.
@@ -68,20 +119,47 @@ class PhotoKeyboardService : InputMethodService() {
         binding = view
         view.backButton.setOnClickListener { if (!switchToPreviousInputMethod()) switchToNextInputMethod(false) }
         view.actionButton.setOnClickListener { onAction() }
-        val grid = GridLayoutManager(themed, COLUMNS).apply {
+        view.setBack.setOnClickListener { closeOpened() }
+
+        Tab.entries.forEach { entry ->
+            view.tabs.addTab(view.tabs.newTab().setIcon(entry.icon).setText(entry.label).setTag(entry), entry == tab)
+        }
+        view.tabs.addOnTabSelectedListener(
+            object : TabLayout.OnTabSelectedListener {
+                override fun onTabSelected(selected: TabLayout.Tab) {
+                    tab = selected.tag as Tab
+                    opened = null
+                    show()
+                }
+
+                override fun onTabUnselected(unselected: TabLayout.Tab) = Unit
+
+                override fun onTabReselected(reselected: TabLayout.Tab) {
+                    if (opened != null) closeOpened() else if (source != null) startGrid(null)
+                }
+            },
+        )
+
+        val layout = GridLayoutManager(themed, COLUMNS).apply {
             spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
                 override fun getSpanSize(position: Int) = if (rows.getOrNull(position) is Row.Month) COLUMNS else 1
             }
         }
-        view.photos.layoutManager = grid
-        view.photos.adapter = adapter
+        grid = layout
+        view.photos.layoutManager = layout
+        view.photos.adapter = photoAdapter
         view.photos.addOnScrollListener(
             object : RecyclerView.OnScrollListener() {
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                    if (grid.findLastVisibleItemPosition() >= rows.size - LOAD_AHEAD) loadMore()
+                    val first = layout.findFirstVisibleItemPosition()
+                    if (layout.findLastVisibleItemPosition() >= rows.size - LOAD_AHEAD) loadOlder()
+                    if (first in 0 until LOAD_AHEAD) loadNewer()
+                    noteShownYear(first)
                 }
             },
         )
+        view.years.layoutManager = LinearLayoutManager(themed)
+        view.years.adapter = yearAdapter
         return view.root
     }
 
@@ -90,7 +168,8 @@ class PhotoKeyboardService : InputMethodService() {
         val accepted = acceptedTypes(info)
         Log.i(TAG, "${info.packageName} accepts from keyboards: ${accepted.ifEmpty { listOf("nothing") }}")
         showState(accepted)
-        if (rows.isEmpty() && repository.isReady) loadMore()
+        // A keyboard opens fresh, at the newest photos, with whatever the last sync brought.
+        if (accepting && !restarting) show()
     }
 
     override fun onDestroy() {
@@ -107,9 +186,15 @@ class PhotoKeyboardService : InputMethodService() {
             !KeyboardFormats.acceptsImages(accepted) -> R.string.keyboard_no_images
             else -> null
         }
-        view.message.visibility = if (message == null) View.GONE else View.VISIBLE
-        view.photos.visibility = if (message == null) View.VISIBLE else View.GONE
-        view.actionButton.visibility = if (message == null) View.GONE else View.VISIBLE
+        accepting = message == null
+        view.tabs.isVisible = accepting
+        view.message.isVisible = !accepting
+        view.actionButton.isVisible = !accepting
+        if (!accepting) {
+            view.gridArea.isVisible = false
+            view.sets.isVisible = false
+            view.setHeader.isVisible = false
+        }
         message?.let(view.message::setText)
         view.actionButton.setText(if (!repository.isReady) R.string.keyboard_open_app else R.string.send_now)
     }
@@ -119,33 +204,207 @@ class PhotoKeyboardService : InputMethodService() {
         startActivity(Intent(this, target).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
-    private fun loadMore() {
-        if (loading || exhausted) return
-        loading = true
-        val after = lastLoaded
+    /** Shows the current tab, or what was opened from it. */
+    private fun show() {
+        val view = binding ?: return
+        if (!accepting) return
+        val current = opened
+        view.setHeader.isVisible = current != null
+        if (current != null) {
+            view.setTitle.text = current.name.ifEmpty { getString(R.string.keyboard_unnamed) }
+            view.setCount.text = photoCount(current.count)
+        }
+        val gridSource = source
+        view.gridArea.isVisible = gridSource != null
+        view.sets.isVisible = gridSource == null
+        showEmpty(null)
+        when {
+            gridSource != null -> {
+                startGrid(null)
+                loadYears(gridSource)
+            }
+            tab == Tab.ALBUMS -> loadAlbums()
+            else -> loadPeople()
+        }
+    }
+
+    private fun closeOpened() {
+        opened = null
+        show()
+    }
+
+    private fun showEmpty(@StringRes text: Int?) {
+        val view = binding ?: return
+        view.message.isVisible = text != null
+        view.actionButton.isVisible = false
+        text?.let(view.message::setText)
+    }
+
+    // The photo grid.
+
+    /** Starts the grid at the newest photo, or at the newest of [year]. */
+    private fun startGrid(year: Int?) {
+        generation++
+        rows.clear()
+        photoAdapter.notifyDataSetChanged()
+        newest = null
+        oldest = null
+        startDate = year?.let { startOf(it + 1) } ?: Long.MAX_VALUE
+        olderDone = false
+        newerDone = year == null
+        loadingOlder = false
+        loadingNewer = false
+        shownYear = year
+        yearAdapter.notifyDataSetChanged()
+        showEmpty(null)
+        loadOlder()
+    }
+
+    private fun loadOlder() {
+        val from = source ?: return
+        if (loadingOlder || olderDone) return
+        loadingOlder = true
+        val run = generation
+        val date = oldest?.dateTakenMillis ?: startDate
+        val id = oldest?.id.orEmpty()
         worker.execute {
-            val page = runCatching { repository.newestPhotos(after, PAGE_SIZE) }.getOrDefault(emptyList())
+            val page = runCatching { repository.keyboardPhotos(from, date, id, newer = false, limit = PAGE_SIZE) }.getOrDefault(emptyList())
             main.post {
-                loading = false
-                if (page.size < PAGE_SIZE) exhausted = true
-                if (page.isEmpty()) return@post
-                val start = rows.size
-                var month = (rows.lastOrNull { it is Row.Photo } as? Row.Photo)?.let { monthOf(it.item) }
-                for (item in page) {
-                    val itemMonth = monthOf(item)
-                    if (itemMonth != month) rows += Row.Month(itemMonth)
-                    month = itemMonth
-                    rows += Row.Photo(item)
+                if (run != generation) return@post
+                loadingOlder = false
+                if (page.size < PAGE_SIZE) olderDone = true
+                if (page.isEmpty()) {
+                    if (rows.isEmpty()) showEmpty(R.string.keyboard_empty)
+                    return@post
                 }
-                lastLoaded = page.last()
-                adapter.notifyItemRangeInserted(start, rows.size - start)
+                if (newest == null) newest = page.first()
+                oldest = page.last()
+                appendRows(page)
             }
         }
     }
 
-    private fun monthOf(item: MediaItem): String =
-        monthFormat.format(Instant.ofEpochMilli(item.dateTakenMillis).atZone(ZoneId.systemDefault()))
-            .replaceFirstChar { it.titlecase(Locale.getDefault()) }
+    private fun loadNewer() {
+        val from = source ?: return
+        val top = newest ?: return
+        if (loadingNewer || newerDone) return
+        loadingNewer = true
+        val run = generation
+        worker.execute {
+            val page = runCatching { repository.keyboardPhotos(from, top.dateTakenMillis, top.id, newer = true, limit = PAGE_SIZE) }.getOrDefault(emptyList())
+            main.post {
+                if (run != generation) return@post
+                loadingNewer = false
+                if (page.size < PAGE_SIZE) newerDone = true
+                if (page.isEmpty()) return@post
+                newest = page.first()
+                prependRows(page)
+            }
+        }
+    }
+
+    private fun appendRows(page: List<MediaItem>) {
+        val start = rows.size
+        var month = (rows.lastOrNull { it is Row.Photo } as? Row.Photo)?.let { monthOf(it.item) }
+        for (item in page) {
+            val itemMonth = monthOf(item)
+            if (itemMonth != month) rows += Row.Month(itemMonth)
+            month = itemMonth
+            rows += Row.Photo(item)
+        }
+        photoAdapter.notifyItemRangeInserted(start, rows.size - start)
+        if (start == 0) noteShownYear(0)
+    }
+
+    /** Newer photos above what is shown, keeping the photos on screen where they are. */
+    private fun prependRows(page: List<MediaItem>) {
+        val layout = grid ?: return
+        val added = ArrayList<Row>()
+        var month: String? = null
+        for (item in page) {
+            val itemMonth = monthOf(item)
+            if (itemMonth != month) added += Row.Month(itemMonth)
+            month = itemMonth
+            added += Row.Photo(item)
+        }
+        val first = layout.findFirstVisibleItemPosition().coerceAtLeast(0)
+        val offset = layout.findViewByPosition(first)?.top ?: 0
+        // The month shown first carries on from the page's last month: one heading is enough.
+        var removed = 0
+        if ((rows.firstOrNull() as? Row.Month)?.label == month) {
+            rows.removeAt(0)
+            photoAdapter.notifyItemRemoved(0)
+            removed = 1
+        }
+        rows.addAll(0, added)
+        photoAdapter.notifyItemRangeInserted(0, added.size)
+        layout.scrollToPositionWithOffset((first - removed).coerceAtLeast(0) + added.size, offset)
+    }
+
+    /** Highlights the year of the photos at the top of the grid. */
+    private fun noteShownYear(first: Int) {
+        if (first < 0) return
+        val item = (first until minOf(rows.size, first + COLUMNS + 1)).firstNotNullOfOrNull { (rows[it] as? Row.Photo)?.item } ?: return
+        val year = Instant.ofEpochMilli(item.dateTakenMillis).atZone(ZoneId.systemDefault()).year
+        if (year == shownYear) return
+        shownYear = year
+        yearAdapter.notifyDataSetChanged()
+        years.indexOf(year).takeIf { it >= 0 }?.let { binding?.years?.scrollToPosition(it) }
+    }
+
+    private fun loadYears(from: KeyboardSource) {
+        val run = generation
+        worker.execute {
+            val found = runCatching { repository.keyboardYears(from) }.getOrDefault(emptyList())
+            main.post {
+                if (run != generation) return@post
+                years = found
+                yearAdapter.notifyDataSetChanged()
+                binding?.years?.isVisible = found.size > 1
+            }
+        }
+    }
+
+    // Albums and people.
+
+    private fun loadAlbums() {
+        val view = binding ?: return
+        view.sets.layoutManager = GridLayoutManager(view.sets.context, ALBUM_COLUMNS)
+        view.sets.adapter = albumAdapter
+        val run = ++generation
+        worker.execute {
+            val found = runCatching { repository.keyboardAlbums() }.getOrDefault(emptyList())
+            main.post {
+                if (run != generation) return@post
+                albums = found
+                albumAdapter.notifyDataSetChanged()
+                showEmpty(if (found.isEmpty()) R.string.keyboard_no_albums else null)
+            }
+        }
+    }
+
+    private fun loadPeople() {
+        val view = binding ?: return
+        view.sets.layoutManager = GridLayoutManager(view.sets.context, PEOPLE_COLUMNS)
+        view.sets.adapter = peopleAdapter
+        val run = ++generation
+        worker.execute {
+            val found = runCatching { repository.keyboardPeople() }.getOrDefault(emptyList())
+            main.post {
+                if (run != generation) return@post
+                people = found
+                peopleAdapter.notifyDataSetChanged()
+                showEmpty(if (found.isEmpty()) R.string.keyboard_no_people else null)
+            }
+        }
+    }
+
+    private fun open(source: KeyboardSource, name: String, count: Int) {
+        opened = Opened(source, name, count)
+        show()
+    }
+
+    // Inserting.
 
     /** Fetches the original, converts it if the app needs another type, and inserts it. */
     private fun insert(item: MediaItem) {
@@ -225,6 +484,41 @@ class PhotoKeyboardService : InputMethodService() {
 
     private fun acceptedTypes(editor: EditorInfo): List<String> = EditorInfoCompat.getContentMimeTypes(editor).toList()
 
+    // Helpers.
+
+    /** A thumbnail, a cover or a face, from the picker's caches; [owner]'s tag guards against reuse. */
+    private fun loadThumbnail(id: String, target: ImageView, owner: View) {
+        owner.tag = id
+        val cached = thumbnails.get(id)
+        target.setImageBitmap(cached)
+        if (cached != null) return
+        thumbnailLoader.execute {
+            val bitmap = runCatching {
+                repository.openPreview(id, Point(THUMBNAIL_PX, THUMBNAIL_PX), true, null, fromPicker = false)
+                    .use { BitmapFactory.decodeFileDescriptor(it.fileDescriptor) }
+            }.getOrNull() ?: return@execute
+            thumbnails.put(id, bitmap)
+            main.post { if (owner.tag == id) target.setImageBitmap(bitmap) }
+        }
+    }
+
+    private fun monthOf(item: MediaItem): String =
+        monthFormat.format(Instant.ofEpochMilli(item.dateTakenMillis).atZone(ZoneId.systemDefault()))
+            .replaceFirstChar { it.titlecase(Locale.getDefault()) }
+
+    private fun startOf(year: Int): Long = LocalDate.of(year, 1, 1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+    private fun photoCount(count: Int): String = resources.getQuantityString(R.plurals.keyboard_photo_count, count, NumberFormat.getIntegerInstance().format(count))
+
+    private enum class Tab(@DrawableRes val icon: Int, @StringRes val label: Int) {
+        RECENT(R.drawable.ic_recent, R.string.keyboard_tab_recent),
+        ALBUMS(R.drawable.ic_albums, R.string.keyboard_tab_albums),
+        PEOPLE(R.drawable.ic_people, R.string.keyboard_tab_people),
+        FAVOURITES(R.drawable.ic_star, R.string.keyboard_tab_favourites),
+    }
+
+    private data class Opened(val source: KeyboardSource, val name: String, val count: Int)
+
     private sealed interface Row {
         data class Month(val label: String) : Row
         data class Photo(val item: MediaItem) : Row
@@ -254,26 +548,83 @@ class PhotoKeyboardService : InputMethodService() {
 
     private inner class PhotoHolder(private val view: ItemKeyboardPhotoBinding) : RecyclerView.ViewHolder(view.root) {
         fun bind(item: MediaItem) {
-            view.root.tag = item.id
             view.root.contentDescription = item.fileName
             view.root.setOnClickListener { insert(item) }
-            val cached = thumbnails.get(item.id)
-            view.thumbnail.setImageBitmap(cached)
-            if (cached != null) return
-            thumbnailLoader.execute {
-                val bitmap = runCatching {
-                    repository.openPreview(item.id, Point(THUMBNAIL_PX, THUMBNAIL_PX), true, null)
-                        .use { BitmapFactory.decodeFileDescriptor(it.fileDescriptor) }
-                }.getOrNull() ?: return@execute
-                thumbnails.put(item.id, bitmap)
-                main.post { if (view.root.tag == item.id) view.thumbnail.setImageBitmap(bitmap) }
-            }
+            loadThumbnail(item.id, view.thumbnail, view.root)
+        }
+    }
+
+    private inner class YearAdapter : RecyclerView.Adapter<YearHolder>() {
+        override fun getItemCount() = years.size
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
+            YearHolder(ItemKeyboardYearBinding.inflate(LayoutInflater.from(parent.context), parent, false))
+
+        override fun onBindViewHolder(holder: YearHolder, position: Int) = holder.bind(years[position])
+    }
+
+    private inner class YearHolder(private val view: ItemKeyboardYearBinding) : RecyclerView.ViewHolder(view.root) {
+        fun bind(year: Int) {
+            val selected = year == shownYear
+            view.year.text = getString(R.string.keyboard_year_short, year % 100)
+            view.year.contentDescription = getString(R.string.keyboard_jump_to_year, year)
+            view.year.isSelected = selected
+            view.year.backgroundTintList = ColorStateList.valueOf(
+                if (selected) MaterialColors.getColor(view.year, com.google.android.material.R.attr.colorSecondaryContainer) else Color.TRANSPARENT,
+            )
+            view.year.setTextColor(
+                MaterialColors.getColor(
+                    view.year,
+                    if (selected) com.google.android.material.R.attr.colorOnSecondaryContainer else com.google.android.material.R.attr.colorOnSurfaceVariant,
+                ),
+            )
+            view.year.setOnClickListener { startGrid(year) }
+        }
+    }
+
+    private inner class AlbumAdapter : RecyclerView.Adapter<AlbumHolder>() {
+        override fun getItemCount() = albums.size
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
+            AlbumHolder(ItemKeyboardAlbumBinding.inflate(LayoutInflater.from(parent.context), parent, false))
+
+        override fun onBindViewHolder(holder: AlbumHolder, position: Int) = holder.bind(albums[position])
+    }
+
+    private inner class AlbumHolder(private val view: ItemKeyboardAlbumBinding) : RecyclerView.ViewHolder(view.root) {
+        fun bind(album: PickerAlbum) {
+            view.name.text = album.name
+            view.count.text = NumberFormat.getIntegerInstance().format(album.count)
+            view.root.contentDescription = album.name + ", " + photoCount(album.count)
+            view.root.setOnClickListener { open(KeyboardSource.Album(album.id), album.name, album.count) }
+            loadThumbnail(album.coverId, view.cover, view.root)
+        }
+    }
+
+    private inner class PeopleAdapter : RecyclerView.Adapter<PersonHolder>() {
+        override fun getItemCount() = people.size
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
+            PersonHolder(ItemKeyboardPersonBinding.inflate(LayoutInflater.from(parent.context), parent, false))
+
+        override fun onBindViewHolder(holder: PersonHolder, position: Int) = holder.bind(people[position])
+    }
+
+    private inner class PersonHolder(private val view: ItemKeyboardPersonBinding) : RecyclerView.ViewHolder(view.root) {
+        fun bind(person: PickerPerson) {
+            view.name.text = person.name
+            view.count.text = NumberFormat.getIntegerInstance().format(person.count)
+            view.root.contentDescription = person.name.ifEmpty { getString(R.string.keyboard_unnamed) } + ", " + photoCount(person.count)
+            view.root.setOnClickListener { open(KeyboardSource.Person(person.id), person.name, person.count) }
+            loadThumbnail(person.faceCoverId, view.face, view.root)
         }
     }
 
     private companion object {
         const val TAG = "PhotoKeyboard"
         const val COLUMNS = 4
+        const val ALBUM_COLUMNS = 3
+        const val PEOPLE_COLUMNS = 4
         const val PAGE_SIZE = 120
         const val LOAD_AHEAD = 24
         const val MONTH = 0

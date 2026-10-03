@@ -144,6 +144,28 @@ interface LibraryDao {
     )
     fun newestPage(mimePrefix: String, beforeDate: Long, beforeId: String, limit: Int): List<MediaItem>
 
+    /** The photo keyboard's grid (PLAN 4.8): older than the keyset position, newest first; favourites only when asked. */
+    @Query(
+        "SELECT * FROM media WHERE mimeType LIKE :mimePrefix || '%' AND isLiveVideo = 0 AND (:favouritesOnly = 0 OR isFavorite = 1) " +
+            "AND (dateTakenMillis < :date OR (dateTakenMillis = :date AND id < :id)) " +
+            "ORDER BY dateTakenMillis DESC, id DESC LIMIT :limit",
+    )
+    fun keyboardOlder(mimePrefix: String, favouritesOnly: Boolean, date: Long, id: String, limit: Int): List<MediaItem>
+
+    /** The next newer page after a jump to a year, oldest first. */
+    @Query(
+        "SELECT * FROM media WHERE mimeType LIKE :mimePrefix || '%' AND isLiveVideo = 0 AND (:favouritesOnly = 0 OR isFavorite = 1) " +
+            "AND (dateTakenMillis > :date OR (dateTakenMillis = :date AND id > :id)) " +
+            "ORDER BY dateTakenMillis ASC, id ASC LIMIT :limit",
+    )
+    fun keyboardNewer(mimePrefix: String, favouritesOnly: Boolean, date: Long, id: String, limit: Int): List<MediaItem>
+
+    @Query(
+        "SELECT DISTINCT CAST(strftime('%Y', dateTakenMillis / 1000, 'unixepoch', 'localtime') AS INTEGER) AS year FROM media " +
+            "WHERE mimeType LIKE :mimePrefix || '%' AND isLiveVideo = 0 AND (:favouritesOnly = 0 OR isFavorite = 1) ORDER BY year DESC",
+    )
+    fun keyboardYears(mimePrefix: String, favouritesOnly: Boolean): List<Int>
+
     @Query("SELECT * FROM folder")
     fun folders(): List<FolderEtag>
 
@@ -262,6 +284,30 @@ interface LibraryDao {
             "WHERE i.personId = :personId AND m.isLiveVideo = 0 AND m.id > :afterId ORDER BY m.id LIMIT :limit",
     )
     fun personMedia(personId: String, afterId: String, limit: Int): List<MediaItem>
+
+    /** One person's photos for the keyboard, older than the keyset position, newest first. */
+    @Query(
+        "SELECT m.* FROM media m JOIN person_item i ON i.id = m.id " +
+            "WHERE i.personId = :personId AND m.mimeType LIKE :mimePrefix || '%' AND m.isLiveVideo = 0 " +
+            "AND (m.dateTakenMillis < :date OR (m.dateTakenMillis = :date AND m.id < :id)) " +
+            "ORDER BY m.dateTakenMillis DESC, m.id DESC LIMIT :limit",
+    )
+    fun personOlder(personId: String, mimePrefix: String, date: Long, id: String, limit: Int): List<MediaItem>
+
+    @Query(
+        "SELECT m.* FROM media m JOIN person_item i ON i.id = m.id " +
+            "WHERE i.personId = :personId AND m.mimeType LIKE :mimePrefix || '%' AND m.isLiveVideo = 0 " +
+            "AND (m.dateTakenMillis > :date OR (m.dateTakenMillis = :date AND m.id > :id)) " +
+            "ORDER BY m.dateTakenMillis ASC, m.id ASC LIMIT :limit",
+    )
+    fun personNewer(personId: String, mimePrefix: String, date: Long, id: String, limit: Int): List<MediaItem>
+
+    @Query(
+        "SELECT DISTINCT CAST(strftime('%Y', m.dateTakenMillis / 1000, 'unixepoch', 'localtime') AS INTEGER) AS year " +
+            "FROM media m JOIN person_item i ON i.id = m.id " +
+            "WHERE i.personId = :personId AND m.mimeType LIKE :mimePrefix || '%' AND m.isLiveVideo = 0 ORDER BY year DESC",
+    )
+    fun personYears(personId: String, mimePrefix: String): List<Int>
 
     @Query("SELECT * FROM memories_day")
     fun memoriesDays(): List<MemoriesDay>

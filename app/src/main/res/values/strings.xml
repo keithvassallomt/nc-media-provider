@@ -60,8 +60,21 @@
     <string name="send_explanation">Some apps, such as Messenger, show their own photo grid instead of Android’s picker, so your Nextcloud photos can’t appear there. Use Send from Nextcloud instead: long-press this app’s icon, or add its Quick Settings tile. Pick your photos, then choose the app to send them to.</string>
     <string name="send_now">Send from Nextcloud</string>
     <string name="keyboard_label">Nextcloud photos</string>
-    <string name="keyboard_title">Nextcloud photos</string>
-    <string name="keyboard_back">Keyboard</string>
+    <string name="keyboard_back">Back to your usual keyboard</string>
+    <string name="keyboard_tab_recent">Recent</string>
+    <string name="keyboard_tab_albums">Albums</string>
+    <string name="keyboard_tab_people">People</string>
+    <string name="keyboard_tab_favourites">Favourites</string>
+    <string name="keyboard_empty">No photos here.</string>
+    <string name="keyboard_no_albums">No albums yet. Albums you make in Nextcloud Photos or Memories show here.</string>
+    <string name="keyboard_no_people">No people yet. They come from the faces Memories has found.</string>
+    <string name="keyboard_unnamed">Unnamed</string>
+    <string name="keyboard_jump_to_year">Jump to %1$d</string>
+    <string name="keyboard_year_short">’%1$02d</string>
+    <plurals name="keyboard_photo_count">
+        <item quantity="one">%1$s photo</item>
+        <item quantity="other">%1$s photos</item>
+    </plurals>
     <string name="keyboard_not_ready">Sign in to NC Media Provider and choose your folders first.</string>
     <string name="keyboard_open_app">Open NC Media Provider</string>
     <string name="keyboard_no_images">This app doesn’t accept photos from keyboards. Send them with Send from Nextcloud instead.</string>

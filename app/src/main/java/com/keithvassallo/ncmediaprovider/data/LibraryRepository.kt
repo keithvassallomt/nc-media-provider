@@ -177,9 +177,26 @@ class LibraryRepository private constructor(context: Context) {
         return client.fileUrl(account, item.href)?.let { Uri.parse(it.toString()) }
     }
 
-    /** A page of photos for the keyboard, newest taken first (PLAN 4.8). Call off the main thread. */
-    fun newestPhotos(after: MediaItem?, limit: Int): List<MediaItem> =
-        if (hasAccount) store.newestPage(IMAGE_PREFIX, after, limit) else emptyList()
+    // The photo keyboard (PLAN 4.8). Call these off the main thread.
+
+    /**
+     * A page of [source]'s photos older than the keyset position ([date], [id]), newest first; with
+     * [newer], the next newer ones, newest first too.
+     */
+    fun keyboardPhotos(source: KeyboardSource, date: Long, id: String, newer: Boolean, limit: Int): List<MediaItem> {
+        if (!hasAccount) return emptyList()
+        val page = store.keyboardPage(source, IMAGE_PREFIX, date, id, newer, limit)
+        return if (newer) page.asReversed() else page
+    }
+
+    /** The years [source] has photos from, newest first. */
+    fun keyboardYears(source: KeyboardSource): List<Int> =
+        if (hasAccount) store.keyboardYears(source, IMAGE_PREFIX, java.time.ZoneId.systemDefault()) else emptyList()
+
+    fun keyboardAlbums(): List<PickerAlbum> = if (hasAccount) store.pickerAlbums() else emptyList()
+
+    /** People with photos in the library, named first, as the newer picker shows them (PLAN 7.3). */
+    fun keyboardPeople(): List<PickerPerson> = if (hasAccount) store.pickerPeople() else emptyList()
 
     // Thumbnail pre-cache (PLAN 5.6).
 
@@ -1319,7 +1336,7 @@ class LibraryRepository private constructor(context: Context) {
     /**
      * Thumbnails come from the server's preview endpoint. A full-size preview gets the original
      * file, as PLAN 1.4 specifies; whether the picker then rotates it twice is checked on a device
-     * in 5.1.
+     * in 5.1. Only the picker's requests ([fromPicker]) teach the pre-cache its size (PLAN 5.6).
      */
     @Throws(FileNotFoundException::class)
     fun openPreview(
@@ -1327,6 +1344,7 @@ class LibraryRepository private constructor(context: Context) {
         requestedSize: Point,
         thumbnailOnly: Boolean,
         cancellationSignal: CancellationSignal?,
+        fromPicker: Boolean = true,
     ): AssetFileDescriptor {
         if (People.isFaceId(mediaId)) return openFace(mediaId, cancellationSignal)
         if (!thumbnailOnly) {
@@ -1336,7 +1354,7 @@ class LibraryRepository private constructor(context: Context) {
         val requestedPx = maxOf(requestedSize.x, requestedSize.y)
         val sizePx = PreviewSizes.forTile(requestedPx)
         val precacheSizePx = settings.precacheSizePx
-        if (PreviewSizes.isGridTile(requestedPx)) gridSizes.record(sizePx, precacheSizePx)?.let(::followGridSize)
+        if (fromPicker && PreviewSizes.isGridTile(requestedPx)) gridSizes.record(sizePx, precacheSizePx)?.let(::followGridSize)
         val key = previewKey(item, sizePx)
         diskCache.peek(MediaDiskCache.Area.PREVIEW, key)?.let { return it.asAssetFileDescriptor() }
         diskCache.peek(MediaDiskCache.Area.PRECACHE, key)?.let { return it.asAssetFileDescriptor() }

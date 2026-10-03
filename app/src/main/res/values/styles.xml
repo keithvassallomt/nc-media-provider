@@ -21,4 +21,15 @@
         <item name="android:textAppearance">?attr/textAppearanceBodySmall</item>
         <item name="android:textIsSelectable">true</item>
     </style>
+
+    <!-- The photo keyboard's album covers and faces (PLAN 4.8). -->
+    <style name="ShapeAppearance.NcMediaProvider.Cover" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">12dp</item>
+    </style>
+
+    <style name="ShapeAppearance.NcMediaProvider.Circle" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
 </resources>
