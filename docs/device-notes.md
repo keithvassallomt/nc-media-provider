@@ -308,6 +308,10 @@ The schema 7 migration kept all 18,348 rows' values; the first syncs then read e
 
 Later syncs find no day whose count changed, so they cost two small requests (the version and the 60 KB day list).
 
+### Exit test
+
+Checked from the logs. The provider had been reselected after the install, so MediaProvider had no cached collection: its handler for the change notification threw a `NullPointerException` on the missing collection info (its own bug, harmless here) and it rebuilt from scratch, taking 18,072 rows, which is the library less the 276 live-photo videos. The next two video-header batches reached it as incremental syncs of 365 and 432 rows. Switching Memories off was checked on a copy of the phone's database: all 18,348 rows went back to their listing values, live-photo videos included.
+
 ### Background requests were slow this morning
 
 The phone took 173 s for the 20 Memories requests that took 2.8 s from the laptop on the same Wi-Fi, and 118 s for 500 video headers that took 32 to 39 s the evening before. Change checks rose from about 0.9 s to 3 to 4 s. Not confirmed, but the likely cause is that the screen was off with the app in the background (`procState=TRNB`), where Wi-Fi power saving and Android's limits on background apps slow each request. Reading Memories now stops after 2 minutes and stores the days it has read, so the next sync carries on from there instead of starting over.

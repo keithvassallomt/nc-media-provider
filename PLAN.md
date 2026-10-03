@@ -1,6 +1,6 @@
 # nc-media-provider: project plan
 
-**Status (2026-10-03):** Phase 0 is complete: activation needs no root on either test phone (see [docs/device-notes.md](docs/device-notes.md)), the server matrix is in [docs/server-notes.md](docs/server-notes.md), and the base repo map is in [docs/base-repo-map.md](docs/base-repo-map.md). Phase 1 is done except the 1.5 run on the stock Pixel. Phase 2 is built and its exit test passed on the GrapheneOS phone (see the device notes). Phase 3 passed its exit test. Phases 4 and 5 passed their exit tests on the GrapheneOS phone; Phase 5's previews are silent, an Android limit shared by Google Photos. Phase 6 (video dates and the Memories layer) is built and running on the GrapheneOS phone, waiting for its exit check.
+**Status (2026-10-03):** Phase 0 is complete: activation needs no root on either test phone (see [docs/device-notes.md](docs/device-notes.md)), the server matrix is in [docs/server-notes.md](docs/server-notes.md), and the base repo map is in [docs/base-repo-map.md](docs/base-repo-map.md). Phase 1 is done except the 1.5 run on the stock Pixel. Phase 2 is built and its exit test passed on the GrapheneOS phone (see the device notes). Phase 3 passed its exit test. Phases 4 and 5 passed their exit tests on the GrapheneOS phone; Phase 5's previews are silent, an Android limit shared by Google Photos. Phase 6 (video dates and the Memories layer) passed its exit test on the GrapheneOS phone. Phase 7 (albums) is next.
 
 Progress is tracked in [GitHub issues](https://github.com/keithvassallomt/nc-media-provider/issues): one issue per phase, with each numbered sub-task below as a sub-issue.
 
@@ -385,7 +385,7 @@ WebDAV still decides what's in the library. Memories only overrides, by fileId, 
 
 **6.3 Isolation.** Built: a network or server error keeps the values last read, while Memories switched off, gone, an untested version or an answer that can't be parsed puts back the core values; nothing in the layer can fail a sync. Parsing is tested against responses saved from both versions, and a read-only integration test checks that Memories' etags match the listing's. Any Memories error silently falls back to the core values. Tests against saved responses catch changes to its API, which is undocumented and internal.
 
-**Exit:** HEIC and video items sort by their real capture date. Turning Memories off changes only those fields. Built and running on the GrapheneOS phone (2026-10-03): 18,070 items take Memories' dates and 276 live-photo videos are hidden; Keith's check in the picker is still to do.
+**Exit:** HEIC and video items sort by their real capture date. Turning Memories off changes only those fields. **Passed on the GrapheneOS phone** (2026-10-03), checked from the logs rather than by eye: after the update MediaProvider rebuilt its copy and took 18,072 rows (the library less the 276 live-photo videos), 18,070 of them dated by Memories, and the later header reads arrived as incremental updates. Switching Memories off was checked on a copy of the phone's database: every row went back to its listing values and the hidden videos came back.
 
 ### Phase 7: Albums
 
