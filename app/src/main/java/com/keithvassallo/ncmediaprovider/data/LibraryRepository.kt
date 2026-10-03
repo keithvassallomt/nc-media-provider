@@ -12,6 +12,7 @@ import android.os.HandlerThread
 import android.os.OperationCanceledException
 import android.os.ParcelFileDescriptor
 import android.os.ProxyFileDescriptorCallback
+import android.os.StatFs
 import android.os.storage.StorageManager
 import android.system.ErrnoException
 import android.system.OsConstants
@@ -41,6 +42,7 @@ import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.Semaphore
@@ -82,8 +84,15 @@ class LibraryRepository private constructor(context: Context) {
     private val credentials = CredentialStore(appContext)
     private val settings = LibrarySettings(appContext)
     private val client = NextcloudClient()
+
+    /** A safety net over the pre-cache's budget; each run keeps the area to the budget, newest first. */
+    @Volatile private var precacheAreaLimit = MediaDiskCache.Area.PRECACHE.maximumBytes
     private val diskCache = MediaDiskCache(appContext) { area ->
-        if (area == MediaDiskCache.Area.ORIGINAL) settings.originalsCacheBytes else area.maximumBytes
+        when (area) {
+            MediaDiskCache.Area.ORIGINAL -> settings.originalsCacheBytes
+            MediaDiskCache.Area.PRECACHE -> precacheAreaLimit
+            else -> area.maximumBytes
+        }
     }
     private val localMatchExecutor = Executors.newSingleThreadScheduledExecutor { runnable ->
         Thread(runnable, "nc-local-match").apply { isDaemon = true }
@@ -178,6 +187,9 @@ class LibraryRepository private constructor(context: Context) {
 
     val precacheMonths: Int get() = settings.precacheMonths
 
+    /** The pre-cache's size when chosen by size; 0 when chosen by date ([precacheMonths]). */
+    val precacheBytes: Long get() = settings.precacheBytes
+
     /** Ready and total thumbnails at the last run. */
     fun precacheReady(): Pair<Int, Int> = settings.precacheReady
 
@@ -185,15 +197,18 @@ class LibraryRepository private constructor(context: Context) {
     fun precacheJobs(): Flow<List<WorkInfo>> = WorkManager.getInstance(appContext).getWorkInfosForUniqueWorkFlow(PRECACHE_WORK)
 
     /**
-     * Turns the pre-cache on or off, or changes how far back it goes; starts a run when on. Off,
+     * Turns the pre-cache on or off, or changes its limit: [months] back (0 for everything), or
+     * [bytes] when chosen by size. On, a run starts, which also trims what now falls outside; off,
      * its thumbnails go too, giving the space back (PLAN 8.2).
      */
-    fun setPrecache(enabled: Boolean, months: Int) {
+    fun setPrecache(enabled: Boolean, months: Int, bytes: Long = 0L) {
         val wasEnabled = settings.precacheEnabled
+        val changed = months != settings.precacheMonths || bytes != settings.precacheBytes
         settings.precacheEnabled = enabled
         settings.precacheMonths = months
+        settings.precacheBytes = bytes
         if (enabled) {
-            schedulePrecache()
+            schedulePrecache(restart = changed)
         } else {
             WorkManager.getInstance(appContext).cancelUniqueWork(PRECACHE_WORK)
             if (wasEnabled) {
@@ -222,14 +237,31 @@ class LibraryRepository private constructor(context: Context) {
         diskCache.clear(MediaDiskCache.Area.ORIGINAL)
     }
 
-    /** How many items the chosen range holds, and roughly how much their thumbnails take. Off the main thread. */
-    fun precacheEstimate(months: Int): Pair<Int, Long> {
-        val count = if (hasAccount) store.countTakenSince(precacheCutoff(months)) else 0
-        return count to count * PreviewSizes.typicalBytes(settings.precacheSizePx)
+    /** What the Storage screen shows of the pre-cache's limit (PLAN 5.6). Off the main thread. */
+    fun precachePlan(): PrecachePlan {
+        val sizePx = settings.precacheSizePx
+        val perItem = PreviewSizes.typicalBytes(sizePx)
+        val months = if (hasAccount) store.monthCounts() else emptyList()
+        // 12 months was a choice before the slider; someone who picked it still sees its size.
+        val recent = listOf(1, 3, 6, 12).associateWith { if (hasAccount) store.countTakenSince(precacheCutoff(it)) else 0 }
+        val free = freeBytes()
+        val ceiling = PrecacheLimits.ceiling(free, diskCache.usedBytes(MediaDiskCache.Area.PRECACHE), months.sumOf(MonthCount::count) * perItem)
+        return PrecachePlan(sizePx, perItem, months, recent, free, ceiling)
     }
 
-    /** Queues a pre-cache run on unmetered Wi-Fi with the battery not low, after any running one. */
-    fun schedulePrecache() {
+    private fun freeBytes(): Long = runCatching { StatFs(appContext.cacheDir.path).availableBytes }.getOrDefault(0L)
+
+    /** What the pre-cache may hold now: the size chosen, if any, within half the free space. */
+    private fun precacheBudget(usedBytes: Long): Long {
+        val half = PrecacheLimits.ceiling(freeBytes(), usedBytes, Long.MAX_VALUE)
+        return settings.precacheBytes.takeIf { it > 0L }?.let { minOf(it, half) } ?: half
+    }
+
+    /**
+     * Queues a pre-cache run on unmetered Wi-Fi with the battery not low, after any running one, or
+     * in its place when [restart] (the limit changed).
+     */
+    fun schedulePrecache(restart: Boolean = false) {
         if (!isReady || !settings.precacheEnabled) return
         val request = OneTimeWorkRequestBuilder<ThumbnailPrecacheWorker>()
             .setConstraints(
@@ -239,83 +271,68 @@ class LibraryRepository private constructor(context: Context) {
                     .build(),
             )
             .build()
-        WorkManager.getInstance(appContext).enqueueUniqueWork(PRECACHE_WORK, ExistingWorkPolicy.KEEP, request)
+        WorkManager.getInstance(appContext).enqueueUniqueWork(PRECACHE_WORK, if (restart) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP, request)
     }
 
     /**
-     * Fetches the grid thumbnails of the chosen range that aren't cached yet, newest first, four
-     * at a time, into their own capped area, at the size this phone's picker grid asks for. Thumbnails the server can't make are marked so later
-     * runs skip them. Stops when [isStopped] says so or the area is nearly full. Returns false only
-     * when the network failed, so the run is retried.
+     * Keeps the pre-cache to its limit, newest first (PLAN 5.6): fetches the grid thumbnails inside
+     * the date range and the space budget that aren't cached yet, four at a time, at the size this
+     * phone's picker grid asks for, and deletes pre-cached ones outside it, so a smaller limit gives
+     * the space back. Thumbnails the server can't make are marked so later runs skip them. Stops
+     * when [isStopped] says so. Returns false only when the network failed, so the run is retried.
      */
     fun precacheThumbnails(isStopped: () -> Boolean, onProgress: (ready: Int, total: Int) -> Unit): Boolean {
         val account = credentials.load() ?: return true
         if (credentials.signInRequired || !settings.precacheEnabled) return true
-        val cutoff = precacheCutoff(settings.precacheMonths)
         val sizePx = settings.precacheSizePx
-        val total = store.countTakenSince(cutoff)
-        val budget = MediaDiskCache.Area.PRECACHE.maximumBytes * 95 / 100
-        val usedAtStart = diskCache.usedBytes(MediaDiskCache.Area.PRECACHE)
-        val ready = java.util.concurrent.atomic.AtomicInteger()
-        val fetched = java.util.concurrent.atomic.AtomicInteger()
+        val cutoff = if (settings.precacheBytes > 0L) Long.MIN_VALUE else precacheCutoff(settings.precacheMonths)
+        val budget = precacheBudget(diskCache.usedBytes(MediaDiskCache.Area.PRECACHE))
+        precacheAreaLimit = budget + budget / 5
+        val perItem = PreviewSizes.typicalBytes(sizePx)
+        val total = minOf(store.countTakenSince(cutoff).toLong(), budget / perItem).toInt()
+        val ready = AtomicInteger()
+        val fetched = AtomicInteger()
         val failed = AtomicBoolean(false)
         val started = SystemClock.elapsedRealtime()
         val pool = Executors.newFixedThreadPool(MAX_CONCURRENT_PREVIEW_DOWNLOADS)
         var after: MediaItem? = null
+        var kept = 0L
+        var inside = true
+        var trimmed = 0
         var outcome = "stopped"
         try {
             while (!isStopped() && !failed.get()) {
-                val page = store.newestPage("", after, PRECACHE_PAGE).takeWhile { it.dateTakenMillis >= cutoff }
+                val page = store.newestPage("", after, PRECACHE_PAGE)
                 if (page.isEmpty()) {
-                    outcome = "done"
+                    if (inside) outcome = "done"
                     break
                 }
-                page.map { item ->
-                    pool.submit {
-                        val key = previewKey(item, sizePx)
-                        if (diskCache.contains(MediaDiskCache.Area.PREVIEW, key) || diskCache.contains(MediaDiskCache.Area.PRECACHE, key)) {
-                            ready.incrementAndGet()
-                            return@submit
-                        }
-                        if (isStopped() || failed.get() || diskCache.isMarkedMissing(MediaDiskCache.Area.PRECACHE, key)) return@submit
-                        try {
-                            diskCache.getOrDownload(MediaDiskCache.Area.PRECACHE, key, null) { target ->
-                                client.downloadPreview(account, item.id, sizePx, target, null, viaPhotos = Albums.isAlbumPath(item.href))
-                            }
-                            ready.incrementAndGet()
-                            fetched.incrementAndGet()
-                        } catch (error: NextcloudHttpException) {
-                            when (error.statusCode) {
-                                // Videos get a frame read on the phone; images would mean downloading
-                                // every HEIC original, gigabytes for an iPhone library, so they are skipped.
-                                404 -> try {
-                                    diskCache.getOrDownload(MediaDiskCache.Area.PRECACHE, key, null) { target ->
-                                        thumbnailOnPhone(account, item, sizePx, target, null, imagesToo = false)
-                                    }
-                                    ready.incrementAndGet()
-                                    fetched.incrementAndGet()
-                                } catch (_: FileNotFoundException) {
-                                    diskCache.markMissing(MediaDiskCache.Area.PRECACHE, key)
-                                } catch (_: IOException) {
-                                    failed.set(true)
-                                }
-                                401 -> failed.set(true)
-                            }
-                        } catch (error: IOException) {
-                            failed.set(true)
-                        } catch (error: Exception) {
-                            Log.w(TAG, "Pre-cache skipped ${item.id}: ${error.javaClass.simpleName}: ${error.message.orEmpty()}")
-                        }
+                // Fetch only what can still fit, judged by a typical thumbnail; the walk below
+                // counts what was really stored, and the next run fills any gap.
+                val wanted = if (!inside) emptyList() else page.takeWhile { it.dateTakenMillis >= cutoff }.take(((budget - kept) / perItem).toInt() + 1)
+                wanted.map { item -> pool.submit { precacheOne(account, item, sizePx, isStopped, failed, ready, fetched) } }.forEach { it.get() }
+                if (failed.get() || isStopped()) break
+                val wantedIds = wanted.mapTo(HashSet(), MediaItem::id)
+                for (item in page) {
+                    val key = previewKey(item, sizePx)
+                    val size = diskCache.sizeOf(MediaDiskCache.Area.PRECACHE, key)
+                    if (inside && item.id in wantedIds && kept + size <= budget) {
+                        kept += size
+                        continue
                     }
-                }.forEach { it.get() }
-                onProgress(ready.get(), total)
+                    if (inside) {
+                        inside = false
+                        outcome = if (item.dateTakenMillis < cutoff) "done" else "full"
+                    }
+                    if (size > 0L) {
+                        diskCache.remove(MediaDiskCache.Area.PRECACHE, key)
+                        trimmed++
+                    }
+                }
+                if (wanted.isNotEmpty()) onProgress(ready.get(), total)
                 after = page.last()
                 if (page.size < PRECACHE_PAGE) {
-                    outcome = "done"
-                    break
-                }
-                if (usedAtStart + fetched.get().toLong() * PreviewSizes.typicalBytes(sizePx) >= budget) {
-                    outcome = "full"
+                    if (inside) outcome = "done"
                     break
                 }
             }
@@ -323,13 +340,59 @@ class LibraryRepository private constructor(context: Context) {
             pool.shutdownNow()
         }
         if (failed.get()) outcome = "network failed"
-        settings.precacheReady = ready.get() to total
+        settings.precacheReady = ready.get() to if (outcome == "full") ready.get() else maxOf(total, ready.get())
         Log.i(
             TAG,
-            "Pre-cache $outcome: ${fetched.get()} thumbnails at $sizePx px fetched, ${ready.get()} of $total ready in " +
-                "${SystemClock.elapsedRealtime() - started} ms",
+            "Pre-cache $outcome: ${fetched.get()} thumbnails at $sizePx px fetched, $trimmed outside the limit deleted, " +
+                "${ready.get()} of $total ready, ${kept / MIB} of ${budget / MIB} MiB in ${SystemClock.elapsedRealtime() - started} ms",
         )
         return !failed.get()
+    }
+
+    /** One thumbnail for the pre-cache; a video the server can't preview gets a frame read on the phone. */
+    private fun precacheOne(
+        account: NextcloudAccount,
+        item: MediaItem,
+        sizePx: Int,
+        isStopped: () -> Boolean,
+        failed: AtomicBoolean,
+        ready: AtomicInteger,
+        fetched: AtomicInteger,
+    ) {
+        val key = previewKey(item, sizePx)
+        if (diskCache.contains(MediaDiskCache.Area.PREVIEW, key) || diskCache.contains(MediaDiskCache.Area.PRECACHE, key)) {
+            ready.incrementAndGet()
+            return
+        }
+        if (isStopped() || failed.get() || diskCache.isMarkedMissing(MediaDiskCache.Area.PRECACHE, key)) return
+        try {
+            diskCache.getOrDownload(MediaDiskCache.Area.PRECACHE, key, null) { target ->
+                client.downloadPreview(account, item.id, sizePx, target, null, viaPhotos = Albums.isAlbumPath(item.href))
+            }
+            ready.incrementAndGet()
+            fetched.incrementAndGet()
+        } catch (error: NextcloudHttpException) {
+            when (error.statusCode) {
+                // Videos get a frame read on the phone; images would mean downloading every HEIC
+                // original, gigabytes for an iPhone library, so they are skipped.
+                404 -> try {
+                    diskCache.getOrDownload(MediaDiskCache.Area.PRECACHE, key, null) { target ->
+                        thumbnailOnPhone(account, item, sizePx, target, null, imagesToo = false)
+                    }
+                    ready.incrementAndGet()
+                    fetched.incrementAndGet()
+                } catch (_: FileNotFoundException) {
+                    diskCache.markMissing(MediaDiskCache.Area.PRECACHE, key)
+                } catch (_: IOException) {
+                    failed.set(true)
+                }
+                401 -> failed.set(true)
+            }
+        } catch (error: IOException) {
+            failed.set(true)
+        } catch (error: Exception) {
+            Log.w(TAG, "Pre-cache skipped ${item.id}: ${error.javaClass.simpleName}: ${error.message.orEmpty()}")
+        }
     }
 
     private fun precacheCutoff(months: Int): Long =
@@ -1431,6 +1494,7 @@ class LibraryRepository private constructor(context: Context) {
         private const val SYNC_WORK = "library-sync"
         private const val PRECACHE_WORK = "thumbnail-precache"
         private const val PRECACHE_PAGE = 200
+        private const val MIB = 1024L * 1024L
         private const val WIPE_CHECK_WORK = "remote-wipe-check"
         private const val SYNC_BACKOFF_MINUTES = 1L
 

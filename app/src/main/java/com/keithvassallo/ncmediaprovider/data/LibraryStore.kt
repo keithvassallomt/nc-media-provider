@@ -41,6 +41,8 @@ class LibraryStore(
 
     fun countTakenSince(since: Long): Int = dao.countTakenSince(since)
 
+    fun monthCounts(): List<MonthCount> = dao.monthCounts()
+
     /**
      * Stores what video headers said (PLAN 5.3 and 6.0), keyed by row ID: a null header couldn't be
      * read. Missing values are stored as [MediaItem.NOT_IN_HEADER], so they aren't read again while

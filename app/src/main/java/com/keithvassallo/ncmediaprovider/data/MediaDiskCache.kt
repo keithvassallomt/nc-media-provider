@@ -35,6 +35,14 @@ class MediaDiskCache(context: Context, private val limit: (Area) -> Long = Area:
 
     fun isMarkedMissing(area: Area, key: String): Boolean = File(File(root, area.directory), key.sha256() + MISSING_SUFFIX).exists()
 
+    /** The cached file's size, or 0 when [key] isn't cached. */
+    fun sizeOf(area: Area, key: String): Long = File(File(root, area.directory), key.sha256()).takeIf { it.isFile }?.length() ?: 0L
+
+    /** Deletes [key] from [area], as the pre-cache does for thumbnails outside its limit (PLAN 5.6). */
+    fun remove(area: Area, key: String) {
+        File(File(root, area.directory), key.sha256()).delete()
+    }
+
     fun getOrDownload(
         area: Area,
         key: String,
@@ -150,7 +158,10 @@ class MediaDiskCache(context: Context, private val limit: (Area) -> Long = Area:
         PREVIEW("previews", 256L * 1024L * 1024L),
         ORIGINAL("originals", 2L * 1024L * 1024L * 1024L),
 
-        /** Thumbnails fetched ahead of time (PLAN 5.6), apart from the on-demand ones. */
+        /**
+         * Thumbnails fetched ahead of time (PLAN 5.6), apart from the on-demand ones. Its real limit is
+         * the user's choice, at most half the free space; the run keeps it newest first.
+         */
         PRECACHE("precache", 1024L * 1024L * 1024L),
     }
 

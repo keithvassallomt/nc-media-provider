@@ -20,6 +20,7 @@ import com.keithvassallo.ncmediaprovider.data.AlbumItem
 import com.keithvassallo.ncmediaprovider.data.MediaItem
 import com.keithvassallo.ncmediaprovider.data.MemoriesDay
 import com.keithvassallo.ncmediaprovider.data.MemoriesFile
+import com.keithvassallo.ncmediaprovider.data.MonthCount
 import com.keithvassallo.ncmediaprovider.data.Person
 import com.keithvassallo.ncmediaprovider.data.PersonItem
 import com.keithvassallo.ncmediaprovider.data.PersonSummary
@@ -120,6 +121,13 @@ interface LibraryDao {
     /** Rows taken at or after [since], for the pre-cache's estimate (PLAN 5.6). */
     @Query("SELECT COUNT(*) FROM media WHERE dateTakenMillis >= :since AND isLiveVideo = 0")
     fun countTakenSince(since: Long): Int
+
+    /** Photos and videos per month in local time, newest first, for the pre-cache's estimates (PLAN 5.6). */
+    @Query(
+        "SELECT strftime('%Y-%m', dateTakenMillis / 1000, 'unixepoch', 'localtime') AS month, COUNT(*) AS count " +
+            "FROM media WHERE isLiveVideo = 0 GROUP BY month ORDER BY month DESC",
+    )
+    fun monthCounts(): List<MonthCount>
 
     /** Videos whose header hasn't been read yet (a 0 duration or recording time), newest first (PLAN 5.3 and 6.0). */
     @Query(

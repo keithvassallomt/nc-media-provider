@@ -72,12 +72,24 @@
     <string name="streaming_channel">Sending from Nextcloud</string>
     <string name="streaming_title">Sending from Nextcloud</string>
     <string name="streaming_text">An app is reading a video from your Nextcloud.</string>
-    <string name="precache_explanation">Downloads your library’s thumbnails over Wi-Fi in the background, so the picker and Send from Nextcloud show them at once instead of one by one.</string>
+    <string name="precache_explanation">Downloads thumbnails over Wi-Fi, newest first, so the picker and Send from Nextcloud show them at once instead of one by one.</string>
     <string name="precache_switch">Download thumbnails in advance</string>
+    <string name="precache_last_month">Last month</string>
+    <string name="precache_3_months">3 months</string>
+    <string name="precache_6_months">6 months</string>
     <string name="precache_all">Everything</string>
-    <string name="precache_year">12 months</string>
-    <string name="precache_quarter">3 months</string>
-    <string name="precache_estimate">About %1$s for %2$d photos and videos, on Wi-Fi only. Up to %3$s is kept.</string>
+    <string name="precache_needs">Needs %1$s</string>
+    <string name="precache_whole_library">Your whole library: %1$s photos and videos</string>
+    <string name="precache_reaches_back">About %1$s photos and videos, back to %2$s</string>
+    <string name="precache_empty">The estimate appears after the first sync.</string>
+    <string name="precache_max_everything">%1$s (everything)</string>
+    <string name="precache_max_half">%1$s (half your free space)</string>
+    <string name="precache_tick_1">1 mo</string>
+    <string name="precache_tick_3">3 mo</string>
+    <string name="precache_tick_6">6 mo</string>
+    <string name="precache_slider">Space for thumbnails</string>
+    <string name="precache_free_note">Thumbnails at %1$d px, the size this phone’s picker asks for. This phone has %2$s free; the pre-cache never takes more than half.</string>
+    <string name="precache_capped">Your whole library needs %1$s, more than half of the %2$s free, so the newest %3$s is the most it keeps.</string>
     <string name="precache_ready">Ready: %1$d of %2$d.</string>
     <string name="memories_status_off">Off: the picker uses Nextcloud’s own dates.</string>
     <string name="memories_status_unchecked">Your server is checked for Memories at the next sync.</string>
@@ -145,7 +157,7 @@
     <string name="open_picker">Test system picker</string>
     <string name="activation_footer">Only one cloud source can be active at a time. With Google Photos kept as a choice, you switch between it and this app in the photo picker’s cloud settings. On some phones, such as GrapheneOS, that settings screen only appears after a restart. Updating this app deselects it; with Shizuku it is selected again automatically, otherwise a notification takes you to the settings.</string>
     <string name="picker_unavailable">The system photo picker is unavailable</string>
-    <string name="originals_limit_label">Space for downloaded photos and videos, so one picked again opens at once:</string>
+    <string name="originals_limit_label">Kept so they open faster next time. The least recently used go first.</string>
     <string name="originals_limit_small">512 MB</string>
     <string name="originals_limit_default">2 GB</string>
     <string name="originals_limit_large">8 GB</string>
@@ -254,7 +266,7 @@
     <string name="navigate_up">Back</string>
 
     <!-- Storage and details. -->
-    <string name="storage_downloads_title">Downloads</string>
+    <string name="storage_downloads_title">Photos and videos you open</string>
     <string name="storage_usage">Using %1$s of %2$s, plus %3$s of pre-cached thumbnails.</string>
     <string name="details_sync_title">Sync</string>
     <string name="details_local_network_title">Local network</string>

@@ -75,10 +75,15 @@ class LibrarySettings(context: Context) {
         get() = preferences.getBoolean(KEY_PRECACHE, false)
         set(value) = preferences.edit { putBoolean(KEY_PRECACHE, value) }
 
-    /** How far back the pre-cache goes, in months; 0 for everything. */
+    /** How far back the pre-cache goes, in months; 0 for everything. Applies when [precacheBytes] is 0. */
     var precacheMonths: Int
         get() = preferences.getInt(KEY_PRECACHE_MONTHS, 0)
         set(value) = preferences.edit { putInt(KEY_PRECACHE_MONTHS, value) }
+
+    /** How much the pre-cache may take, newest first, when chosen by size; 0 when chosen by date. */
+    var precacheBytes: Long
+        get() = preferences.getLong(KEY_PRECACHE_BYTES, 0L)
+        set(value) = preferences.edit { putLong(KEY_PRECACHE_BYTES, value) }
 
     /** The thumbnail size the pre-cache stores: what this phone's picker grid asks for (PLAN 5.6). */
     var precacheSizePx: Int
@@ -117,6 +122,7 @@ class LibrarySettings(context: Context) {
         private const val KEY_PRECACHE_READY = "precache_ready"
         private const val KEY_PRECACHE_TOTAL = "precache_total"
         private const val KEY_PRECACHE_SIZE = "precache_size_px"
+        private const val KEY_PRECACHE_BYTES = "precache_bytes"
         private const val KEY_ORIGINALS_CACHE = "originals_cache_bytes"
         private const val KEY_WAS_SELECTED = "was_selected_provider"
         private const val KEY_SELECTED_SEEN = "selected_seen_millis"
