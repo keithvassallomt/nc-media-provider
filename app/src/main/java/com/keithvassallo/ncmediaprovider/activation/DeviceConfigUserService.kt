@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.RemoteException
 import androidx.annotation.Keep
 import com.keithvassallo.ncmediaprovider.BuildConfig
-import java.util.concurrent.TimeUnit
 import kotlin.system.exitProcess
 
 @Keep
@@ -70,31 +69,10 @@ class DeviceConfigUserService() : IActivationService.Stub() {
         return null
     }
 
-    private fun runDeviceConfig(vararg arguments: String): CommandResult = run(DEVICE_CONFIG_BINARY, *arguments)
+    private fun runDeviceConfig(vararg arguments: String): ShellCommand.Result = run(DEVICE_CONFIG_BINARY, *arguments)
 
-    private fun run(binary: String, vararg arguments: String): CommandResult {
-        val process = try {
-            ProcessBuilder(listOf(binary, *arguments))
-                .redirectErrorStream(true)
-                .start()
-        } catch (error: Exception) {
-            return CommandResult(-1, error.message.orEmpty(), false)
-        }
-        if (!process.waitFor(COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-            process.destroyForcibly()
-            return CommandResult(-1, "command timed out", false)
-        }
-        val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
-        val failedInOutput = listOf("error", "unknown command", "invalid command")
-            .any { output.contains(it, ignoreCase = true) }
-        return CommandResult(process.exitValue(), output, process.exitValue() == 0 && !failedInOutput)
-    }
-
-    private data class CommandResult(
-        val exitCode: Int,
-        val output: String,
-        val successful: Boolean,
-    )
+    private fun run(binary: String, vararg arguments: String): ShellCommand.Result =
+        ShellCommand.run(listOf(binary, *arguments), COMMAND_TIMEOUT_SECONDS)
 
     companion object {
         private const val DEVICE_CONFIG_BINARY = "/system/bin/device_config"
