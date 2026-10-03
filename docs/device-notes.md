@@ -330,3 +330,7 @@ A keyboard showing the 30 newest Nextcloud photos, inserting the tapped one thro
 ### Albums in the older picker
 
 Keith opened the picker's Albums tab: `onQueryAlbums` returned the one album, "Landscapes"; opening it ran MediaProvider's album sync (`SyncAddAlbum`), which asked for 1,000 rows a page and got the 517 photos as 500 and 17; the photo he picked opened (2 MB in 0.3 s). The picker on this phone is still MediaProvider's own (`PhotoPickerActivity`), though `com.android.photopicker` is installed and the search and category flags are on.
+
+### The newer picker can't be switched on over adb
+
+To try People (PLAN 7.3) on this phone, `adb shell device_config override mediaprovider enable_modern_picker true` was refused: `SecurityException: Permission denial for flag 'mediaprovider/enable_modern_picker'; allowlist permission granted, but must add flag to the allowlist`. The shell can write only allow-listed device_config flags; `allowed_cloud_providers` and `cloud_media_feature_enabled` are on that list, this one isn't. Nothing changed (the flag still reads `null`, and `PICK_IMAGES` still resolves to MediaProvider's `PhotoPickerActivity`). Categories also check this flag inside the picker, so enabling `com.android.photopicker`'s activities with `pm` wouldn't bring them.
