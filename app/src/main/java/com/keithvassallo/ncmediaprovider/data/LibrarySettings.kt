@@ -80,6 +80,11 @@ class LibrarySettings(context: Context) {
         get() = preferences.getInt(KEY_PRECACHE_MONTHS, 0)
         set(value) = preferences.edit { putInt(KEY_PRECACHE_MONTHS, value) }
 
+    /** The thumbnail size the pre-cache stores: what this phone's picker grid asks for (PLAN 5.6). */
+    var precacheSizePx: Int
+        get() = preferences.getInt(KEY_PRECACHE_SIZE, PreviewSizes.SMALL_PX)
+        set(value) = preferences.edit { putInt(KEY_PRECACHE_SIZE, value) }
+
     /** How much space downloaded originals may take (PLAN 8.2); the oldest-used go first. */
     var originalsCacheBytes: Long
         get() = preferences.getLong(KEY_ORIGINALS_CACHE, MediaDiskCache.Area.ORIGINAL.maximumBytes)
@@ -111,6 +116,7 @@ class LibrarySettings(context: Context) {
         private const val KEY_PRECACHE_MONTHS = "precache_months"
         private const val KEY_PRECACHE_READY = "precache_ready"
         private const val KEY_PRECACHE_TOTAL = "precache_total"
+        private const val KEY_PRECACHE_SIZE = "precache_size_px"
         private const val KEY_ORIGINALS_CACHE = "originals_cache_bytes"
         private const val KEY_WAS_SELECTED = "was_selected_provider"
         private const val KEY_SELECTED_SEEN = "selected_seen_millis"

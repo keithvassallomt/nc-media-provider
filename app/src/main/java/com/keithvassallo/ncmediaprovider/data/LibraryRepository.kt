@@ -102,6 +102,7 @@ class LibraryRepository private constructor(context: Context) {
     private val previewSlots = Semaphore(MAX_CONCURRENT_PREVIEW_DOWNLOADS, true)
     private val originalSlots = Semaphore(MAX_CONCURRENT_ORIGINAL_DOWNLOADS, true)
     private val previewGate = RemoteQueryGate(PREVIEW_RETRY_DELAY_MS, ::isReachabilityFailure, failuresBeforeBackOff = PREVIEW_FAILURES_BEFORE_BACK_OFF)
+    private val gridSizes = GridSizeTally()
 
     // Android reports no active network to an app whose network is blocked, as well as offline.
     private val reachability = ServerReachability(
@@ -224,7 +225,7 @@ class LibraryRepository private constructor(context: Context) {
     /** How many items the chosen range holds, and roughly how much their thumbnails take. Off the main thread. */
     fun precacheEstimate(months: Int): Pair<Int, Long> {
         val count = if (hasAccount) store.countTakenSince(precacheCutoff(months)) else 0
-        return count to count * TYPICAL_THUMBNAIL_BYTES
+        return count to count * PreviewSizes.typicalBytes(settings.precacheSizePx)
     }
 
     /** Queues a pre-cache run on unmetered Wi-Fi with the battery not low, after any running one. */
@@ -243,7 +244,7 @@ class LibraryRepository private constructor(context: Context) {
 
     /**
      * Fetches the grid thumbnails of the chosen range that aren't cached yet, newest first, four
-     * at a time, into their own capped area. Thumbnails the server can't make are marked so later
+     * at a time, into their own capped area, at the size this phone's picker grid asks for. Thumbnails the server can't make are marked so later
      * runs skip them. Stops when [isStopped] says so or the area is nearly full. Returns false only
      * when the network failed, so the run is retried.
      */
@@ -251,6 +252,7 @@ class LibraryRepository private constructor(context: Context) {
         val account = credentials.load() ?: return true
         if (credentials.signInRequired || !settings.precacheEnabled) return true
         val cutoff = precacheCutoff(settings.precacheMonths)
+        val sizePx = settings.precacheSizePx
         val total = store.countTakenSince(cutoff)
         val budget = MediaDiskCache.Area.PRECACHE.maximumBytes * 95 / 100
         val usedAtStart = diskCache.usedBytes(MediaDiskCache.Area.PRECACHE)
@@ -270,7 +272,7 @@ class LibraryRepository private constructor(context: Context) {
                 }
                 page.map { item ->
                     pool.submit {
-                        val key = previewKey(item, SMALL_PREVIEW_PX)
+                        val key = previewKey(item, sizePx)
                         if (diskCache.contains(MediaDiskCache.Area.PREVIEW, key) || diskCache.contains(MediaDiskCache.Area.PRECACHE, key)) {
                             ready.incrementAndGet()
                             return@submit
@@ -278,7 +280,7 @@ class LibraryRepository private constructor(context: Context) {
                         if (isStopped() || failed.get() || diskCache.isMarkedMissing(MediaDiskCache.Area.PRECACHE, key)) return@submit
                         try {
                             diskCache.getOrDownload(MediaDiskCache.Area.PRECACHE, key, null) { target ->
-                                client.downloadPreview(account, item.id, SMALL_PREVIEW_PX, target, null, viaPhotos = Albums.isAlbumPath(item.href))
+                                client.downloadPreview(account, item.id, sizePx, target, null, viaPhotos = Albums.isAlbumPath(item.href))
                             }
                             ready.incrementAndGet()
                             fetched.incrementAndGet()
@@ -288,7 +290,7 @@ class LibraryRepository private constructor(context: Context) {
                                 // every HEIC original, gigabytes for an iPhone library, so they are skipped.
                                 404 -> try {
                                     diskCache.getOrDownload(MediaDiskCache.Area.PRECACHE, key, null) { target ->
-                                        thumbnailOnPhone(account, item, SMALL_PREVIEW_PX, target, null, imagesToo = false)
+                                        thumbnailOnPhone(account, item, sizePx, target, null, imagesToo = false)
                                     }
                                     ready.incrementAndGet()
                                     fetched.incrementAndGet()
@@ -312,7 +314,7 @@ class LibraryRepository private constructor(context: Context) {
                     outcome = "done"
                     break
                 }
-                if (usedAtStart + fetched.get().toLong() * TYPICAL_THUMBNAIL_BYTES >= budget) {
+                if (usedAtStart + fetched.get().toLong() * PreviewSizes.typicalBytes(sizePx) >= budget) {
                     outcome = "full"
                     break
                 }
@@ -324,7 +326,7 @@ class LibraryRepository private constructor(context: Context) {
         settings.precacheReady = ready.get() to total
         Log.i(
             TAG,
-            "Pre-cache $outcome: ${fetched.get()} thumbnails fetched, ${ready.get()} of $total ready in " +
+            "Pre-cache $outcome: ${fetched.get()} thumbnails at $sizePx px fetched, ${ready.get()} of $total ready in " +
                 "${SystemClock.elapsedRealtime() - started} ms",
         )
         return !failed.get()
@@ -387,14 +389,20 @@ class LibraryRepository private constructor(context: Context) {
     }
 
     /**
-     * The preview size to fetch for a tile of [requestedPx]. The picker's grid asks for 264 to 291 px
-     * on Keith's fold (Phase 5); sending those to the 1024 px bucket downloaded ten times the data
-     * per tile, so 256 px previews serve tiles up to 300 px, a slight enlargement at most.
+     * The pre-cache follows the size this phone's picker grid asks for (PLAN 5.6): 256 px on Keith's
+     * fold, 512 on the stock Pixel. The smaller thumbnails it held serve no tile any more, so they
+     * go, and a run fetches the new size.
      */
-    private fun previewSizeFor(requestedPx: Int): Int = when {
-        requestedPx <= SMALL_PREVIEW_MAX_TILE_PX -> SMALL_PREVIEW_PX
-        requestedPx <= MEDIUM_PREVIEW_MAX_TILE_PX -> MEDIUM_PREVIEW_PX
-        else -> LARGE_PREVIEW_PX
+    private fun followGridSize(sizePx: Int) {
+        settings.precacheSizePx = sizePx
+        Log.i(TAG, "The picker's grid asks for $sizePx px thumbnails; the pre-cache follows")
+        if (!settings.precacheEnabled) return
+        settings.precacheReady = 0 to 0
+        Thread {
+            runCatching { WorkManager.getInstance(appContext).cancelUniqueWork(PRECACHE_WORK).result.get() }
+            diskCache.clear(MediaDiskCache.Area.PRECACHE)
+            schedulePrecache()
+        }.start()
     }
 
     // The Memories layer (PLAN 6.1 to 6.3).
@@ -1262,10 +1270,17 @@ class LibraryRepository private constructor(context: Context) {
             return AssetFileDescriptor(openOriginal(mediaId, cancellationSignal), 0, AssetFileDescriptor.UNKNOWN_LENGTH)
         }
         val item = findItem(mediaId)
-        val sizePx = previewSizeFor(maxOf(requestedSize.x, requestedSize.y))
+        val requestedPx = maxOf(requestedSize.x, requestedSize.y)
+        val sizePx = PreviewSizes.forTile(requestedPx)
+        val precacheSizePx = settings.precacheSizePx
+        if (PreviewSizes.isGridTile(requestedPx)) gridSizes.record(sizePx, precacheSizePx)?.let(::followGridSize)
         val key = previewKey(item, sizePx)
         diskCache.peek(MediaDiskCache.Area.PREVIEW, key)?.let { return it.asAssetFileDescriptor() }
         diskCache.peek(MediaDiskCache.Area.PRECACHE, key)?.let { return it.asAssetFileDescriptor() }
+        // A larger pre-cached thumbnail serves a smaller tile: the picker scales it down.
+        if (precacheSizePx > sizePx) {
+            diskCache.peek(MediaDiskCache.Area.PRECACHE, previewKey(item, precacheSizePx))?.let { return it.asAssetFileDescriptor() }
+        }
         phoneCopyThumbnail(item, key, sizePx, cancellationSignal)?.let { return it.asAssetFileDescriptor() }
         val account = requireAuthorizedAccount()
         reachability.check()
@@ -1416,9 +1431,6 @@ class LibraryRepository private constructor(context: Context) {
         private const val SYNC_WORK = "library-sync"
         private const val PRECACHE_WORK = "thumbnail-precache"
         private const val PRECACHE_PAGE = 200
-
-        /** The first 871 pre-cached 256 px thumbnails from Keith's server took 13 MB (Phase 5). */
-        private const val TYPICAL_THUMBNAIL_BYTES = 15L * 1024L
         private const val WIPE_CHECK_WORK = "remote-wipe-check"
         private const val SYNC_BACKOFF_MINUTES = 1L
 
@@ -1468,11 +1480,6 @@ class LibraryRepository private constructor(context: Context) {
         private const val FRAME_WINDOW_BYTES = 512 * 1024
         private const val STREAM_RETRIES = 3
         private const val STREAM_RETRY_DELAY_MS = 500L
-        private const val SMALL_PREVIEW_PX = 256
-        private const val SMALL_PREVIEW_MAX_TILE_PX = 300
-        private const val MEDIUM_PREVIEW_PX = 512
-        private const val MEDIUM_PREVIEW_MAX_TILE_PX = 600
-        private const val LARGE_PREVIEW_PX = 1024
         private const val MAX_CONCURRENT_PREVIEW_DOWNLOADS = 4
         private const val MAX_CONCURRENT_ORIGINAL_DOWNLOADS = 2
         private const val PREVIEW_SLOT_WAIT_MS = 2_000L
