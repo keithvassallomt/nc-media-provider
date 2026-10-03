@@ -173,7 +173,7 @@ class NcCloudMediaProvider : CloudMediaProvider() {
         Log.d(TAG, "onQueryAlbums -> ${albums.size} albums")
         return MatrixCursor(ALBUM_PROJECTION).apply {
             albums.forEach { album ->
-                addRow(arrayOf<Any?>(album.id, album.name, album.count, album.coverId, album.dateTakenMillis))
+                addRow(arrayOf<Any?>(album.id, album.dateTakenMillis, album.name, album.coverId, album.count))
             }
             this.extras = collectionExtras(collection.id)
         }
@@ -462,12 +462,16 @@ class NcCloudMediaProvider : CloudMediaProvider() {
             CloudMediaProviderContract.MediaSetColumns.MEDIA_COUNT,
         )
 
+        /**
+         * In AOSP's order (`AlbumColumns.ALL_PROJECTION`): the older picker's album cursor wrapper
+         * maps columns by name for text only, so numbers are read by position.
+         */
         val ALBUM_PROJECTION = arrayOf(
             CloudMediaProviderContract.AlbumColumns.ID,
-            CloudMediaProviderContract.AlbumColumns.DISPLAY_NAME,
-            CloudMediaProviderContract.AlbumColumns.MEDIA_COUNT,
-            CloudMediaProviderContract.AlbumColumns.MEDIA_COVER_ID,
             CloudMediaProviderContract.AlbumColumns.DATE_TAKEN_MILLIS,
+            CloudMediaProviderContract.AlbumColumns.DISPLAY_NAME,
+            CloudMediaProviderContract.AlbumColumns.MEDIA_COVER_ID,
+            CloudMediaProviderContract.AlbumColumns.MEDIA_COUNT,
         )
     }
 }
