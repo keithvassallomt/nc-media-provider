@@ -334,3 +334,14 @@ Keith opened the picker's Albums tab: `onQueryAlbums` returned the one album, "L
 ### The newer picker can't be switched on over adb
 
 To try People (PLAN 7.3) on this phone, `adb shell device_config override mediaprovider enable_modern_picker true` was refused: `SecurityException: Permission denial for flag 'mediaprovider/enable_modern_picker'; allowlist permission granted, but must add flag to the allowlist`. The shell can write only allow-listed device_config flags; `allowed_cloud_providers` and `cloud_media_feature_enabled` are on that list, this one isn't. Nothing changed (the flag still reads `null`, and `PICK_IMAGES` still resolves to MediaProvider's `PhotoPickerActivity`). Categories also check this flag inside the picker, so enabling `com.android.photopicker`'s activities with `pm` wouldn't bring them.
+
+## Phase 8 checks (GrapheneOS, 2026-10-03)
+
+### Offline
+
+The app alone was cut off with `cmd connectivity set-package-networking-enabled false <package>` and `set-chain3-enabled true` (the rest of the phone stayed online; both undone afterwards, back to `chain:disabled` and `allow`). Android then reports no active network to the app, which is what the new check looks at. Keith opened the picker and picked a photo and a video he hadn't sent before:
+
+- The picker rebuilt its copy of the library from the app's database (about 18,000 rows in 4 s) and showed every thumbnail from the pre-cache; its only errors were tiles it cancelled while scrolling.
+- The 1.7 MB JPEG and the 37 MB MP4 both failed at once with `ServerUnreachableException: No network`, reported to the picker within milliseconds, where before they would have waited out the connection timeout.
+
+Not tried on the phone: a server that stops answering while the network is up (two failures, then 15 s of failing fast); unit tests cover it.
