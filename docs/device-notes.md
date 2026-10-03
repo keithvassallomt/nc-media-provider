@@ -324,3 +324,9 @@ A keyboard showing the 30 newest Nextcloud photos, inserting the tapped one thro
 - Tapping a 3 MB JPEG original fetched it and inserted it in 400 ms; Messenger accepted it.
 - All thumbnails loaded while the keyboard was open: an active keyboard has network access.
 - Enabling the keyboard with `adb shell ime enable` skips the trust warning a user sees when enabling it in Settings.
+
+## Phase 7 checks (GrapheneOS, 2026-10-03)
+
+### Albums in the older picker
+
+Keith opened the picker's Albums tab: `onQueryAlbums` returned the one album, "Landscapes"; opening it ran MediaProvider's album sync (`SyncAddAlbum`), which asked for 1,000 rows a page and got the 517 photos as 500 and 17; the photo he picked opened (2 MB in 0.3 s). The picker on this phone is still MediaProvider's own (`PhotoPickerActivity`), though `com.android.photopicker` is installed and the search and category flags are on.
