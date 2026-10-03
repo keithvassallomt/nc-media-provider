@@ -11,6 +11,7 @@ import android.graphics.Point
 import android.os.Binder
 import android.os.Bundle
 import android.os.CancellationSignal
+import android.os.OperationCanceledException
 import android.os.ParcelFileDescriptor
 import android.os.Process
 import android.provider.CloudMediaProvider
@@ -18,9 +19,12 @@ import android.provider.CloudMediaProvider.CloudMediaSurfaceController
 import android.provider.CloudMediaProvider.CloudMediaSurfaceStateChangedCallback
 import android.provider.CloudMediaProviderContract
 import android.util.Log
+import com.keithvassallo.ncmediaprovider.R
 import com.keithvassallo.ncmediaprovider.data.LibraryRepository
 import com.keithvassallo.ncmediaprovider.data.MediaItem
 import com.keithvassallo.ncmediaprovider.data.Page
+import com.keithvassallo.ncmediaprovider.data.People
+import com.keithvassallo.ncmediaprovider.data.PickerPerson
 import com.keithvassallo.ncmediaprovider.data.RemoteQueryDeferredException
 import com.keithvassallo.ncmediaprovider.data.ServerUnreachableException
 import java.io.FileNotFoundException
@@ -175,6 +179,84 @@ class NcCloudMediaProvider : CloudMediaProvider() {
         }
     }
 
+    /**
+     * What the newer picker may ask for (PLAN 7.3): categories, for its People section, when the
+     * last sync found people. Called often and on the picker's thread, so it reads a preference.
+     */
+    override fun onGetCapabilities(): CloudMediaProviderContract.Capabilities =
+        CloudMediaProviderContract.Capabilities.Builder()
+            .setMediaCategoriesEnabled(runCatching { repository.peopleAvailable }.getOrDefault(false))
+            .build()
+
+    /** One category, People, with the four most photographed faces as its covers. */
+    override fun onQueryMediaCategories(parentCategoryId: String?, extras: Bundle, cancellationSignal: CancellationSignal?): Cursor {
+        enforceSystemCaller()
+        val collection = queryCollection()
+        val people = if (parentCategoryId == null) {
+            runCatching { repository.queryPeople() }.onFailure(::logProviderFailure).getOrDefault(emptyList())
+        } else {
+            emptyList()
+        }
+        Log.d(TAG, "onQueryMediaCategories parent=$parentCategoryId -> ${if (people.isEmpty()) "none" else "People"}")
+        return MatrixCursor(CATEGORY_PROJECTION).apply {
+            if (people.isNotEmpty()) {
+                val covers = people.take(4).map(PickerPerson::faceCoverId)
+                addRow(
+                    arrayOf<Any?>(
+                        People.CATEGORY_ID,
+                        context?.getString(R.string.people_category),
+                        CloudMediaProviderContract.MEDIA_CATEGORY_TYPE_PEOPLE_AND_PETS,
+                        covers.getOrNull(0), covers.getOrNull(1), covers.getOrNull(2), covers.getOrNull(3),
+                    ),
+                )
+            }
+            this.extras = collectionExtras(collection.id)
+        }
+    }
+
+    /** The people in the People category, a page at a time; the token is the index to carry on from. */
+    override fun onQueryMediaSets(mediaCategoryId: String, extras: Bundle, cancellationSignal: CancellationSignal?): Cursor {
+        enforceSystemCaller()
+        val collection = queryCollection()
+        val pageSize = extras.pageSize(DEFAULT_PAGE_SIZE)
+        val start = extras.getString(CloudMediaProviderContract.EXTRA_PAGE_TOKEN)?.toIntOrNull() ?: 0
+        val people = if (mediaCategoryId == People.CATEGORY_ID) {
+            runCatching { repository.queryPeople() }.onFailure(::logProviderFailure).getOrDefault(emptyList())
+        } else {
+            emptyList()
+        }
+        val page = people.drop(start).take(pageSize)
+        val next = (start + pageSize).takeIf { it < people.size }?.toString()
+        Log.d(TAG, "onQueryMediaSets $mediaCategoryId from $start -> ${page.size} people, next=$next")
+        return MatrixCursor(MEDIA_SET_PROJECTION).apply {
+            page.forEach { addRow(arrayOf<Any?>(it.id, it.name.ifEmpty { null }, it.faceCoverId, it.count)) }
+            this.extras = collectionExtras(collection.id, next).apply {
+                putStringArrayList(
+                    ContentResolver.EXTRA_HONORED_ARGS,
+                    arrayListOf(CloudMediaProviderContract.EXTRA_PAGE_SIZE, CloudMediaProviderContract.EXTRA_PAGE_TOKEN),
+                )
+            }
+        }
+    }
+
+    /** One person's photos, as media rows; they are all in the library, which the picker requires. */
+    override fun onQueryMediaInMediaSet(mediaSetId: String, extras: Bundle, cancellationSignal: CancellationSignal?): Cursor {
+        enforceSystemCaller()
+        val collection = queryCollection()
+        val pageSize = extras.pageSize(DEFAULT_PAGE_SIZE)
+        val pageToken = extras.getString(CloudMediaProviderContract.EXTRA_PAGE_TOKEN)
+        val page = if (People.isPersonId(mediaSetId)) safelyQuery { repository.queryPersonMedia(mediaSetId, pageSize, pageToken) } else Page(emptyList(), null)
+        Log.d(TAG, "onQueryMediaInMediaSet $mediaSetId token=$pageToken -> ${page.items.size} rows, next=${page.nextPageToken}")
+        return mediaCursor(page).apply {
+            this.extras = collectionExtras(collection.id, page.nextPageToken).apply {
+                putStringArrayList(
+                    ContentResolver.EXTRA_HONORED_ARGS,
+                    arrayListOf(CloudMediaProviderContract.EXTRA_PAGE_SIZE, CloudMediaProviderContract.EXTRA_PAGE_TOKEN),
+                )
+            }
+        }
+    }
+
     @Throws(FileNotFoundException::class)
     override fun onOpenMedia(
         mediaId: String,
@@ -218,6 +300,9 @@ class NcCloudMediaProvider : CloudMediaProvider() {
             if (error is RemoteQueryDeferredException || error is ServerUnreachableException) {
                 // Expected offline, for every tile on screen; not worth a warning each.
                 Log.d(TAG, "onOpenPreview $mediaId not fetched: ${error.message}")
+            } else if (error is OperationCanceledException || cancellationSignal?.isCanceled == true) {
+                // The tile scrolled away. OkHttp reports that as a plain IOException ("Canceled").
+                Log.d(TAG, "onOpenPreview $mediaId canceled")
             } else {
                 Log.w(TAG, "onOpenPreview $mediaId (thumbnail=$thumbnailOnly) failed: ${error.describe()}")
             }
@@ -358,6 +443,23 @@ class NcCloudMediaProvider : CloudMediaProvider() {
             CloudMediaProviderContract.MediaColumns.WIDTH,
             CloudMediaProviderContract.MediaColumns.HEIGHT,
             CloudMediaProviderContract.MediaColumns.ORIENTATION,
+        )
+
+        val CATEGORY_PROJECTION = arrayOf(
+            CloudMediaProviderContract.MediaCategoryColumns.ID,
+            CloudMediaProviderContract.MediaCategoryColumns.DISPLAY_NAME,
+            CloudMediaProviderContract.MediaCategoryColumns.MEDIA_CATEGORY_TYPE,
+            CloudMediaProviderContract.MediaCategoryColumns.MEDIA_COVER_ID1,
+            CloudMediaProviderContract.MediaCategoryColumns.MEDIA_COVER_ID2,
+            CloudMediaProviderContract.MediaCategoryColumns.MEDIA_COVER_ID3,
+            CloudMediaProviderContract.MediaCategoryColumns.MEDIA_COVER_ID4,
+        )
+
+        val MEDIA_SET_PROJECTION = arrayOf(
+            CloudMediaProviderContract.MediaSetColumns.ID,
+            CloudMediaProviderContract.MediaSetColumns.DISPLAY_NAME,
+            CloudMediaProviderContract.MediaSetColumns.MEDIA_COVER_ID,
+            CloudMediaProviderContract.MediaSetColumns.MEDIA_COUNT,
         )
 
         val ALBUM_PROJECTION = arrayOf(

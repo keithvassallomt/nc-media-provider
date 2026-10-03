@@ -20,6 +20,9 @@ import com.keithvassallo.ncmediaprovider.data.AlbumItem
 import com.keithvassallo.ncmediaprovider.data.MediaItem
 import com.keithvassallo.ncmediaprovider.data.MemoriesDay
 import com.keithvassallo.ncmediaprovider.data.MemoriesFile
+import com.keithvassallo.ncmediaprovider.data.Person
+import com.keithvassallo.ncmediaprovider.data.PersonItem
+import com.keithvassallo.ncmediaprovider.data.PersonSummary
 import com.keithvassallo.ncmediaprovider.local.CloudPhoto
 
 /** A file removed from the library, and the generation that removed it (the deletion journal). */
@@ -214,6 +217,44 @@ interface LibraryDao {
     @Query("DELETE FROM album_item")
     fun clearAlbumItems()
 
+    @Query("SELECT * FROM person")
+    fun persons(): List<Person>
+
+    @Query("SELECT * FROM person WHERE id = :id")
+    fun person(id: String): Person?
+
+    @Upsert
+    fun savePersons(rows: List<Person>)
+
+    @Query("DELETE FROM person WHERE id IN (:ids)")
+    fun deletePersons(ids: List<String>)
+
+    @Upsert
+    fun savePersonItems(rows: List<PersonItem>)
+
+    @Query("DELETE FROM person_item WHERE personId IN (:personIds)")
+    fun deletePersonItems(personIds: List<String>)
+
+    @Query("DELETE FROM person")
+    fun clearPersons()
+
+    @Query("DELETE FROM person_item")
+    fun clearPersonItems()
+
+    /** Each person with how many of their photos the picker shows, and the newest one's date. */
+    @Query(
+        "SELECT p.id AS id, p.name AS name, COUNT(m.id) AS shown, COALESCE(MAX(m.dateTakenMillis), 0) AS newest " +
+            "FROM person p JOIN person_item i ON i.personId = p.id JOIN media m ON m.id = i.id AND m.isLiveVideo = 0 GROUP BY p.id",
+    )
+    fun personSummaries(): List<PersonSummary>
+
+    /** A page of one person's photos in the library, in file ID order after [afterId]. */
+    @Query(
+        "SELECT m.* FROM media m JOIN person_item i ON i.id = m.id " +
+            "WHERE i.personId = :personId AND m.isLiveVideo = 0 AND m.id > :afterId ORDER BY m.id LIMIT :limit",
+    )
+    fun personMedia(personId: String, afterId: String, limit: Int): List<MediaItem>
+
     @Query("SELECT * FROM memories_day")
     fun memoriesDays(): List<MemoriesDay>
 
@@ -282,9 +323,9 @@ class ListedValuesMigration : AutoMigrationSpec {
 @Database(
     entities = [
         MediaItem::class, DeletedMedia::class, SyncState::class, FolderEtag::class, MemoriesFile::class, MemoriesDay::class,
-        Album::class, AlbumItem::class,
+        Album::class, AlbumItem::class, Person::class, PersonItem::class,
     ],
-    version = 8,
+    version = 9,
     autoMigrations = [
         AutoMigration(from = 2, to = 3),
         AutoMigration(from = 3, to = 4),
@@ -292,6 +333,7 @@ class ListedValuesMigration : AutoMigrationSpec {
         AutoMigration(from = 5, to = 6),
         AutoMigration(from = 6, to = 7, spec = ListedValuesMigration::class),
         AutoMigration(from = 7, to = 8),
+        AutoMigration(from = 8, to = 9),
     ],
 )
 abstract class LibraryDatabase : RoomDatabase() {

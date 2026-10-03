@@ -414,6 +414,24 @@ class LibraryStoreTest {
     }
 
     @Test
+    fun `people show only their photos in the library, a page at a time`() {
+        store.commit((1..4).map(::item), complete = true)
+        val alex = Person("nc-person-1", "keith/1", "Alex", "3|e")
+        val nobody = Person("nc-person-2", "keith/2", "", "1|e")
+        assertTrue(store.savePeople(listOf(alex, nobody), mapOf(alex.id to listOf("1", "2", "9"), nobody.id to listOf("9"))))
+        assertEquals(listOf("Alex"), store.pickerPeople().map(PickerPerson::name))
+        assertEquals(2, store.pickerPeople().single().count)
+        val first = store.personPage(alex.id, null, 1)
+        assertEquals(listOf("1"), first.items.map(MediaItem::id))
+        assertEquals(listOf("2"), store.personPage(alex.id, first.nextPageToken, 1).items.map(MediaItem::id))
+
+        assertTrue(store.savePeople(listOf(nobody), emptyMap()))
+        assertTrue(store.pickerPeople().isEmpty())
+        assertTrue(store.clearPeople())
+        assertTrue(store.persons().isEmpty())
+    }
+
+    @Test
     fun `state survives a new store on the same database, and a reset starts over`() {
         store.commit((1..3).map(::item), complete = true)
         val reopened = LibraryStore(database) { now }

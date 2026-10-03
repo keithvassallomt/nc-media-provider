@@ -19,6 +19,10 @@
         <package android:name="moe.shizuku.privileged.api" />
         <!-- Activation keeps Google Photos on the allow-list when it is installed (PLAN 4.6). -->
         <package android:name="com.google.android.apps.photos" />
+        <!-- Which photo picker the phone uses decides how people are offered (PLAN 7.3). -->
+        <intent>
+            <action android:name="android.provider.action.PICK_IMAGES" />
+        </intent>
     </queries>
 
     <application

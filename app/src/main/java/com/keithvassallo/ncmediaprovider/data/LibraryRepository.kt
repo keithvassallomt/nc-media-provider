@@ -686,6 +686,7 @@ class LibraryRepository private constructor(context: Context) {
         val albums = syncAlbums(account, full = needsFull) or store.applyAlbumRows()
         // Memories first: it fixes far more dates than the video headers do.
         val enriched = enrichFromMemories(account, fullRead = needsFull, isStopped)
+        val people = syncPeople(account, full = needsFull, isStopped)
         val headers = if (isMeteredNetwork()) {
             // Up to two 64 KiB reads a video: over 100 MB for a first pass on a large library.
             Log.d(TAG, "Video headers wait for an unmetered network")
@@ -697,7 +698,7 @@ class LibraryRepository private constructor(context: Context) {
         val rematched = matchLocally()
         store.pruneDeletions(DELETION_RETENTION_MS)
         store.markChecked()
-        if (changed || albums || headers || enriched || rematched > 0) notifyPickerOfChanges()
+        if (changed || albums || people || headers || enriched || rematched > 0) notifyPickerOfChanges()
         if (changed || enriched) schedulePrecache()
         return changed
     }
@@ -798,6 +799,71 @@ class LibraryRepository private constructor(context: Context) {
             false
         } catch (error: IOException) {
             Log.d(TAG, "Couldn't list albums, keeping what was stored: ${error.javaClass.simpleName}: ${error.message.orEmpty()}")
+            false
+        }
+    }
+
+    /**
+     * Reads the people Recognize found, through Memories (PLAN 7.3): the face groups at every sync,
+     * and a person's photos when Memories' count or cover for them changed, or with a full listing.
+     * People come on top of the library, like albums: an error keeps what was stored, and a server
+     * without Memories and Recognize, or Memories switched off here, has none. Listing stops after
+     * [PEOPLE_TIME_BUDGET_MS]; a person not reached waits for the next sync. Returns true when
+     * anything changed.
+     */
+    private fun syncPeople(account: NextcloudAccount, full: Boolean, isStopped: () -> Boolean): Boolean {
+        if (!settings.useMemories || settings.memoriesVersion?.let(MemoriesApi::isSupported) != true) {
+            settings.peopleAvailable = false
+            return store.clearPeople()
+        }
+        val started = SystemClock.elapsedRealtime()
+        return try {
+            val clusters = client.memoriesClusters(account)?.filter { it.count > 0 }
+            if (clusters == null) {
+                settings.peopleAvailable = false
+                return store.clearPeople()
+            }
+            val stored = store.persons().associateBy(Person::id)
+            val relisted = HashMap<String, List<String>>()
+            var cutShort = false
+            val people = clusters.map { cluster ->
+                val id = People.personId(cluster)
+                var signature = stored[id]?.signature.orEmpty()
+                if (full || signature != cluster.signature) {
+                    if (cutShort || isStopped() || SystemClock.elapsedRealtime() - started > PEOPLE_TIME_BUDGET_MS) {
+                        cutShort = true
+                    } else {
+                        val days = client.memoriesPersonDays(account, cluster.memoriesKey)
+                        relisted[id] = MemoriesApi.requestBatches(days.keys, days)
+                            .flatMap { client.memoriesPersonFiles(account, cluster.memoriesKey, it) }
+                            .map(MemoriesFile::id)
+                            .distinct()
+                        signature = cluster.signature
+                    }
+                }
+                Person(id, cluster.memoriesKey, cluster.name, signature)
+            }
+            val changed = store.savePeople(people, relisted)
+            val shown = store.pickerPeople()
+            settings.peopleAvailable = shown.isNotEmpty()
+            if (relisted.isNotEmpty()) {
+                Log.i(
+                    TAG,
+                    "People: ${people.size} face groups (${people.count { it.name.isNotEmpty() }} named), ${relisted.size} listed again " +
+                        "in ${SystemClock.elapsedRealtime() - started} ms${if (cutShort) ", the rest next time" else ""}; ${shown.size} with photos in the library",
+                )
+            }
+            changed
+        } catch (error: JSONException) {
+            Log.w(TAG, "Memories answered the people request in a form this app can't read: ${error.message.orEmpty()}")
+            settings.peopleAvailable = false
+            store.clearPeople()
+        } catch (error: NextcloudHttpException) {
+            if (error.statusCode == 401) throw error
+            Log.w(TAG, "Couldn't read people, keeping what was stored: HTTP ${error.statusCode}")
+            false
+        } catch (error: IOException) {
+            Log.d(TAG, "Couldn't read people, keeping what was stored: ${error.javaClass.simpleName}: ${error.message.orEmpty()}")
             false
         }
     }
@@ -1032,12 +1098,33 @@ class LibraryRepository private constructor(context: Context) {
         return store.mediaPage(sinceGeneration, pageToken, pageSize)
     }
 
-    /** The albums the picker can show (PLAN 7.1), from the database. */
-    fun queryAlbums(): List<PickerAlbum> = if (hasAccount) store.pickerAlbums() else emptyList()
+    /**
+     * The albums the picker can show (PLAN 7.1), from the database. The older picker has no People
+     * section, so there named people are albums too (PLAN 7.3).
+     */
+    fun queryAlbums(): List<PickerAlbum> {
+        if (!hasAccount) return emptyList()
+        val albums = store.pickerAlbums()
+        if (PickerKind.isNewer(appContext)) return albums
+        return albums + store.pickerPeople().filter { it.name.isNotEmpty() }
+            .map { PickerAlbum(it.id, it.name, it.count, it.faceCoverId, it.newestMillis) }
+    }
 
-    /** A page of one album's photos and videos; the token is the last file ID of the previous page. */
-    fun queryAlbumMedia(albumId: String, pageSize: Int, pageToken: String?): Page<MediaItem> =
-        if (hasAccount) store.albumPage(albumId, pageToken, pageSize) else Page(emptyList(), null)
+    /** A page of one album's or person's photos and videos; the token is the last file ID of the previous page. */
+    fun queryAlbumMedia(albumId: String, pageSize: Int, pageToken: String?): Page<MediaItem> = when {
+        !hasAccount -> Page(emptyList(), null)
+        People.isPersonId(albumId) -> store.personPage(albumId, pageToken, pageSize)
+        else -> store.albumPage(albumId, pageToken, pageSize)
+    }
+
+    // People for the newer picker's categories (PLAN 7.3).
+
+    val peopleAvailable: Boolean get() = hasAccount && settings.peopleAvailable
+
+    fun queryPeople(): List<PickerPerson> = if (hasAccount) store.pickerPeople() else emptyList()
+
+    fun queryPersonMedia(personId: String, pageSize: Int, pageToken: String?): Page<MediaItem> =
+        if (hasAccount) store.personPage(personId, pageToken, pageSize) else Page(emptyList(), null)
 
     fun deletedSince(sinceGeneration: Long, pageToken: String?, pageSize: Int): Page<String> {
         if (forcedRebuild(sinceGeneration)) return Page(emptyList(), null)
@@ -1170,6 +1257,7 @@ class LibraryRepository private constructor(context: Context) {
         thumbnailOnly: Boolean,
         cancellationSignal: CancellationSignal?,
     ): AssetFileDescriptor {
+        if (People.isFaceId(mediaId)) return openFace(mediaId, cancellationSignal)
         if (!thumbnailOnly) {
             return AssetFileDescriptor(openOriginal(mediaId, cancellationSignal), 0, AssetFileDescriptor.UNKNOWN_LENGTH)
         }
@@ -1204,6 +1292,21 @@ class LibraryRepository private constructor(context: Context) {
                         throw error
                     }
                 }
+            }
+        }
+        return file.asAssetFileDescriptor()
+    }
+
+    /** A person's face as Memories crops it, for the picker's covers (PLAN 7.3); the same at every size. */
+    private fun openFace(faceId: String, cancellationSignal: CancellationSignal?): AssetFileDescriptor {
+        val person = store.person(People.personOfFace(faceId)) ?: throw FileNotFoundException("Unknown face $faceId")
+        val key = "face:${person.id}:${person.signature}"
+        diskCache.peek(MediaDiskCache.Area.PREVIEW, key)?.let { return it.asAssetFileDescriptor() }
+        val account = requireAuthorizedAccount()
+        reachability.check()
+        val file = withSlot(previewSlots, PREVIEW_SLOT_WAIT_MS, "face") {
+            diskCache.getOrDownload(MediaDiskCache.Area.PREVIEW, key, cancellationSignal) { target ->
+                unauthorizedStops { reachability.request { client.downloadFacePreview(account, person.memoriesKey, target, cancellationSignal) } }
             }
         }
         return file.asAssetFileDescriptor()
@@ -1336,6 +1439,9 @@ class LibraryRepository private constructor(context: Context) {
 
         /** Memories reading per sync; the rest waits for the next one (PLAN 6.2). */
         private const val MEMORIES_TIME_BUDGET_MS = 2L * 60L * 1_000L
+
+        /** Listing people's photos per sync, two or more requests each (PLAN 7.3). */
+        private const val PEOPLE_TIME_BUDGET_MS = 2L * 60L * 1_000L
 
         private const val LOCAL_MATCH_DELAY_MS = 5_000L
         private const val SELECTED_SEEN_RESOLUTION_MS = 5L * 60L * 1_000L

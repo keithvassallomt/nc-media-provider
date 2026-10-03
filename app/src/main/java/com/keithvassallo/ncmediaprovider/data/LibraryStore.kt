@@ -164,6 +164,45 @@ class LibraryStore(
         return Albums.contents(items, rows, state().generation)
     }
 
+    // People (PLAN 7.3).
+
+    fun persons(): List<Person> = dao.persons()
+
+    fun person(id: String): Person? = dao.person(id)
+
+    /**
+     * Stores the people as listed: people no longer listed go with their photos, and [relisted]
+     * replaces the photos of the people it holds. Returns true when anything changed.
+     */
+    fun savePeople(people: List<Person>, relisted: Map<String, List<String>>): Boolean = database.runInTransaction<Boolean> {
+        val before = dao.persons()
+        val gone = before.map(Person::id) - people.mapTo(HashSet(), Person::id)
+        gone.chunked(SQL_BATCH).forEach {
+            dao.deletePersonItems(it)
+            dao.deletePersons(it)
+        }
+        people.chunked(SQL_BATCH).forEach(dao::savePersons)
+        relisted.keys.toList().chunked(SQL_BATCH).forEach(dao::deletePersonItems)
+        relisted.flatMap { (person, ids) -> ids.map { PersonItem(person, it) } }.chunked(SQL_BATCH).forEach(dao::savePersonItems)
+        gone.isNotEmpty() || people.toSet() != before.toSet() || relisted.isNotEmpty()
+    }
+
+    fun clearPeople(): Boolean = database.runInTransaction<Boolean> {
+        val had = dao.persons().isNotEmpty()
+        dao.clearPersonItems()
+        dao.clearPersons()
+        had
+    }
+
+    /** The people the picker can show: those with a photo in the library. */
+    fun pickerPeople(): List<PickerPerson> = People.forPicker(dao.personSummaries())
+
+    /** A page of one person's photos; [afterId] is the last ID of the previous page. */
+    fun personPage(personId: String, afterId: String?, pageSize: Int): Page<MediaItem> {
+        val rows = dao.personMedia(personId, afterId.orEmpty(), pageSize)
+        return Page(rows, rows.takeIf { it.size == pageSize }?.last()?.id)
+    }
+
     /** Rows whose values come from Memories, and live-photo videos it paired (PLAN 6.2). */
     fun memoriesStats(): Pair<Int, Int> = dao.memoriesMatchedCount() to dao.liveVideoCount()
 
@@ -184,6 +223,8 @@ class LibraryStore(
         dao.clearMemoriesDayCounts()
         dao.clearAlbumItems()
         dao.clearAlbums()
+        dao.clearPersonItems()
+        dao.clearPersons()
         val fresh = SyncState(instanceId = UUID.randomUUID().toString(), sourceKey = sourceKey)
         dao.saveState(fresh)
         cached = fresh

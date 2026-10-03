@@ -47,6 +47,11 @@ class LibrarySettings(context: Context) {
         get() = preferences.getBoolean(KEY_USE_MEMORIES, true)
         set(value) = preferences.edit { putBoolean(KEY_USE_MEMORIES, value) }
 
+    /** Whether the last sync found people to show (PLAN 7.3); read on the picker's capabilities call. */
+    var peopleAvailable: Boolean
+        get() = preferences.getBoolean(KEY_PEOPLE_AVAILABLE, false)
+        set(value) = preferences.edit { putBoolean(KEY_PEOPLE_AVAILABLE, value) }
+
     /** The Memories version the last sync found: empty when there was none, null before any check. */
     var memoriesVersion: String?
         get() = preferences.getString(KEY_MEMORIES_VERSION, null)
@@ -100,6 +105,7 @@ class LibrarySettings(context: Context) {
         private const val KEY_RESPECT_NO_MEDIA = "respect_no_media"
         private const val KEY_USE_MEMORIES = "use_memories"
         private const val KEY_MEMORIES_VERSION = "memories_version"
+        private const val KEY_PEOPLE_AVAILABLE = "people_available"
         private const val KEY_LAST_SYNC_ERROR = "last_sync_error"
         private const val KEY_PRECACHE = "precache"
         private const val KEY_PRECACHE_MONTHS = "precache_months"

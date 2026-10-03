@@ -291,8 +291,46 @@ class NextcloudClient {
             MemoriesApi.parseFiles(response.body.string())
         }
 
-    private fun <T> memoriesGet(account: NextcloudAccount, path: String, read: (Response) -> T): T {
-        val url = account.server().newBuilder().addPathSegments("index.php/apps/memories/api/$path").build()
+    /**
+     * The user's face groups from Recognize, through Memories (PLAN 7.3), or null when the server
+     * has no Recognize behind Memories (Memories answers 412) or no Memories at all.
+     */
+    fun memoriesClusters(account: NextcloudAccount): List<MemoriesCluster>? = memoriesGet(account, "clusters/recognize") { response ->
+        when {
+            response.code == 404 || response.code == 403 || response.code == 412 -> null
+            !response.isSuccessful -> throw response.toException()
+            else -> People.parseClusters(response.body.string())
+        }
+    }
+
+    /** The days holding photos of the person with [memoriesKey], and how many on each. */
+    fun memoriesPersonDays(account: NextcloudAccount, memoriesKey: String): Map<Int, Int> =
+        memoriesGet(account, "days", "recognize" to memoriesKey) { response ->
+            if (!response.isSuccessful) throw response.toException()
+            MemoriesApi.parseDays(response.body.string())
+        }
+
+    /** The photos of the person with [memoriesKey] on [days]. */
+    fun memoriesPersonFiles(account: NextcloudAccount, memoriesKey: String, days: List<Int>): List<MemoriesFile> =
+        memoriesGet(account, "days/${days.joinToString(",")}", "recognize" to memoriesKey) { response ->
+            if (!response.isSuccessful) throw response.toException()
+            MemoriesApi.parseFiles(response.body.string())
+        }
+
+    /** Memories' crop of the person's face, a small JPEG, for the picker's covers. */
+    fun downloadFacePreview(account: NextcloudAccount, memoriesKey: String, destination: File, cancellationSignal: CancellationSignal?) {
+        val url = account.server().newBuilder()
+            .addPathSegments("index.php/apps/memories/api/clusters/recognize/preview")
+            .addQueryParameter("name", memoriesKey)
+            .build()
+        download(Request.Builder().url(url).header("Accept", "image/*"), account, destination, cancellationSignal, PREVIEW_TIMEOUT_SECONDS)
+    }
+
+    private fun <T> memoriesGet(account: NextcloudAccount, path: String, vararg query: Pair<String, String>, read: (Response) -> T): T {
+        val url = account.server().newBuilder()
+            .addPathSegments("index.php/apps/memories/api/$path")
+            .apply { query.forEach { (name, value) -> addQueryParameter(name, value) } }
+            .build()
         return execute(Request.Builder().url(url).header("Accept", "application/json"), account, SEARCH_TIMEOUT_SECONDS).use(read)
     }
 

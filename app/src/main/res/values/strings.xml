@@ -260,4 +260,5 @@
     <string name="details_local_network_title">Local network</string>
     <string name="details_diagnostics_title">Diagnostics</string>
     <string name="setup_again">Go through setup again</string>
+    <string name="people_category">People</string>
 </resources>
