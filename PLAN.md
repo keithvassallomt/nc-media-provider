@@ -411,11 +411,11 @@ What the pickers need (MediaProvider source, `android17-release`):
 
 ### Phase 8: Robustness and offline
 
-**8.1 Offline.** Collection info and queries come from the database, thumbnails from the cache, and opening a file fails quickly instead of hanging. This also stops Android 17 from deselecting the provider after repeated failures.
+**8.1 Offline.** Built: collection info, media, albums and deletions were already answered from the database, and thumbnails from the cache and pre-cache. New: a shared reachability check in front of every preview, original and stream. Without a network nothing is tried; after two requests in a row fail for want of the server, nothing is tried for 15 s, and any answer from the server clears that. A video stream reads its first chunk before it is handed over, so an unreachable server or a changed file fails the open, where the picker can report it, instead of the receiving app's first read. Collection info and queries come from the database, thumbnails from the cache, and opening a file fails quickly instead of hanging. This also stops Android 17 from deselecting the provider after repeated failures.
 
-**8.2 Background tuning.** WorkManager constraints, cache size settings, and a "Clear cache" button.
+**8.2 Background tuning.** Built: the originals' space limit is a setting (512 MB, 2 GB as before, or 8 GB) and lowering it trims at once; "Clear downloads" empties the preview and originals caches; switching the pre-cache off deletes its thumbnails. Video header reads (5.3 and 6.0) wait for an unmetered network, since a first pass costs up to two 64 KiB reads a video, over 100 MB for a large library; the pre-cache already waited for Wi-Fi. The sync keeps its plain "any network" constraint: a change check is a few small requests. WorkManager constraints, cache size settings, and a "Clear cache" button.
 
-**8.3 Browser check.** Vanadium twice stopped loading the server after a sign-in through the app's browser tab, until it was force-stopped (see docs/device-notes.md). Check the sign-in with Chrome and Firefox, and whether a sign-in tab left open is what wedges it.
+**8.3 Browser check.** Vanadium twice stopped loading the server after a sign-in through the app's browser tab, until it was force-stopped (see docs/device-notes.md). Check the sign-in with Chrome and Firefox, and whether a sign-in tab left open is what wedges it. Chrome is part of the stock Pixel session (with #10); signing in again on Keith's phone would wipe its library and pre-cache, so Firefox waits for a fresh-install test.
 
 ### Phase 9: Release
 

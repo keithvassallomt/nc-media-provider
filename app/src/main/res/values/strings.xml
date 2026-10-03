@@ -99,7 +99,7 @@
     <string name="memories_status_unchecked">Your server is checked for Memories at the next sync.</string>
     <string name="memories_status_absent">Memories isn’t installed on your server, or isn’t available to your account.</string>
     <string name="memories_status_untested">Memories %1$s hasn’t been tested with this app, so its dates aren’t used.</string>
-    <string name="memories_status_active">Memories %1$s: %2$d photos and videos use its dates, and %3$d live-photo videos are hidden.</string>
+    <string name="memories_status_active">Memories %1$s. Items dated by it: %2$d. Live-photo videos hidden: %3$d.</string>
     <string name="precache_running">Downloading: %1$d of %2$d ready.</string>
     <string name="notify_channel">Account and setup</string>
     <string name="notify_sign_in_title">Sign in to Nextcloud again</string>
@@ -172,8 +172,16 @@
     <string name="open_picker">Test system picker</string>
     <string name="activation_footer">Only one cloud source can be active at a time. With Google Photos kept as a choice, you switch between it and this app in the photo picker’s cloud settings. On some phones, such as GrapheneOS, that settings screen only appears after a restart. Updating this app deselects it; with Shizuku it is selected again automatically, otherwise a notification takes you to the settings.</string>
     <string name="picker_unavailable">The system photo picker is unavailable</string>
-    <string name="cache_title">Diagnostics</string>
+    <string name="cache_title">Storage and diagnostics</string>
     <string name="cache_explanation">The library, the last sync and the downloaded media. Old downloads are removed automatically at the limits shown.</string>
+    <string name="originals_limit_label">Space for downloaded photos and videos, so one picked again opens at once:</string>
+    <string name="originals_limit_small">512 MB</string>
+    <string name="originals_limit_default">2 GB</string>
+    <string name="originals_limit_large">8 GB</string>
+    <string name="clear_downloads">Clear downloads</string>
+    <string name="clear_downloads_title">Clear downloads?</string>
+    <string name="clear_downloads_message">This deletes the previews and photos downloaded so far. Pre-cached thumbnails stay; switch the pre-cache off to remove those. Your library and your Nextcloud are untouched.</string>
+    <string name="clear_downloads_done">Downloads cleared.</string>
     <string name="diagnostics_summary">Images in the library: %1$d (generation %2$d)\nAlso on this phone: %3$d\nLast checked: %4$s\nLast error: %5$s\nPreviews: %6$s of %7$s\nOriginals: %8$s of %9$s</string>
     <string name="diagnostics_never">never</string>
     <string name="diagnostics_no_error">none</string>

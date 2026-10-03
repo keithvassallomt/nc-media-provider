@@ -159,6 +159,7 @@ class SetupActivity : AppCompatActivity() {
         binding.sendButton.setOnClickListener { startActivity(Intent(this, SendFromNextcloudActivity::class.java)) }
         binding.keyboardSettingsButton.setOnClickListener { startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) }
         setUpPrecache()
+        setUpStorage()
         binding.memoriesSwitch.isChecked = repository.useMemories
         binding.memoriesSwitch.setOnCheckedChangeListener { _, checked ->
             repository.setUseMemories(checked)
@@ -300,6 +301,42 @@ class SetupActivity : AppCompatActivity() {
             else -> repository.precacheReady().takeIf { it.second > 0 }?.let { getString(R.string.precache_ready, it.first, it.second) }
         }
         binding.precacheStatus.text = listOfNotNull(estimate, progress).joinToString(" ")
+    }
+
+    /** The originals' size limit and "Clear downloads" (PLAN 8.2). */
+    private fun setUpStorage() {
+        binding.originalsLimit.check(
+            when (repository.originalsCacheBytes) {
+                ORIGINALS_SMALL_BYTES -> R.id.originalsLimitSmall
+                ORIGINALS_LARGE_BYTES -> R.id.originalsLimitLarge
+                else -> R.id.originalsLimitDefault
+            },
+        )
+        binding.originalsLimit.addOnButtonCheckedListener { _, id, checked ->
+            if (!checked) return@addOnButtonCheckedListener
+            repository.setOriginalsCacheLimit(
+                when (id) {
+                    R.id.originalsLimitSmall -> ORIGINALS_SMALL_BYTES
+                    R.id.originalsLimitLarge -> ORIGINALS_LARGE_BYTES
+                    else -> MediaDiskCache.Area.ORIGINAL.maximumBytes
+                },
+            )
+            updateCacheUi()
+        }
+        binding.clearDownloadsButton.setOnClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.clear_downloads_title)
+                .setMessage(R.string.clear_downloads_message)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.clear_downloads) { _, _ ->
+                    lifecycleScope.launch {
+                        withContext(Dispatchers.IO) { repository.clearDownloads() }
+                        Toast.makeText(this@SetupActivity, R.string.clear_downloads_done, Toast.LENGTH_SHORT).show()
+                        updateCacheUi()
+                    }
+                }
+                .show()
+        }
     }
 
     /** The Memories layer (PLAN 6.1): what the last sync found, and how much of the library it dates. */
@@ -640,6 +677,8 @@ class SetupActivity : AppCompatActivity() {
         private const val RESULT_SELECTED = "selected"
         private const val KEY_ASKED_NOTIFICATIONS = "asked_notifications"
         private const val SHIZUKU_PERMISSION_REQUEST = 41
+        private const val ORIGINALS_SMALL_BYTES = 512L * 1024L * 1024L
+        private const val ORIGINALS_LARGE_BYTES = 8L * 1024L * 1024L * 1024L
         private const val SHIZUKU_BIND_TIMEOUT_MS = 20_000L
         private const val SHIZUKU_PACKAGE_NAME = "moe.shizuku.privileged.api"
         private const val SHIZUKU_DOWNLOAD_URL = "https://shizuku.rikka.app/download/"

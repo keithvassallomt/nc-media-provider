@@ -22,6 +22,7 @@ import com.keithvassallo.ncmediaprovider.data.LibraryRepository
 import com.keithvassallo.ncmediaprovider.data.MediaItem
 import com.keithvassallo.ncmediaprovider.data.Page
 import com.keithvassallo.ncmediaprovider.data.RemoteQueryDeferredException
+import com.keithvassallo.ncmediaprovider.data.ServerUnreachableException
 import java.io.FileNotFoundException
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
@@ -214,8 +215,9 @@ class NcCloudMediaProvider : CloudMediaProvider() {
         return try {
             repository.openPreview(mediaId, size, thumbnailOnly, cancellationSignal)
         } catch (error: Exception) {
-            if (error is RemoteQueryDeferredException) {
-                Log.d(TAG, "onOpenPreview $mediaId deferred: ${error.message}")
+            if (error is RemoteQueryDeferredException || error is ServerUnreachableException) {
+                // Expected offline, for every tile on screen; not worth a warning each.
+                Log.d(TAG, "onOpenPreview $mediaId not fetched: ${error.message}")
             } else {
                 Log.w(TAG, "onOpenPreview $mediaId (thumbnail=$thumbnailOnly) failed: ${error.describe()}")
             }

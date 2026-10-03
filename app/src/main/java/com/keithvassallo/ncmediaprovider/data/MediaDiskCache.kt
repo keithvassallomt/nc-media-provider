@@ -8,7 +8,11 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
-class MediaDiskCache(context: Context) {
+/**
+ * Downloaded previews and originals, each area pruned oldest-used first. [limit] gives an area's
+ * size limit; the originals' is a setting (PLAN 8.2).
+ */
+class MediaDiskCache(context: Context, private val limit: (Area) -> Long = Area::maximumBytes) {
     private val root = File(context.applicationContext.cacheDir, "media_cache")
     private val locks = ConcurrentHashMap<String, Any>()
     private val bytesSincePrune = ConcurrentHashMap<Area, AtomicLong>()
@@ -72,6 +76,18 @@ class MediaDiskCache(context: Context) {
         bytesSincePrune.values.forEach { it.set(0L) }
     }
 
+    /** Empties one area, for "Clear downloads" and switching the pre-cache off (PLAN 8.2). */
+    fun clear(area: Area) {
+        File(root, area.directory).deleteRecursively()
+        bytesSincePrune[area]?.set(0L)
+    }
+
+    /** Brings [area] under its limit now, after the limit was lowered. Call off the main thread. */
+    fun prune(area: Area) {
+        val directory = File(root, area.directory)
+        if (directory.isDirectory) prune(directory, limit(area), keep = null)
+    }
+
     fun stats(): CacheStats = CacheStats(
         previews = areaStats(Area.PREVIEW),
         originals = areaStats(Area.ORIGINAL),
@@ -88,7 +104,7 @@ class MediaDiskCache(context: Context) {
             ?.filter { it.isFile && !it.name.endsWith(".part") && !it.name.endsWith(MISSING_SUFFIX) }
             ?.sumOf { file -> runCatching { file.length() }.getOrDefault(0L) }
             ?: 0L
-        return CacheAreaStats(usedBytes = usedBytes, maximumBytes = area.maximumBytes)
+        return CacheAreaStats(usedBytes = usedBytes, maximumBytes = limit(area))
     }
 
     /**
@@ -97,18 +113,18 @@ class MediaDiskCache(context: Context) {
      */
     private fun pruneIfDue(area: Area, directory: File, keep: File) {
         val written = bytesSincePrune.getOrPut(area) { AtomicLong() }.addAndGet(keep.length())
-        if (written < area.maximumBytes / PRUNE_INTERVAL_DIVISOR) return
+        if (written < limit(area) / PRUNE_INTERVAL_DIVISOR) return
         val guard = pruning.getOrPut(area) { AtomicBoolean() }
         if (!guard.compareAndSet(false, true)) return
         try {
             bytesSincePrune.getValue(area).set(0L)
-            prune(directory, area.maximumBytes, keep)
+            prune(directory, limit(area), keep)
         } finally {
             guard.set(false)
         }
     }
 
-    private fun prune(directory: File, maximumBytes: Long, keep: File) {
+    private fun prune(directory: File, maximumBytes: Long, keep: File?) {
         val files = directory.listFiles()?.filter { it.isFile && !it.name.endsWith(".part") && !it.name.endsWith(MISSING_SUFFIX) }.orEmpty()
         var total = files.sumOf(File::length)
         if (total <= maximumBytes) return
@@ -129,6 +145,7 @@ class MediaDiskCache(context: Context) {
         .digest(toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(it) }
 
+    /** [maximumBytes] is the default limit. */
     enum class Area(val directory: String, val maximumBytes: Long) {
         PREVIEW("previews", 256L * 1024L * 1024L),
         ORIGINAL("originals", 2L * 1024L * 1024L * 1024L),

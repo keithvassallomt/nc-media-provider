@@ -75,6 +75,11 @@ class LibrarySettings(context: Context) {
         get() = preferences.getInt(KEY_PRECACHE_MONTHS, 0)
         set(value) = preferences.edit { putInt(KEY_PRECACHE_MONTHS, value) }
 
+    /** How much space downloaded originals may take (PLAN 8.2); the oldest-used go first. */
+    var originalsCacheBytes: Long
+        get() = preferences.getLong(KEY_ORIGINALS_CACHE, MediaDiskCache.Area.ORIGINAL.maximumBytes)
+        set(value) = preferences.edit { putLong(KEY_ORIGINALS_CACHE, value) }
+
     /** The last pre-cache run's result, "ready of total", for the setup screen. */
     var precacheReady: Pair<Int, Int>
         get() = preferences.getInt(KEY_PRECACHE_READY, 0) to preferences.getInt(KEY_PRECACHE_TOTAL, 0)
@@ -100,6 +105,7 @@ class LibrarySettings(context: Context) {
         private const val KEY_PRECACHE_MONTHS = "precache_months"
         private const val KEY_PRECACHE_READY = "precache_ready"
         private const val KEY_PRECACHE_TOTAL = "precache_total"
+        private const val KEY_ORIGINALS_CACHE = "originals_cache_bytes"
         private const val KEY_WAS_SELECTED = "was_selected_provider"
         private const val KEY_SELECTED_SEEN = "selected_seen_millis"
 

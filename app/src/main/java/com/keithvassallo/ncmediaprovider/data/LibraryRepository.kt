@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.AssetFileDescriptor
 import android.graphics.ImageDecoder
 import android.graphics.Point
+import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.CancellationSignal
 import android.os.Handler
@@ -81,7 +82,9 @@ class LibraryRepository private constructor(context: Context) {
     private val credentials = CredentialStore(appContext)
     private val settings = LibrarySettings(appContext)
     private val client = NextcloudClient()
-    private val diskCache = MediaDiskCache(appContext)
+    private val diskCache = MediaDiskCache(appContext) { area ->
+        if (area == MediaDiskCache.Area.ORIGINAL) settings.originalsCacheBytes else area.maximumBytes
+    }
     private val localMatchExecutor = Executors.newSingleThreadScheduledExecutor { runnable ->
         Thread(runnable, "nc-local-match").apply { isDaemon = true }
     }
@@ -99,6 +102,11 @@ class LibraryRepository private constructor(context: Context) {
     private val previewSlots = Semaphore(MAX_CONCURRENT_PREVIEW_DOWNLOADS, true)
     private val originalSlots = Semaphore(MAX_CONCURRENT_ORIGINAL_DOWNLOADS, true)
     private val previewGate = RemoteQueryGate(PREVIEW_RETRY_DELAY_MS, ::isReachabilityFailure, failuresBeforeBackOff = PREVIEW_FAILURES_BEFORE_BACK_OFF)
+
+    // Android reports no active network to an app whose network is blocked, as well as offline.
+    private val reachability = ServerReachability(
+        hasNetwork = { appContext.getSystemService(ConnectivityManager::class.java)?.activeNetwork != null },
+    )
 
     /** Plain preferences only, never the Keystore: safe on the picker's 100 ms collection-info path. */
     val hasAccount: Boolean get() = credentials.account() != null
@@ -175,11 +183,42 @@ class LibraryRepository private constructor(context: Context) {
     /** The pre-cache job, for showing its progress. */
     fun precacheJobs(): Flow<List<WorkInfo>> = WorkManager.getInstance(appContext).getWorkInfosForUniqueWorkFlow(PRECACHE_WORK)
 
-    /** Turns the pre-cache on or off, or changes how far back it goes; starts a run when on. */
+    /**
+     * Turns the pre-cache on or off, or changes how far back it goes; starts a run when on. Off,
+     * its thumbnails go too, giving the space back (PLAN 8.2).
+     */
     fun setPrecache(enabled: Boolean, months: Int) {
+        val wasEnabled = settings.precacheEnabled
         settings.precacheEnabled = enabled
         settings.precacheMonths = months
-        if (enabled) schedulePrecache() else WorkManager.getInstance(appContext).cancelUniqueWork(PRECACHE_WORK)
+        if (enabled) {
+            schedulePrecache()
+        } else {
+            WorkManager.getInstance(appContext).cancelUniqueWork(PRECACHE_WORK)
+            if (wasEnabled) {
+                settings.precacheReady = 0 to 0
+                Thread { diskCache.clear(MediaDiskCache.Area.PRECACHE) }.start()
+            }
+        }
+    }
+
+    // Storage (PLAN 8.2).
+
+    val originalsCacheBytes: Long get() = settings.originalsCacheBytes
+
+    /** Sets how much space downloaded originals may take, and trims them to it at once. */
+    fun setOriginalsCacheLimit(bytes: Long) {
+        settings.originalsCacheBytes = bytes
+        Thread { diskCache.prune(MediaDiskCache.Area.ORIGINAL) }.start()
+    }
+
+    /**
+     * Deletes downloaded previews and originals, not the pre-cache, which has its own switch. Call
+     * off the main thread.
+     */
+    fun clearDownloads() {
+        diskCache.clear(MediaDiskCache.Area.PREVIEW)
+        diskCache.clear(MediaDiskCache.Area.ORIGINAL)
     }
 
     /** How many items the chosen range holds, and roughly how much their thumbnails take. Off the main thread. */
@@ -647,7 +686,13 @@ class LibraryRepository private constructor(context: Context) {
         val albums = syncAlbums(account, full = needsFull) or store.applyAlbumRows()
         // Memories first: it fixes far more dates than the video headers do.
         val enriched = enrichFromMemories(account, fullRead = needsFull, isStopped)
-        val headers = readVideoHeaders(account, isStopped)
+        val headers = if (isMeteredNetwork()) {
+            // Up to two 64 KiB reads a video: over 100 MB for a first pass on a large library.
+            Log.d(TAG, "Video headers wait for an unmetered network")
+            false
+        } else {
+            readVideoHeaders(account, isStopped)
+        }
         // After the dates settle: matching phone copies compares them.
         val rematched = matchLocally()
         store.pruneDeletions(DELETION_RETENTION_MS)
@@ -656,6 +701,9 @@ class LibraryRepository private constructor(context: Context) {
         if (changed || enriched) schedulePrecache()
         return changed
     }
+
+    private fun isMeteredNetwork(): Boolean =
+        appContext.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered ?: false
 
     /**
      * Reads the duration and recording time of videos whose header hasn't been read yet (PLAN 5.3
@@ -1039,9 +1087,11 @@ class LibraryRepository private constructor(context: Context) {
         }
         if (item.isVideo) return openStreamed(item)
         val account = requireAuthorizedAccount()
+        // Before queueing for a download slot: offline, the answer is known at once (PLAN 8.1).
+        reachability.check()
         val file = withSlot(originalSlots, ORIGINAL_SLOT_WAIT_MS, "original") {
             diskCache.getOrDownload(MediaDiskCache.Area.ORIGINAL, key, cancellationSignal) { target ->
-                unauthorizedStops { client.downloadFile(account, item.href, target, cancellationSignal) }
+                unauthorizedStops { reachability.request { client.downloadFile(account, item.href, target, cancellationSignal) } }
             }
         }
         return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
@@ -1062,6 +1112,18 @@ class LibraryRepository private constructor(context: Context) {
         }
         val opened = SystemClock.elapsedRealtime()
         val seconds = { (SystemClock.elapsedRealtime() - opened) / 1_000.0 }
+        // The first chunk is read before the stream is handed over, so an unreachable server or a
+        // changed file fails the open, where the picker can say so, instead of the app's first
+        // read (PLAN 8.1). The chunk stays in the reader for that read.
+        try {
+            reachability.request { reader.read(0L, ByteArray(1), 0, 1) }
+        } catch (error: Exception) {
+            reader.close()
+            readAhead.shutdownNow()
+            readThread.quitSafely()
+            if (error is FileNotFoundException) throw error
+            throw FileNotFoundException("Couldn't stream ${item.id}: ${error.message}").apply { initCause(error) }
+        }
         Log.i(TAG, "Streaming ${item.id} (${item.sizeBytes / MEBIBYTE} MiB)")
         val callback = object : ProxyFileDescriptorCallback() {
             override fun onGetSize(): Long = item.sizeBytes
@@ -1118,13 +1180,16 @@ class LibraryRepository private constructor(context: Context) {
         diskCache.peek(MediaDiskCache.Area.PRECACHE, key)?.let { return it.asAssetFileDescriptor() }
         phoneCopyThumbnail(item, key, sizePx, cancellationSignal)?.let { return it.asAssetFileDescriptor() }
         val account = requireAuthorizedAccount()
+        reachability.check()
         val file = withSlot(previewSlots, PREVIEW_SLOT_WAIT_MS, "preview") {
             previewGate.query {
                 diskCache.getOrDownload(MediaDiskCache.Area.PREVIEW, key, cancellationSignal) { target ->
                     try {
                         unauthorizedStops {
-                            // Core's preview endpoint can't see files shared only through an album.
-                            client.downloadPreview(account, item.id, sizePx, target, cancellationSignal, viaPhotos = Albums.isAlbumPath(item.href))
+                            reachability.request {
+                                // Core's preview endpoint can't see files shared only through an album.
+                                client.downloadPreview(account, item.id, sizePx, target, cancellationSignal, viaPhotos = Albums.isAlbumPath(item.href))
+                            }
                         }
                     } catch (error: NextcloudHttpException) {
                         // The server has no preview for this file (HEIC or video without a server
