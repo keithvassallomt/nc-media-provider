@@ -423,7 +423,7 @@ What the pickers need (MediaProvider source, `android17-release`):
 
 **9.2 Channels.** GitHub releases with Obtainium first, with IzzyOnDroid as a quick extra channel. Every planned library (OkHttp, Room, WorkManager, Media3, the Shizuku API) is open source, so F-Droid with reproducible builds is possible. Google Play is deferred until its policies are checked, since the app needs adb to work at all and duplicate handling needs broad photo-library access.
 
-**9.3 Onboarding.** Explains adb and Shizuku to people who aren't developers.
+**9.3 Onboarding.** Built (2026-10-03): a four-step checklist (turn it on in the picker, connect, folders, extras) and a home screen of status, tiles and a short list, chosen from three prototypes; colours follow the phone's wallpaper. [docs/setup-guide.md](docs/setup-guide.md) explains Shizuku and adb step by step, and the app links to it; its screenshots are still to add. Explains adb and Shizuku to people who aren't developers.
 
 **9.4 README.**
 
