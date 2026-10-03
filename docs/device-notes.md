@@ -117,7 +117,25 @@ Unexplained: the server-set `mediaprovider` value (`...cloudpicker`) is ignored,
 
 Not covered here: a third-party provider actually appearing in this phone's picker. That is the Phase 1 exit test (#10).
 
-Current state: restored to baseline, no overrides set.
+### The app in Google's picker (2026-10-03)
+
+A debug build, installed with the owner's agreement, run through onboarding and signed in to a second Nextcloud account.
+
+- **Activation through Shizuku** first sat on "Applying" for minutes. The activation service waited for each command to exit before reading its output, and MediaProvider's `dumpsys` runs to about 108 KB here, more than the pipe holds, so every check in the verify loop timed out after 10 s. The overrides had been written. With the output read while the command runs (c672468), activation through Shizuku finished and selected the app.
+- **A third-party provider works in the newer picker.** The app was listed and selected, its photos showed mixed with the phone's own, and picked files arrived. This answers the open part of Phase 1.5.
+- **Sign-in through Chrome** worked (the Chrome half of 8.3).
+- **Library:** 39,834 files listed; Memories dated 36,286 of them.
+- **Thumbnails:** the newer picker asks for 358×358 on this phone, against 264 to 291 px on the Fold's older picker. That falls in the 512 px bucket, so the pre-cache's 256 px thumbnails go unused here; the pre-cache should store the size each phone asks for (5.6).
+- **Originals:** a photo held only on the server opened at 3.3 MB in 192 ms.
+- **Albums** show in the newer picker, after its own Favourites and Camera. One album with 10 photos showed 9: the app's "Try the picker" asks for images only, and one of them is a video.
+- **Video preview** plays without sound, as on GrapheneOS. The mute button does nothing: the video keeps playing silently either way.
+- **Streaming:** the foreground service starts from the newer picker (`Background started FGS: Allowed ... uidState: TOP`). A 16 MB video was picked and sent through Messenger.
+- **People** (7.3): the sync read 140 face groups from Memories in 28 s, none named, 138 with photos in the library. The picker asked for capabilities, showed a People category with four face covers, listed the 138 people and opened three of them (121, 180 and 34 photos). Face covers that scrolled away were logged as warnings (`IOException: Canceled`); they are debug lines now.
+- The picker logs `E/PhotoPickerProvider ... Failed to check if local search is enabled ... Service not connected` while it loads categories. That is its own on-device search, not this app.
+
+Not checked: whether the app selects itself again through Shizuku after an update (adb selected it first), and Firefox.
+
+Current state: the app is installed, signed in and selected, left set up for now. Restoring means signing out in the app, selecting Google Photos again (`com.google.android.apps.photos.cloudpicker`), `clear_override` on the four flags, uninstalling the app, and comparing with the baseline above.
 
 ## Phase 1.5 on-device test (GrapheneOS, 2026-10-02)
 
