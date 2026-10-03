@@ -174,6 +174,16 @@ def main():
             s["memories"]["config_keys"] = sorted(cfg)[:40]
         st, albums = p.json("memories-albums", "/index.php/apps/memories/api/clusters/albums")
         s["memories"]["albums"] = {"http": st, "count": len(albums) if isinstance(albums, list) else None}
+        # The timeline the app's enrichment reads (PLAN 6.2): the day list, then every day's items.
+        st, days = p.json("memories-days", "/index.php/apps/memories/api/days")
+        if isinstance(days, list) and days:
+            ids = ",".join(str(d.get("dayid")) for d in days)
+            dst, detail = p.json("memories-day", f"/index.php/apps/memories/api/days/{ids}")
+            keys = collections.Counter(k for it in detail or [] for k in it)
+            s["memories"]["days"] = {"http": st, "days": len(days), "detail_http": dst,
+                                     "items": len(detail or []), "item_keys": dict(sorted(keys.items()))}
+        else:
+            s["memories"]["days"] = {"http": st, "days": None}
 
     s["coverage"] = {}
     for label, mime in (("jpeg", "image/jpeg"), ("heic", "image/heic"), ("mp4", "video/mp4")):

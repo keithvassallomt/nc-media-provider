@@ -37,20 +37,67 @@ class LibraryStore(
     fun newestPage(mimePrefix: String, after: MediaItem?, limit: Int): List<MediaItem> =
         dao.newestPage(mimePrefix, after?.dateTakenMillis ?: Long.MAX_VALUE, after?.id ?: "", limit)
 
-    fun videosWithoutDuration(limit: Int): List<MediaItem> = dao.videosWithoutDuration(limit)
+    fun videosWithoutHeader(limit: Int): List<MediaItem> = dao.videosWithoutHeader(limit)
 
     fun countTakenSince(since: Long): Int = dao.countTakenSince(since)
 
     /**
-     * Stores durations read from the files (PLAN 5.3), negative for files that couldn't be read,
-     * under the next generation so the picker picks them up. Rows that changed meanwhile are left.
+     * Stores what video headers said (PLAN 5.3 and 6.0), keyed by row ID: a null header couldn't be
+     * read. Missing values are stored as [MediaItem.NOT_IN_HEADER], so they aren't read again while
+     * the etag is unchanged; values already read are kept. Changed rows move to the next generation.
      */
-    fun applyDurations(durations: Map<String, Long>): Boolean = database.runInTransaction<Boolean> {
-        val upserts = durations.keys.toList().chunked(SQL_BATCH).flatMap(dao::mediaWithIds)
-            .filter { it.durationMillis == 0L }
-            .map { it.copy(durationMillis = durations.getValue(it.id)) }
+    internal fun applyVideoHeaders(headers: Map<String, VideoHeader.Info?>): Boolean = database.runInTransaction<Boolean> {
+        val rows = headers.keys.toList().chunked(SQL_BATCH).flatMap(dao::mediaWithIds)
+        val memories = memoriesFor(rows)
+        val upserts = rows.mapNotNull { row ->
+            val header = headers[row.id]
+            val item = row.copy(
+                durationMillis = row.durationMillis.takeIf { it != 0L } ?: header?.durationMillis ?: MediaItem.NOT_IN_HEADER,
+                recordedMillis = row.recordedMillis.takeIf { it != 0L } ?: header?.recordedMillis ?: MediaItem.NOT_IN_HEADER,
+            ).resolved(memories[row.id])
+            item.takeUnless { it.sameContentAs(row) }
+        }
         applyChanges(LibraryChanges(upserts, emptyList()), fullListing = false)
     }
+
+    /** Memories' day counts as last read (PLAN 6.2). */
+    fun memoriesDays(): Map<Int, Int> = dao.memoriesDays().associate { it.dayId to it.count }
+
+    /** Days holding a file whose etag moved on since Memories was read. */
+    fun staleMemoriesDays(): List<Int> = dao.staleMemoriesDays()
+
+    /**
+     * Stores what Memories said of [readDays] (PLAN 6.2), [files] replacing what was stored for them,
+     * and resolves every row against the result. [days] is Memories' current day list: whatever was
+     * stored for a day no longer in it is dropped. Days not read keep their files and counts, so a
+     * read cut short carries on at the next sync. Returns true when any row changed.
+     */
+    fun applyMemories(days: Map<Int, Int>, readDays: Set<Int>, files: List<MemoriesFile>): Boolean =
+        database.runInTransaction<Boolean> {
+            val gone = (dao.memoriesFileDays() + dao.memoriesDays().map(MemoriesDay::dayId)).distinct().filterNot(days::containsKey)
+            (readDays + gone).toList().chunked(SQL_BATCH).forEach(dao::deleteMemoriesDays)
+            files.chunked(SQL_BATCH).forEach(dao::saveMemoriesFiles)
+            gone.chunked(SQL_BATCH).forEach(dao::deleteMemoriesDayCounts)
+            readDays.mapNotNull { day -> days[day]?.let { MemoriesDay(day, it) } }.chunked(SQL_BATCH).forEach(dao::saveMemoriesDayCounts)
+            resolveAll()
+        }
+
+    /**
+     * Forgets everything Memories said, when it's switched off, gone, or untested, so every row goes
+     * back to core and header values (PLAN 6.3). Returns true when any row changed.
+     */
+    fun clearMemories(): Boolean = database.runInTransaction<Boolean> {
+        if (dao.memoriesFileCount() == 0 && dao.memoriesDays().isEmpty()) {
+            false
+        } else {
+            dao.clearMemoriesFiles()
+            dao.clearMemoriesDayCounts()
+            resolveAll()
+        }
+    }
+
+    /** Rows whose values come from Memories, and live-photo videos it paired (PLAN 6.2). */
+    fun memoriesStats(): Pair<Int, Int> = dao.memoriesMatchedCount() to dao.liveVideoCount()
 
     /** Rows with a copy on the phone (PLAN 3.2). */
     fun matchedCount(): Int = dao.matchedCount()
@@ -65,6 +112,8 @@ class LibraryStore(
         dao.clearMedia()
         dao.clearDeleted()
         dao.clearFolders()
+        dao.clearMemoriesFiles()
+        dao.clearMemoriesDayCounts()
         val fresh = SyncState(instanceId = UUID.randomUUID().toString(), sourceKey = sourceKey)
         dao.saveState(fresh)
         cached = fresh
@@ -76,7 +125,8 @@ class LibraryStore(
      * longer contains as deleted.
      */
     fun commit(listed: Collection<MediaItem>, complete: Boolean): Boolean = database.runInTransaction<Boolean> {
-        applyChanges(diffLibrary(dao.allMedia(), listed, complete), fullListing = complete)
+        val memories = memoriesFor(listed)
+        applyChanges(diffLibrary(dao.allMedia(), markLiveVideos(listed, memories), complete, memories::get), fullListing = complete)
     }
 
     /**
@@ -103,7 +153,9 @@ class LibraryStore(
                 dao.saveState(state.copy(duplicatePaths = true).also { cached = it })
             }
             val kept = copies.map { it.minBy(MediaItem::href) }
-            applyChanges(diffLibrary(stored + elsewhere, kept, complete = true), fullListing = false)
+            // A live photo's two halves share a folder, so each folder's listing holds both.
+            val memories = memoriesFor(kept)
+            applyChanges(diffLibrary(stored + elsewhere, markLiveVideos(kept, memories), complete = true, memories::get), fullListing = false)
         }
 
     /**
@@ -182,14 +234,41 @@ class LibraryStore(
         dao.saveState(state.copy(lastCheckMillis = nowMillis()).also { cached = it })
     })
 
-    /** Writes [changes] under the next generation, if there are any. Call inside a transaction. */
+    /** What Memories said of [items], by ID. Call inside a transaction. */
+    private fun memoriesFor(items: Collection<MediaItem>): Map<String, MemoriesFile> =
+        items.map(MediaItem::id).chunked(SQL_BATCH).flatMap(dao::memoriesWithIds).associateBy(MemoriesFile::id)
+
+    /** [items] with [MediaItem.isLiveVideo] set by Memories' live-photo pairs among them. */
+    private fun markLiveVideos(items: Collection<MediaItem>, memories: Map<String, MemoriesFile>): List<MediaItem> {
+        val halves = MemoriesApi.liveHalves(items, memories::get)
+        return items.map { it.copy(isLiveVideo = it.id in halves) }
+    }
+
+    /** Resolves every row against what Memories said and stores the rows that changed. Call inside a transaction. */
+    private fun resolveAll(): Boolean {
+        val memories = dao.memoriesFiles().associateBy(MemoriesFile::id)
+        val rows = dao.allMedia()
+        val halves = MemoriesApi.liveHalves(rows, memories::get)
+        val upserts = rows.mapNotNull { row ->
+            row.resolved(memories[row.id]).copy(isLiveVideo = row.id in halves).takeUnless { it.sameContentAs(row) }
+        }
+        return applyChanges(LibraryChanges(upserts, emptyList()), fullListing = false)
+    }
+
+    /**
+     * Writes [changes] under the next generation, if there are any. A live-photo video is written
+     * like any row but journalled as deleted, which is how the picker learns to drop it (PLAN 6.2).
+     * Call inside a transaction.
+     */
     private fun applyChanges(changes: LibraryChanges, fullListing: Boolean): Boolean {
         val state = dao.state() ?: state()
         val now = nowMillis()
         val generation = if (changes.isEmpty) state.generation else state.generation + 1
         if (!changes.isEmpty) {
             changes.upserts.map { it.copy(generation = generation) }.chunked(SQL_BATCH).forEach(dao::upsertMedia)
-            changes.upserts.map(MediaItem::id).chunked(SQL_BATCH).forEach(dao::forgetDeleted)
+            val (hidden, shown) = changes.upserts.partition(MediaItem::isLiveVideo)
+            shown.map(MediaItem::id).chunked(SQL_BATCH).forEach(dao::forgetDeleted)
+            hidden.chunked(SQL_BATCH).forEach { rows -> dao.upsertDeleted(rows.map { DeletedMedia(it.id, generation, now) }) }
             changes.deletedIds.chunked(SQL_BATCH).forEach { ids ->
                 dao.deleteMedia(ids)
                 dao.upsertDeleted(ids.map { DeletedMedia(it, generation, now) })

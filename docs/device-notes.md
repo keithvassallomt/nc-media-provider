@@ -300,6 +300,18 @@ adb shell am instrument -w com.keithvassallo.ncmediaprovider.debug.test/androidx
 adb reverse --remove tcp:8035
 ```
 
+## Phase 6 checks (GrapheneOS, 2026-10-03)
+
+### The update and the first Memories read
+
+The schema 7 migration kept all 18,348 rows' values; the first syncs then read every video's header (1,453 in three batches of 500, 1,444 with a recording time) and Memories' whole timeline. Afterwards 18,070 rows take Memories' dates, 16,399 dates differ from the listing's, and 276 live-photo videos are reported to the picker as deleted, leaving 18,072. Where both exist, a video's header time agrees with Memories within 2 s for 1,108 of 1,167.
+
+Later syncs find no day whose count changed, so they cost two small requests (the version and the 60 KB day list).
+
+### Background requests were slow this morning
+
+The phone took 173 s for the 20 Memories requests that took 2.8 s from the laptop on the same Wi-Fi, and 118 s for 500 video headers that took 32 to 39 s the evening before. Change checks rose from about 0.9 s to 3 to 4 s. Not confirmed, but the likely cause is that the screen was off with the app in the background (`procState=TRNB`), where Wi-Fi power saving and Android's limits on background apps slow each request. Reading Memories now stops after 2 minutes and stores the days it has read, so the next sync carries on from there instead of starting over.
+
 ## Photo keyboard prototype (GrapheneOS, 2026-10-02)
 
 A keyboard showing the 30 newest Nextcloud photos, inserting the tapped one through the keyboard content API (branch `proto/photo-keyboard`, debug builds only). Tested in Messenger, whose own photo grid never sees a cloud provider:

@@ -92,6 +92,14 @@
     <string name="precache_quarter">3 months</string>
     <string name="precache_estimate">About %1$s for %2$d photos and videos, on Wi-Fi only. Up to %3$s is kept.</string>
     <string name="precache_ready">Ready: %1$d of %2$d.</string>
+    <string name="memories_title">Dates from Memories</string>
+    <string name="memories_explanation">Nextcloud on its own often dates HEIC photos and videos by when they were uploaded, and can be an hour or two out on others. When your server has the Memories app, the picker uses the dates and sizes Memories read from the files, and hides the video half of live photos.</string>
+    <string name="memories_switch">Use Memories</string>
+    <string name="memories_status_off">Off: the picker uses Nextcloud’s own dates.</string>
+    <string name="memories_status_unchecked">Your server is checked for Memories at the next sync.</string>
+    <string name="memories_status_absent">Memories isn’t installed on your server, or isn’t available to your account.</string>
+    <string name="memories_status_untested">Memories %1$s hasn’t been tested with this app, so its dates aren’t used.</string>
+    <string name="memories_status_active">Memories %1$s: %2$d photos and videos use its dates, and %3$d live-photo videos are hidden.</string>
     <string name="precache_running">Downloading: %1$d of %2$d ready.</string>
     <string name="notify_channel">Account and setup</string>
     <string name="notify_sign_in_title">Sign in to Nextcloud again</string>

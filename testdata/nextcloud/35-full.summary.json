@@ -176,6 +176,26 @@
   "albums": {
    "http": 200,
    "count": 1
+  },
+  "days": {
+   "http": 200,
+   "days": 8,
+   "detail_http": 200,
+   "items": 8,
+   "item_keys": {
+    "basename": 8,
+    "dayid": 8,
+    "epoch": 8,
+    "etag": 8,
+    "fileid": 8,
+    "h": 8,
+    "isfavorite": 1,
+    "isvideo": 1,
+    "mimetype": 8,
+    "size": 8,
+    "video_duration": 1,
+    "w": 8
+   }
   }
  },
  "coverage": {

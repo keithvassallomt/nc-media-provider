@@ -13,16 +13,24 @@ internal data class LibraryChanges(
  * Compares a listing with the stored rows. Only a [complete] listing can prove a file is gone: a
  * partial one (a first-import page, say) never deletes anything. Listings know nothing of what the
  * phone works out itself: a row keeps its local match until matching runs again, and a video its
- * duration while its etag is unchanged (PLAN 5.3).
+ * header values while its etag is unchanged (PLAN 5.3 and 6.0). Each row's dates and sizes are then
+ * resolved against what [memories] says of it (PLAN 6.2).
  */
-internal fun diffLibrary(stored: Collection<MediaItem>, listed: Collection<MediaItem>, complete: Boolean): LibraryChanges {
+internal fun diffLibrary(
+    stored: Collection<MediaItem>,
+    listed: Collection<MediaItem>,
+    complete: Boolean,
+    memories: (String) -> MemoriesFile? = { null },
+): LibraryChanges {
     val storedById = stored.associateBy(MediaItem::id)
     val upserts = listed.mapNotNull { listedItem ->
-        val old = storedById[listedItem.id] ?: return@mapNotNull listedItem
+        val old = storedById[listedItem.id] ?: return@mapNotNull listedItem.resolved(memories(listedItem.id))
+        val sameFile = old.etag == listedItem.etag
         val item = listedItem.copy(
             mediaStoreUri = old.mediaStoreUri,
-            durationMillis = if (old.etag == listedItem.etag) old.durationMillis else listedItem.durationMillis,
-        )
+            durationMillis = if (sameFile) old.durationMillis else listedItem.durationMillis,
+            recordedMillis = if (sameFile) old.recordedMillis else listedItem.recordedMillis,
+        ).resolved(memories(listedItem.id))
         if (old.sameContentAs(item)) null else item
     }
     val deletedIds = if (complete) {
@@ -42,7 +50,9 @@ internal fun MediaItem.sameContentAs(other: MediaItem): Boolean =
     id == other.id && href == other.href && etag == other.etag && fileName == other.fileName &&
         mimeType == other.mimeType && sizeBytes == other.sizeBytes && lastModifiedMillis == other.lastModifiedMillis &&
         dateTakenMillis == other.dateTakenMillis && durationMillis == other.durationMillis && width == other.width &&
-        height == other.height && isFavorite == other.isFavorite && folder == other.folder
+        height == other.height && isFavorite == other.isFavorite && folder == other.folder &&
+        listedDateMillis == other.listedDateMillis && listedWidth == other.listedWidth && listedHeight == other.listedHeight &&
+        recordedMillis == other.recordedMillis && isLiveVideo == other.isLiveVideo
 
 /**
  * A position in one sync pass (PLAN 2.3). [pass] says which query issued it: Android 17's picker can

@@ -40,6 +40,19 @@ class LibrarySettings(context: Context) {
         set(value) = preferences.edit { putBoolean(KEY_RESPECT_NO_MEDIA, value) }
 
     /**
+     * Take dates, sizes and live-photo pairs from Memories when the server has a tested version
+     * (PLAN 6.1). Turning it off puts back the core values at the next sync.
+     */
+    var useMemories: Boolean
+        get() = preferences.getBoolean(KEY_USE_MEMORIES, true)
+        set(value) = preferences.edit { putBoolean(KEY_USE_MEMORIES, value) }
+
+    /** The Memories version the last sync found: empty when there was none, null before any check. */
+    var memoriesVersion: String?
+        get() = preferences.getString(KEY_MEMORIES_VERSION, null)
+        set(value) = preferences.edit { putString(KEY_MEMORIES_VERSION, value) }
+
+    /**
      * Whether this app was the picker's selected cloud provider when last seen, so an update that
      * deselects it can select it again (PLAN 4.6).
      */
@@ -80,6 +93,8 @@ class LibrarySettings(context: Context) {
         private const val KEY_FOLDER = "folder"
         private const val KEY_FOLDERS = "folders"
         private const val KEY_RESPECT_NO_MEDIA = "respect_no_media"
+        private const val KEY_USE_MEMORIES = "use_memories"
+        private const val KEY_MEMORIES_VERSION = "memories_version"
         private const val KEY_LAST_SYNC_ERROR = "last_sync_error"
         private const val KEY_PRECACHE = "precache"
         private const val KEY_PRECACHE_MONTHS = "precache_months"

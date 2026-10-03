@@ -252,6 +252,101 @@ class LibraryStoreTest {
         assertEquals(now, store.state().lastCheckMillis)
     }
 
+    private fun livePair(n: Int) = listOf(
+        MediaItem("${n}0", "/dav/Photos/IMG_$n.HEIC", "p$n", "IMG_$n.HEIC", "image/heic", 10, 1_000, 1_000, folder = "/Photos/"),
+        MediaItem("${n}1", "/dav/Photos/IMG_$n.MOV", "v$n", "IMG_$n.MOV", "video/quicktime", 10, 1_000, 1_000, folder = "/Photos/"),
+    )
+
+    /** Memories' view of a pair: the photo with a live-photo ID, the video left out of its timeline. */
+    private fun indexedPhoto(n: Int, date: Long = 2_000L) = MemoriesFile("${n}0", "p$n", 7, date, 4032, 3024, "live-$n", isVideo = false)
+
+    @Test
+    fun `Memories values replace core ones, and switching it off puts them back`() {
+        store.commit(livePair(1), complete = true)
+        assertTrue(store.applyMemories(mapOf(7 to 1), readDays = setOf(7), files = listOf(indexedPhoto(1))))
+        val photo = store.media("10")!!
+        assertEquals(2_000L to 4032, photo.dateTakenMillis to photo.width)
+        assertEquals(1_000L, photo.listedDateMillis)
+        assertEquals(2L, photo.generation)
+        assertEquals(1 to 1, store.memoriesStats())
+        // Reading the same again changes nothing.
+        assertFalse(store.applyMemories(mapOf(7 to 1), readDays = setOf(7), files = listOf(indexedPhoto(1))))
+
+        assertTrue(store.clearMemories())
+        val restored = store.media("10")!!
+        assertEquals(1_000L to 0, restored.dateTakenMillis to restored.width)
+        assertFalse(store.clearMemories())
+    }
+
+    @Test
+    fun `a live photo's video is reported as deleted, and comes back when the pairing goes`() {
+        store.commit(livePair(1) + livePair(2), complete = true)
+        store.applyMemories(mapOf(7 to 2), readDays = setOf(7), files = listOf(indexedPhoto(1), indexedPhoto(2)))
+        assertEquals(setOf("10", "20"), allMedia(since = null).map(MediaItem::id).toSet())
+        assertEquals(setOf("11", "21"), store.deletedPage(1, null, 10).items.toSet())
+        assertEquals(2, store.mediaCount())
+
+        // A later listing keeps them hidden, without another generation.
+        val generation = store.state().generation
+        assertFalse(store.commit(livePair(1) + livePair(2), complete = true))
+        assertEquals(generation, store.state().generation)
+
+        // Memories no longer pairs the second photo (re-read of its day): its video is back.
+        assertTrue(store.applyMemories(mapOf(7 to 2), readDays = setOf(7), files = listOf(indexedPhoto(1), indexedPhoto(2).copy(liveId = null))))
+        assertEquals(setOf("21"), allMedia(since = generation).map(MediaItem::id).toSet())
+        assertTrue(store.deletedPage(generation, null, 10).items.isEmpty())
+        assertEquals(listOf("11"), store.deletedPage(0, null, 10).items)
+    }
+
+    @Test
+    fun `a partial read replaces only the days read, and drops days that are gone`() {
+        store.commit(livePair(1) + livePair(2), complete = true)
+        store.applyMemories(mapOf(7 to 1, 8 to 1), readDays = setOf(7, 8), files = listOf(indexedPhoto(1), indexedPhoto(2).copy(dayId = 8)))
+        assertEquals(2, store.memoriesStats().first)
+
+        store.applyMemories(mapOf(8 to 1), readDays = emptySet(), files = emptyList())
+        assertEquals(1, store.memoriesStats().first)
+        assertEquals(1_000L, store.media("10")!!.dateTakenMillis)
+        assertEquals(2_000L, store.media("20")!!.dateTakenMillis)
+        assertEquals(mapOf(8 to 1), store.memoriesDays())
+    }
+
+    @Test
+    fun `a read cut short stores the days it read, and leaves the rest to be read`() {
+        store.commit(livePair(1) + livePair(2), complete = true)
+        val days = mapOf(7 to 1, 8 to 1)
+        assertTrue(store.applyMemories(days, readDays = setOf(7), files = listOf(indexedPhoto(1))))
+        assertEquals(mapOf(7 to 1), store.memoriesDays())
+        assertEquals(setOf(8), MemoriesApi.changedDays(days, store.memoriesDays(), store.staleMemoriesDays()))
+        assertEquals(2_000L to 1_000L, store.media("10")!!.dateTakenMillis to store.media("20")!!.dateTakenMillis)
+    }
+
+    @Test
+    fun `an edited file no longer takes Memories' values, and its day reads as stale`() {
+        store.commit(livePair(1), complete = true)
+        store.applyMemories(mapOf(7 to 1), readDays = setOf(7), files = listOf(indexedPhoto(1)))
+        val edited = livePair(1).map { if (it.id == "10") it.copy(etag = "p1-edited") else it }
+        assertTrue(store.commit(edited, complete = true))
+        assertEquals(1_000L, store.media("10")!!.dateTakenMillis)
+        assertEquals(listOf(7), store.staleMemoriesDays())
+    }
+
+    @Test
+    fun `video headers fill in what's missing and resolve the date`() {
+        store.commit(livePair(1), complete = true)
+        assertEquals(listOf("11"), store.videosWithoutHeader(10).map(MediaItem::id))
+        assertTrue(store.applyVideoHeaders(mapOf("11" to VideoHeader.Info(2_500L, 3_000L))))
+        val video = store.media("11")!!
+        assertEquals(Triple(2_500L, 3_000L, 3_000L), Triple(video.durationMillis, video.recordedMillis, video.dateTakenMillis))
+        assertTrue(store.videosWithoutHeader(10).isEmpty())
+
+        store.commit(livePair(1).map { if (it.id == "11") it.copy(etag = "v1-edited") else it }, complete = true)
+        assertTrue(store.applyVideoHeaders(mapOf("11" to null)))
+        val unreadable = store.media("11")!!
+        assertEquals(MediaItem.NOT_IN_HEADER to MediaItem.NOT_IN_HEADER, unreadable.durationMillis to unreadable.recordedMillis)
+        assertEquals(1_000L, unreadable.dateTakenMillis)
+    }
+
     @Test
     fun `state survives a new store on the same database, and a reset starts over`() {
         store.commit((1..3).map(::item), complete = true)

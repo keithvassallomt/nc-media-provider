@@ -36,6 +36,29 @@ What this means for the app:
 - **Dimensions are often missing.** Width and height come only from `metadata-photos-size`, which was present on 110 of 1,142 sampled items.
 - **No live photos.** This library comes from a Pixel, which embeds motion in the JPEG instead of pairing it with a MOV. Live-photo handling (5.5) has to be checked against the test library on the container servers.
 
+### Memories timeline (Phase 6)
+
+Read 2026-10-03 through `/apps/memories/api/days` (the day list, 60 KB) and `/apps/memories/api/days/<id,id,...>` (the files of several days), and compared with the app's library on the phone (18,348 items in `/Photos` and `/Shared`, the same folders as Memories' timeline path).
+
+- **Cost:** the whole timeline, 18,487 files on 1,666 days, took 20 requests of up to 1,000 files: 2.8 s and 4.1 MB.
+- **Fields per file:** `fileid`, `etag`, `dayid`, `epoch`, `w`, `h`, `size`, `mimetype`, `basename`; `liveid` on 9,500 (502 of them `self__` motion photos), `isvideo` and `video_duration` (whole seconds) on videos, `shared_by` on files shared with the user.
+- **`epoch` is the capture time in UTC with the camera's time zone applied:** a Pixel JPEG named in UTC (`PXL_20260926_193720059`) has an `epoch` of 19:37:20 UTC.
+- **Etags** were identical to the WebDAV listing's for all 18,070 files in both.
+- **Dimensions** match core's `metadata-photos-size` where core has one (6,885 of 6,886, display orientation), and Memories also has them for the 11,000 HEICs and videos that core lacks.
+
+How core's dates compare with `epoch`, by type:
+
+| Type | Items | Same | Core differs |
+|---|---|---|---|
+| JPEG | 6,923 | 1,488 | 5,240 one or two hours late: EXIF local time read as UTC, the server's time zone |
+| HEIC | 9,867 | 573 | 9,813 dated by modification time (upload); off by hours to years |
+| MOV | 1,037 | 120 | all dated by modification time |
+| MP4 | 139 | 10 | 92 by under half an hour, 37 by more; core dates Pixel videos by their `PXL_` name, which is UTC, and reads it as server time, here also UTC |
+
+For videos the file's own `mvhd` creation time matched `epoch` in 33 of 35 samples; the other two were iPhone videos edited months later, whose header holds the edit date.
+
+**Live photos core missed.** 277 visible MOVs (0.6 to 3.0 s long) in the library are missing from Memories' timeline. 276 sit next to a photo of the same name that Memories gives a live-photo ID: they are live-photo halves that core's `metadata-files-live-photo` never linked, so the picker showed them as videos.
+
 ## Container servers (test matrix)
 
 Built and probed 2026-10-02 with [tools/testserver/](../tools/testserver/). Each server runs rootless in Podman on 127.0.0.1, gets the synthetic library from `tools/testserver/library` uploaded over WebDAV with fixed modification times (as a phone client would), plus a folder shared by a second user, a Photos album and a favourite. Probe output is committed under [testdata/nextcloud/](../testdata/nextcloud/) as fixtures.

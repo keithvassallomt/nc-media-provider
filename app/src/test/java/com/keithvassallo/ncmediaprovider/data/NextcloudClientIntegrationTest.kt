@@ -157,6 +157,21 @@ class NextcloudClientIntegrationTest {
     }
 
     @Test
+    fun `Memories, when installed, dates files by their own etag`() {
+        // Read-only, so it is also safe against a real server.
+        val version = client.memoriesVersion(account)
+        assumeTrue("Memories not installed", version != null)
+        val days = client.memoriesDays(account)
+        val files = MemoriesApi.requestBatches(days.keys, days).flatMap { client.memoriesFiles(account, it) }
+        assertEquals(days.values.sum(), files.size)
+        // Overrides apply only while the etags agree, so they must be the same strings WebDAV lists.
+        val listed = client.listMedia(account, folders, listOf("image/", "video/")).files.associateBy(RemoteFile::fileId)
+        val shared = files.filter { it.id in listed }
+        assertTrue("no file both listed and in Memories", shared.isNotEmpty())
+        assertTrue(shared.all { listed.getValue(it.id).etag == it.etag })
+    }
+
+    @Test
     fun `an app password checks for a wipe and can be revoked`() {
         // Nextcloud's own endpoint turns the test password into an app password.
         val url = "${account.baseUrl.trimEnd('/')}/ocs/v2.php/core/getapppassword?format=json"

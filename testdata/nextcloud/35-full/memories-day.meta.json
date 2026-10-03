@@ -1,0 +1,25 @@
+{
+ "method": "GET",
+ "path": "/index.php/apps/memories/api/days/19510,19509,19483,19083,19056,18828,18823,18822",
+ "status": 200,
+ "seconds": 0.3,
+ "headers": {
+  "Date": "Sat, 03 Oct 2026 07:22:09 GMT",
+  "Server": "Apache/2.4.68 (Debian)",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "SAMEORIGIN",
+  "X-Permitted-Cross-Domain-Policies": "none",
+  "X-Robots-Tag": "noindex, nofollow",
+  "Referrer-Policy": "no-referrer",
+  "X-Powered-By": "PHP/8.5.11",
+  "Set-Cookie": "ocyxr4s3f621=7179aa30d086e2f640b8f69ae93c3ffb; path=/; HttpOnly; SameSite=Lax",
+  "Content-Security-Policy": "default-src 'none';base-uri 'none';manifest-src 'self';frame-ancestors 'none'",
+  "X-Request-Id": "xgAWABfUnELVqizLCQoQ",
+  "Cache-Control": "no-cache, no-store, must-revalidate",
+  "Feature-Policy": "autoplay 'none';camera 'none';fullscreen 'none';geolocation 'none';microphone 'none';payment 'none'",
+  "X-User-Id": "alice",
+  "Content-Length": "1445",
+  "Connection": "close",
+  "Content-Type": "application/json; charset=utf-8"
+ }
+}

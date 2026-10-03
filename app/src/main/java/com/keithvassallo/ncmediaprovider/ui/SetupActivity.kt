@@ -159,9 +159,17 @@ class SetupActivity : AppCompatActivity() {
         binding.sendButton.setOnClickListener { startActivity(Intent(this, SendFromNextcloudActivity::class.java)) }
         binding.keyboardSettingsButton.setOnClickListener { startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) }
         setUpPrecache()
+        binding.memoriesSwitch.isChecked = repository.useMemories
+        binding.memoriesSwitch.setOnCheckedChangeListener { _, checked ->
+            repository.setUseMemories(checked)
+            updateMemoriesUi()
+        }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                repository.syncJobs().collect(::showSyncJobs)
+                repository.syncJobs().collect { jobs ->
+                    showSyncJobs(jobs)
+                    updateMemoriesUi()
+                }
             }
         }
 
@@ -292,6 +300,20 @@ class SetupActivity : AppCompatActivity() {
             else -> repository.precacheReady().takeIf { it.second > 0 }?.let { getString(R.string.precache_ready, it.first, it.second) }
         }
         binding.precacheStatus.text = listOfNotNull(estimate, progress).joinToString(" ")
+    }
+
+    /** The Memories layer (PLAN 6.1): what the last sync found, and how much of the library it dates. */
+    private fun updateMemoriesUi() {
+        lifecycleScope.launch {
+            val status = withContext(Dispatchers.IO) { runCatching { repository.memoriesStatus() }.getOrNull() } ?: return@launch
+            binding.memoriesStatus.text = when {
+                !binding.memoriesSwitch.isChecked -> getString(R.string.memories_status_off)
+                status.version == null -> getString(R.string.memories_status_unchecked)
+                status.version.isEmpty() -> getString(R.string.memories_status_absent)
+                !status.supported -> getString(R.string.memories_status_untested, status.version)
+                else -> getString(R.string.memories_status_active, status.version, status.enriched, status.liveVideos)
+            }
+        }
     }
 
     /** Whether the photo keyboard (PLAN 4.8) is turned on in Android's keyboard settings. */

@@ -239,6 +239,36 @@ class NextcloudClient {
     }
 
     /**
+     * Memories' version from its `api/describe`, or null when Memories isn't installed or this user
+     * can't use it (PLAN 6.1). Memories adds nothing to the OCS capabilities (Phase 0.2).
+     */
+    fun memoriesVersion(account: NextcloudAccount): String? = memoriesGet(account, "describe") { response ->
+        when {
+            response.code == 404 || response.code == 403 -> null
+            !response.isSuccessful -> throw response.toException()
+            else -> MemoriesApi.parseVersion(response.body.string())
+        }
+    }
+
+    /** The days of the user's Memories timeline and how many files each holds (PLAN 6.2). */
+    fun memoriesDays(account: NextcloudAccount): Map<Int, Int> = memoriesGet(account, "days") { response ->
+        if (!response.isSuccessful) throw response.toException()
+        MemoriesApi.parseDays(response.body.string())
+    }
+
+    /** Every file Memories shows on [days], read in one request. */
+    fun memoriesFiles(account: NextcloudAccount, days: List<Int>): List<MemoriesFile> =
+        memoriesGet(account, "days/${days.joinToString(",")}") { response ->
+            if (!response.isSuccessful) throw response.toException()
+            MemoriesApi.parseFiles(response.body.string())
+        }
+
+    private fun <T> memoriesGet(account: NextcloudAccount, path: String, read: (Response) -> T): T {
+        val url = account.server().newBuilder().addPathSegments("index.php/apps/memories/api/$path").build()
+        return execute(Request.Builder().url(url).header("Accept", "application/json"), account, SEARCH_TIMEOUT_SECONDS).use(read)
+    }
+
+    /**
      * Whether the user asked the server to wipe this device (PLAN 4.4). The app password is the
      * token; the call needs no other sign-in, so it still works once the password is refused.
      */

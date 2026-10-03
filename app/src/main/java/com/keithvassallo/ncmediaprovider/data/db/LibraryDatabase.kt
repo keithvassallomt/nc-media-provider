@@ -12,7 +12,12 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Upsert
+import androidx.room.migration.AutoMigrationSpec
+import androidx.sqlite.SQLiteConnection
+import androidx.sqlite.execSQL
 import com.keithvassallo.ncmediaprovider.data.MediaItem
+import com.keithvassallo.ncmediaprovider.data.MemoriesDay
+import com.keithvassallo.ncmediaprovider.data.MemoriesFile
 import com.keithvassallo.ncmediaprovider.local.CloudPhoto
 
 /** A file removed from the library, and the generation that removed it (the deletion journal). */
@@ -108,16 +113,19 @@ interface LibraryDao {
     fun matchedCount(): Int
 
     /** Rows taken at or after [since], for the pre-cache's estimate (PLAN 5.6). */
-    @Query("SELECT COUNT(*) FROM media WHERE dateTakenMillis >= :since")
+    @Query("SELECT COUNT(*) FROM media WHERE dateTakenMillis >= :since AND isLiveVideo = 0")
     fun countTakenSince(since: Long): Int
 
-    /** Videos whose duration hasn't been read yet (0), newest first (PLAN 5.3). */
-    @Query("SELECT * FROM media WHERE mimeType LIKE 'video/%' AND durationMillis = 0 ORDER BY dateTakenMillis DESC LIMIT :limit")
-    fun videosWithoutDuration(limit: Int): List<MediaItem>
+    /** Videos whose header hasn't been read yet (a 0 duration or recording time), newest first (PLAN 5.3 and 6.0). */
+    @Query(
+        "SELECT * FROM media WHERE mimeType LIKE 'video/%' AND (durationMillis = 0 OR recordedMillis = 0) " +
+            "ORDER BY dateTakenMillis DESC LIMIT :limit",
+    )
+    fun videosWithoutHeader(limit: Int): List<MediaItem>
 
     /** Newest first by date taken, after the keyset position ([beforeDate], [beforeId]) (PLAN 4.8). */
     @Query(
-        "SELECT * FROM media WHERE mimeType LIKE :mimePrefix || '%' " +
+        "SELECT * FROM media WHERE mimeType LIKE :mimePrefix || '%' AND isLiveVideo = 0 " +
             "AND (dateTakenMillis < :beforeDate OR (dateTakenMillis = :beforeDate AND id < :beforeId)) " +
             "ORDER BY dateTakenMillis DESC, id DESC LIMIT :limit",
     )
@@ -132,8 +140,53 @@ interface LibraryDao {
     @Query("DELETE FROM folder")
     fun clearFolders()
 
-    @Query("SELECT COUNT(*) FROM media")
+    /** Rows the picker shows: live-photo videos are reported to it as deleted (PLAN 6.2). */
+    @Query("SELECT COUNT(*) FROM media WHERE isLiveVideo = 0")
     fun mediaCount(): Int
+
+    @Query("SELECT COUNT(*) FROM media WHERE isLiveVideo = 1")
+    fun liveVideoCount(): Int
+
+    /** Rows whose values come from Memories: it indexed the file as it is now (PLAN 6.2). */
+    @Query("SELECT COUNT(*) FROM media f JOIN memories_file m ON m.id = f.id AND m.etag = f.etag")
+    fun memoriesMatchedCount(): Int
+
+    @Query("SELECT * FROM memories_file")
+    fun memoriesFiles(): List<MemoriesFile>
+
+    @Query("SELECT * FROM memories_file WHERE id IN (:ids)")
+    fun memoriesWithIds(ids: List<String>): List<MemoriesFile>
+
+    @Query("SELECT COUNT(*) FROM memories_file")
+    fun memoriesFileCount(): Int
+
+    /** Days holding a file whose etag moved on since Memories was read: an edit, say. */
+    @Query("SELECT DISTINCT m.dayId FROM memories_file m JOIN media f ON f.id = m.id WHERE f.etag != m.etag")
+    fun staleMemoriesDays(): List<Int>
+
+    @Upsert
+    fun saveMemoriesFiles(rows: List<MemoriesFile>)
+
+    @Query("DELETE FROM memories_file WHERE dayId IN (:days)")
+    fun deleteMemoriesDays(days: List<Int>)
+
+    @Query("SELECT DISTINCT dayId FROM memories_file")
+    fun memoriesFileDays(): List<Int>
+
+    @Query("DELETE FROM memories_file")
+    fun clearMemoriesFiles()
+
+    @Query("SELECT * FROM memories_day")
+    fun memoriesDays(): List<MemoriesDay>
+
+    @Upsert
+    fun saveMemoriesDayCounts(rows: List<MemoriesDay>)
+
+    @Query("DELETE FROM memories_day")
+    fun clearMemoriesDayCounts()
+
+    @Query("DELETE FROM memories_day WHERE dayId IN (:days)")
+    fun deleteMemoriesDayCounts(days: List<Int>)
 
     @Upsert
     fun upsertMedia(items: List<MediaItem>)
@@ -147,9 +200,12 @@ interface LibraryDao {
     @Query("DELETE FROM deleted WHERE id IN (:ids)")
     fun forgetDeleted(ids: List<String>)
 
-    /** Rows changed after [since], up to [top], after the keyset position ([afterGeneration], [afterId]). */
+    /**
+     * Rows changed after [since], up to [top], after the keyset position ([afterGeneration], [afterId]).
+     * Live-photo videos are left out: the deletion journal reports them (PLAN 6.2).
+     */
     @Query(
-        "SELECT * FROM media WHERE generation > :since AND generation <= :top " +
+        "SELECT * FROM media WHERE generation > :since AND generation <= :top AND isLiveVideo = 0 " +
             "AND (generation > :afterGeneration OR (generation = :afterGeneration AND id > :afterId)) " +
             "ORDER BY generation, id LIMIT :limit",
     )
@@ -175,14 +231,25 @@ interface LibraryDao {
     fun clearDeleted()
 }
 
+/**
+ * Rows stored before schema 7 hold the listing's values only, so those become the listed values
+ * too; the next sync's header reads and Memories pass add the rest (PLAN 6.0 and 6.2).
+ */
+class ListedValuesMigration : AutoMigrationSpec {
+    override fun onPostMigrate(connection: SQLiteConnection) {
+        connection.execSQL("UPDATE media SET listedDateMillis = dateTakenMillis, listedWidth = width, listedHeight = height")
+    }
+}
+
 @Database(
-    entities = [MediaItem::class, DeletedMedia::class, SyncState::class, FolderEtag::class],
-    version = 6,
+    entities = [MediaItem::class, DeletedMedia::class, SyncState::class, FolderEtag::class, MemoriesFile::class, MemoriesDay::class],
+    version = 7,
     autoMigrations = [
         AutoMigration(from = 2, to = 3),
         AutoMigration(from = 3, to = 4),
         AutoMigration(from = 4, to = 5),
         AutoMigration(from = 5, to = 6),
+        AutoMigration(from = 6, to = 7, spec = ListedValuesMigration::class),
     ],
 )
 abstract class LibraryDatabase : RoomDatabase() {

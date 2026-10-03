@@ -36,6 +36,7 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.security.MessageDigest
+import java.util.Optional
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -44,6 +45,7 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.Flow
+import org.json.JSONException
 
 /**
  * Whether a failed download means the server is unreachable, which arms the back-off that fails
@@ -356,6 +358,27 @@ class LibraryRepository private constructor(context: Context) {
         else -> LARGE_PREVIEW_PX
     }
 
+    // The Memories layer (PLAN 6.1 to 6.3).
+
+    val useMemories: Boolean get() = settings.useMemories
+
+    /** Switches the Memories layer on or off; a sync queued after any running one applies it. */
+    fun setUseMemories(enabled: Boolean) {
+        settings.useMemories = enabled
+        requestSync(afterRunning = true)
+    }
+
+    /** What the setup screen shows about Memories. Call off the main thread. */
+    fun memoriesStatus(): MemoriesStatus {
+        val (enriched, liveVideos) = if (hasAccount) store.memoriesStats() else 0 to 0
+        return MemoriesStatus(settings.memoriesVersion, enriched, liveVideos)
+    }
+
+    /** [version] is what the last sync found: empty for no Memories, null before any check. */
+    data class MemoriesStatus(val version: String?, val enriched: Int, val liveVideos: Int) {
+        val supported: Boolean get() = !version.isNullOrEmpty() && MemoriesApi.isSupported(version)
+    }
+
     /** What the diagnostics show (PLAN 4.6). Call off the main thread. */
     fun diagnostics(): Diagnostics {
         val state = if (hasAccount) store.state() else null
@@ -491,6 +514,7 @@ class LibraryRepository private constructor(context: Context) {
         credentials.clear()
         settings.clearFolders()
         settings.lastSyncError = null
+        settings.memoriesVersion = null
         // A new instance ID gives a new collection ID, so MediaProvider drops what it had.
         store.resetFor("")
         diskCache.clear()
@@ -523,8 +547,11 @@ class LibraryRepository private constructor(context: Context) {
     /** When the last sync finished, or 0. Call off the main thread. */
     fun lastCheckMillis(): Long = if (hasAccount) store.state().lastCheckMillis else 0L
 
-    /** Asks for a sync as soon as the network allows. Requests made while one is queued are dropped. */
-    fun requestSync(expedited: Boolean = false) {
+    /**
+     * Asks for a sync as soon as the network allows. Requests made while one is queued are dropped,
+     * unless [afterRunning] queues this one after it, for a change the running sync may have missed.
+     */
+    fun requestSync(expedited: Boolean = false, afterRunning: Boolean = false) {
         if (!isReady) return
         val request = OneTimeWorkRequestBuilder<LibrarySyncWorker>()
             .setConstraints(NETWORK)
@@ -532,7 +559,8 @@ class LibraryRepository private constructor(context: Context) {
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, SYNC_BACKOFF_MINUTES, TimeUnit.MINUTES)
             .apply { if (expedited) setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST) }
             .build()
-        WorkManager.getInstance(appContext).enqueueUniqueWork(SYNC_WORK, ExistingWorkPolicy.KEEP, request)
+        val policy = if (afterRunning) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.KEEP
+        WorkManager.getInstance(appContext).enqueueUniqueWork(SYNC_WORK, policy, request)
     }
 
     /**
@@ -615,42 +643,47 @@ class LibraryRepository private constructor(context: Context) {
         val needsFull = full || !state.imported || due || state.rootEtag.isEmpty() ||
             state.respectsNoMedia != settings.respectNoMedia || state.listingVersion != LISTING_VERSION
         val changed = if (needsFull) fullSync(account, folders, onProgress) else changeSync(account, folders, onProgress)
+        // Memories first: it fixes far more dates than the video headers do.
+        val enriched = enrichFromMemories(account, fullRead = needsFull, isStopped)
+        val headers = readVideoHeaders(account, isStopped)
+        // After the dates settle: matching phone copies compares them.
         val rematched = matchLocally()
-        val durations = readVideoDurations(account, isStopped)
         store.pruneDeletions(DELETION_RETENTION_MS)
         store.markChecked()
-        if (changed || rematched > 0 || durations) notifyPickerOfChanges()
-        if (changed) schedulePrecache()
+        if (changed || headers || enriched || rematched > 0) notifyPickerOfChanges()
+        if (changed || enriched) schedulePrecache()
         return changed
     }
 
     /**
-     * Reads the durations of videos that have none yet from their headers (PLAN 5.3), newest first
-     * and a batch per sync. Each video costs one or two 64 KiB Range requests, read four at a time:
-     * a request costs Keith's server about 180 ms, and four small requests one after another took
-     * 0.7 s a video. Stops as soon as the job is stopped: WorkManager can run a job inside the app's
-     * own process, where Android 17 cut the network 3 s in (Phase 5). Returns true when any were stored.
+     * Reads the duration and recording time of videos whose header hasn't been read yet (PLAN 5.3
+     * and 6.0), newest first and a batch per sync. Each video costs one or two 64 KiB Range requests,
+     * read four at a time: a request costs Keith's server about 180 ms, and four small requests one
+     * after another took 0.7 s a video. Stops as soon as the job is stopped: WorkManager can run a
+     * job inside the app's own process, where Android 17 cut the network 3 s in (Phase 5). Returns
+     * true when any were stored.
      */
-    private fun readVideoDurations(account: NextcloudAccount, isStopped: () -> Boolean): Boolean {
-        val videos = store.videosWithoutDuration(DURATION_BATCH)
+    private fun readVideoHeaders(account: NextcloudAccount, isStopped: () -> Boolean): Boolean {
+        val videos = store.videosWithoutHeader(HEADER_BATCH)
         if (videos.isEmpty()) return false
         val started = SystemClock.elapsedRealtime()
-        val durations = ConcurrentHashMap<String, Long>()
+        // ConcurrentHashMap takes no null values: an unreadable header is stored as a missing value.
+        val headers = ConcurrentHashMap<String, Optional<VideoHeader.Info>>()
         val stop = AtomicBoolean(false)
         val unauthorized = AtomicReference<NextcloudHttpException>()
-        val pool = Executors.newFixedThreadPool(DURATION_PARALLEL)
+        val pool = Executors.newFixedThreadPool(HEADER_PARALLEL)
         try {
             videos.map { video ->
                 pool.submit {
-                    if (stop.get() || isStopped() || SystemClock.elapsedRealtime() - started > DURATION_TIME_BUDGET_MS) return@submit
-                    val reader = RangeReader(video.sizeBytes, DURATION_WINDOW_BYTES) { offset, length ->
+                    if (stop.get() || isStopped() || SystemClock.elapsedRealtime() - started > HEADER_TIME_BUDGET_MS) return@submit
+                    val reader = RangeReader(video.sizeBytes, HEADER_WINDOW_BYTES) { offset, length ->
                         client.fetchRange(account, video.href, video.etag, offset, length)
                     }
                     try {
-                        val duration = VideoHeader.durationMillis(video.sizeBytes) { offset, length ->
+                        val header = VideoHeader.read(video.sizeBytes) { offset, length ->
                             ByteArray(length).also { reader.read(offset, it, 0, length) }
                         }
-                        durations[video.id] = duration ?: DURATION_UNREADABLE
+                        headers[video.id] = Optional.ofNullable(header)
                     } catch (error: NextcloudHttpException) {
                         // A file that changed or vanished is picked up by the next listing.
                         if (error.statusCode == 401) {
@@ -659,7 +692,7 @@ class LibraryRepository private constructor(context: Context) {
                         }
                     } catch (error: IOException) {
                         // The network went: keep what was read, and carry on at the next sync.
-                        if (!stop.getAndSet(true)) Log.d(TAG, "Stopped reading video durations: ${error.javaClass.simpleName}: ${error.message.orEmpty()}")
+                        if (!stop.getAndSet(true)) Log.d(TAG, "Stopped reading video headers: ${error.javaClass.simpleName}: ${error.message.orEmpty()}")
                     }
                 }
             }.forEach { it.get() }
@@ -667,13 +700,78 @@ class LibraryRepository private constructor(context: Context) {
             pool.shutdownNow()
         }
         unauthorized.get()?.let { throw it }
-        val stored = store.applyDurations(durations)
+        val read = headers.mapValues { it.value.orElse(null) }
+        val stored = store.applyVideoHeaders(read)
         Log.i(
             TAG,
-            "Read ${durations.count { it.value > 0 }} video durations (${durations.count { it.value < 0 }} unreadable) " +
-                "of ${videos.size} in ${SystemClock.elapsedRealtime() - started} ms",
+            "Read ${read.count { it.value != null }} video headers (${read.count { it.value == null }} unreadable, " +
+                "${read.count { it.value?.recordedMillis != null }} with a recording time) of ${videos.size} " +
+                "in ${SystemClock.elapsedRealtime() - started} ms",
         )
         return stored
+    }
+
+    /**
+     * Takes dates, sizes and live-photo pairs from Memories (PLAN 6.1 to 6.3). WebDAV still decides
+     * what is in the library; Memories only overrides values of files it indexed, matched by file ID
+     * and etag. Its API is internal and undocumented, so only tested versions are used, and nothing
+     * here can fail a sync: a network or server error keeps the values last read, while Memories
+     * switched off, gone, untested or answering in a form this can't read puts back core values.
+     *
+     * Reads the whole timeline with each full listing, otherwise only the days whose file count
+     * changed. Reading stops when the job is stopped, on a network error, or after
+     * [MEMORIES_TIME_BUDGET_MS], and what was read so far is stored: the next sync reads the rest.
+     * Keith's 18,487 files took 20 requests: 3 s from a laptop, but 3 minutes from the phone in a
+     * background job with its screen off. Returns true when any row changed.
+     */
+    private fun enrichFromMemories(account: NextcloudAccount, fullRead: Boolean, isStopped: () -> Boolean): Boolean {
+        if (!settings.useMemories) return store.clearMemories()
+        val started = SystemClock.elapsedRealtime()
+        return try {
+            val version = client.memoriesVersion(account)
+            settings.memoriesVersion = version.orEmpty()
+            if (version == null || !MemoriesApi.isSupported(version)) {
+                if (version != null) Log.i(TAG, "Memories $version is untested: using core values")
+                return store.clearMemories()
+            }
+            val days = client.memoriesDays(account)
+            val stored = store.memoriesDays()
+            val toRead = if (fullRead) days.keys else MemoriesApi.changedDays(days, stored, store.staleMemoriesDays())
+            if (toRead.isEmpty() && stored.keys.all(days::containsKey)) return false
+            val read = HashSet<Int>()
+            val files = ArrayList<MemoriesFile>()
+            var cutShort: String? = null
+            for (batch in MemoriesApi.requestBatches(toRead, days)) {
+                if (isStopped() || SystemClock.elapsedRealtime() - started > MEMORIES_TIME_BUDGET_MS) {
+                    cutShort = "out of time"
+                    break
+                }
+                try {
+                    files += client.memoriesFiles(account, batch)
+                    read += batch
+                } catch (error: IOException) {
+                    cutShort = "${error.javaClass.simpleName}: ${error.message.orEmpty()}"
+                    break
+                }
+            }
+            val readMillis = SystemClock.elapsedRealtime() - started
+            val changed = store.applyMemories(days, read, files)
+            val (matched, liveVideos) = store.memoriesStats()
+            Log.i(
+                TAG,
+                "Memories $version: read ${read.size} of ${toRead.size} days to read (${files.size} files" +
+                    "${if (fullRead) ", full read" else ""}${cutShort?.let { ", stopped: $it" }.orEmpty()}) in $readMillis ms, " +
+                    "stored in ${SystemClock.elapsedRealtime() - started - readMillis} ms; $matched rows use its values, " +
+                    "$liveVideos live-photo videos hidden, changed: $changed",
+            )
+            changed
+        } catch (error: JSONException) {
+            Log.w(TAG, "Memories answered in a form this app can't read: using core values (${error.message.orEmpty()})")
+            store.clearMemories()
+        } catch (error: IOException) {
+            Log.d(TAG, "Couldn't read Memories, keeping what was read before: ${error.javaClass.simpleName}: ${error.message.orEmpty()}")
+            false
+        }
     }
 
     /**
@@ -1111,14 +1209,15 @@ class LibraryRepository private constructor(context: Context) {
 
         private const val IMPORT_BATCH = 2_000
 
-        /** Video durations read per sync; a WorkManager job may run for 10 minutes in all. */
-        private const val DURATION_BATCH = 500
-        private const val DURATION_TIME_BUDGET_MS = 3L * 60L * 1_000L
-        private const val DURATION_PARALLEL = 4
-        private const val DURATION_WINDOW_BYTES = 64 * 1024
+        /** Video headers read per sync; a WorkManager job may run for 10 minutes in all. */
+        private const val HEADER_BATCH = 500
+        private const val HEADER_TIME_BUDGET_MS = 3L * 60L * 1_000L
+        private const val HEADER_PARALLEL = 4
+        private const val HEADER_WINDOW_BYTES = 64 * 1024
 
-        /** Stored for a video whose header couldn't be read, so it isn't tried at every sync. */
-        private const val DURATION_UNREADABLE = -1L
+        /** Memories reading per sync; the rest waits for the next one (PLAN 6.2). */
+        private const val MEMORIES_TIME_BUDGET_MS = 2L * 60L * 1_000L
+
         private const val LOCAL_MATCH_DELAY_MS = 5_000L
         private const val SELECTED_SEEN_RESOLUTION_MS = 5L * 60L * 1_000L
 
