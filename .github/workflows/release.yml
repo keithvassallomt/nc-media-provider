@@ -32,6 +32,10 @@ jobs:
 
       - uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
+      # The release notes are the tag's section of CHANGELOG.md. Without one, the release stops before building.
+      - name: Read the release notes
+        run: python3 tools/release.py notes "${GITHUB_REF_NAME#v}" > "$RUNNER_TEMP/notes.md"
+
       # No Gradle cache: a release builds from a clean slate.
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
@@ -106,7 +110,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP"/release/* \
             --repo "$GITHUB_REPOSITORY" \
             --title "NC Media Provider $GITHUB_REF_NAME" \
-            --generate-notes \
+            --notes-file "$RUNNER_TEMP/notes.md" \
             --verify-tag
 
       - name: Delete the release keystore

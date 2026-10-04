@@ -27,20 +27,26 @@ gh secret set ANDROID_KEY_PASSWORD
 
 If a secret is missing, the workflow stops before building and names it. The keystore is decoded into the runner's temporary folder and deleted at the end of the job, pass or fail.
 
+## The changelog
+
+[CHANGELOG.md](../CHANGELOG.md) follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.PATCH. List each change under `## [Unreleased]` as it's made, under `### Added`, `Changed`, `Deprecated`, `Removed`, `Fixed` or `Security`. Each release's section becomes its GitHub release notes.
+
+The store changelogs in `fastlane/metadata/android/en-US/changelogs/`, one file per `versionCode`, are separate and still written by hand.
+
 ## Cutting a release
 
-1. In `app/build.gradle.kts`, add one to `versionCode` and set `versionName` to the new version, for example `0.2.0`.
-2. Commit, push to `main` and wait for CI to pass.
-3. Tag that commit with `v` and the version name, then push the tag:
+Run `just release` on `main` (needs [just](https://just.systems)), or `just release 0.2.0` to skip the question. It:
 
-   ```sh
-   git tag v0.2.0
-   git push origin v0.2.0
-   ```
+1. Checks that the working tree is clean and `main` isn't behind `origin/main`.
+2. Asks which version to release, showing the current one. The version must be newer than the current one, or the current one if it hasn't been tagged yet, as for the first release.
+3. Checks CHANGELOG.md has at least one change for it: in its own `## [0.2.0]` section, or under `## [Unreleased]`, which becomes the version's section. The section is dated today.
+4. Sets `versionName` to the version and adds one to `versionCode` in `app/build.gradle.kts`.
+5. Shows the changes and asks before going on. Saying no undoes them.
+6. Commits them as "Release 0.2.0", pushes `main`, then tags the commit `v0.2.0` and pushes the tag.
 
-4. The Release workflow publishes `nc-media-provider-v0.2.0.apk`, `nc-media-provider-v0.2.0.aab` and `SHA256SUMS` under the tag, with notes generated from the changes since the last release. Obtainium picks up the APK from there.
+`tools/release.py` does steps 2 to 4 and changes nothing until every check passes. The tag starts the Release workflow, which publishes `nc-media-provider-v0.2.0.apk`, `nc-media-provider-v0.2.0.aab` and `SHA256SUMS` under the tag, with the version's changelog section as the notes. Obtainium picks up the APK from there.
 
-The workflow stops without publishing if the tag doesn't match `versionName` (tag `v0.2.0` needs `versionName = "0.2.0"`), or if the APK isn't signed with the release key. To try again after a fix, delete the tag on GitHub and locally, then tag the new commit:
+The workflow stops without publishing if CHANGELOG.md has no section for the tag, if the tag doesn't match `versionName` (tag `v0.2.0` needs `versionName = "0.2.0"`), or if the APK isn't signed with the release key. To try again after a fix, delete the tag on GitHub and locally, then run `just release` again with the same version:
 
 ```sh
 git push --delete origin v0.2.0
