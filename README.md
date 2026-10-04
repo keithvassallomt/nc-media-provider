@@ -2,7 +2,7 @@
 
 Your Nextcloud photos and videos in Android's own photo picker.
 
-<p align="center"><img src="art/icon/original/nmp_play.svg" alt="NC Media Provider logo" width="128"></p>
+<p align="center"><img src="art/icon/nmp_play_rounded.svg" alt="NC Media Provider logo" width="128"></p>
 
 > **Status:** in testing, not released yet. It will be published on Google Play and as GitHub releases. See [PLAN.md](PLAN.md) for the roadmap and the [issues](https://github.com/keithvassallomt/nc-media-provider/issues) for progress.
 

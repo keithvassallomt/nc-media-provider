@@ -1,2 +1,0 @@
-1. The app should detect when it is not the default cloudmediaprovider and surface a notification. 
-2. We need to refactor the UI to make it user frienldy, currently it's just a vomit of information. We need a brief setup process. 
