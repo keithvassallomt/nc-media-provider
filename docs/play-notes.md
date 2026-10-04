@@ -16,14 +16,16 @@ What publishing on Google Play takes for this app (PLAN 9.2). Researched 2026-10
 - Best argument (inference): the app *is* the picker's back end, and the platform's `MEDIA_STORE_URI` column expects a provider to know each item's local MediaStore URI [S5], which the picker can't give it.
 - Partial access (`READ_MEDIA_VISUAL_USER_SELECTED`) is declared alongside the same permissions [S6], so it doesn't avoid the declaration, and it would defeat recognising the phone's copies.
 
-**Plan:** a Play build without `READ_MEDIA_*`, so "Use local photos" is off there; the GitHub and IzzyOnDroid builds keep them. The declaration can follow later as an update. The permissions are already optional, which the policy requires anyway [S2].
+The declaration is required: since 2025-05-28 every app asking for these permissions needs an approved one, and apps without are "subject to removal" [S2] (checked on Google's page, 2026-10-04).
+
+**Decision (Keith, 2026-10-04):** one build for every channel, with the permissions; submit the declaration with the argument above, and revisit only if it's refused. The permissions are already optional, which the policy requires anyway [S2].
 
 ## Foreground service
 
 - `dataSync` fits: its documented uses include "Data upload or download" [S9], matching Play's "Network transfer" use case [S7]. `shortService` stops after about 3 minutes, too short for a long video, and `mediaProcessing` is for transcoding [S9].
 - Declaration: a description, what the user loses if it's stopped, a video and the use case [S7]. The service must be user-initiated or user-visible, stoppable, and stop when done [S8].
 - Android 15 and later give `dataSync` 6 hours in 24, reset when the user opens the app; the service must call `stopSelf()` in `onTimeout` or the app crashes [S10].
-- **To do:** handle `onTimeout`, add a Stop action to the notification, and keep the word "proxy" out of the declaration, since Play restricts proxy services [S8] (inference).
+- Done (2026-10-04): `onTimeout` stops the service, and its notification has a Stop action. Still to do: keep the word "proxy" out of the declaration, since Play restricts proxy services [S8] (inference), and record the video ([screenshots.md](screenshots.md)).
 
 ## adb and Shizuku
 
@@ -37,7 +39,7 @@ No keyboard-specific policy or declaration [S14]. Inserting a photo the user cho
 
 ## Developer account
 
-- New personal accounts need a closed test with at least 12 testers opted in for 14 days in a row before production [S16].
+- New personal accounts need a closed test with at least 12 testers opted in for 14 days in a row before production [S16]. Keith's account predates that rule, so it doesn't apply.
 - Identity: a government ID for a personal account; an organisation needs a D-U-N-S number and documents [S17], free but up to 28 days [S19]. Either way, a non-rooted phone on Android 10 or later for device verification [S18].
 - Android developer verification for sideloaded apps: from 2026-09-30 it covers installs from seven stores in Brazil, Indonesia, Singapore and Thailand only; GitHub and IzzyOnDroid installs are unaffected until the global rollout in 2027, and adb installs always are [S19][S20]. Play registers the package; another signing key's SHA-256 can be added [S19][S21].
 
@@ -46,10 +48,10 @@ No keyboard-specific policy or declaration [S14]. Inserting a photo the user cho
 - **Privacy policy:** required, linked in the app too; a public web page naming the developer, with contact details and retention [S22] (PLAN 9.8).
 - **Data safety:** "collect" means sending data off the device [S15]. The official Nextcloud app declares no data collected [S35]; inference: credentials sent to the user's own server can be treated the same way. Plain HTTP is allowed only to servers on the local network (NextcloudClient refuses it otherwise), so say so rather than claim everything is encrypted in transit [S22]. Filled in before closed testing [S15].
 - **Content rating:** the IARC questionnaire [S27]. Target audience 18 and over keeps the app outside the Families policy [S28].
-- **App access for reviewers:** reusable credentials in English [S23]: a demo Nextcloud server and app password, the adb steps, and a video. Inference: the keyboard works without adb, so point reviewers to it first.
+- **App access for reviewers:** reusable credentials in English [S23]: a demo Nextcloud server and app password, the adb steps, and a video. Inference: the keyboard works without adb, so point reviewers to it first. Decision (Keith): set this up only if review asks for it.
 - **Graphics:** icon 512×512 32-bit PNG; feature graphic 1024×500 without transparency; 2 to 8 screenshots, 320 to 3840 px a side [S25]; title up to 30 characters [S34].
 - **Build:** an Android App Bundle [S33]; target SDK 37 meets the minimum of 36 [S32].
-- **Signing:** new apps default to a key Google generates. Choose "Provide a copy of your app signing key" before any open or production release, so GitHub APKs can be signed with the same key [S26].
+- **Signing:** new apps default to a key Google generates. Choose "Provide a copy of your app signing key" before any open or production release, so GitHub APKs can be signed with the same key [S26]. The release key was made on 2026-10-04 (RSA 4096, `CN=Keith Vassallo`, SHA-256 `08:C0:A9:28:BD:71:22:D3:A2:B9:94:D2:49:7A:D7:7E:1A:DE:E4:6E:85:4E:CC:6E:2D:E1:93:20:5F:6E:AE:CD`); it is kept outside the repository.
 - **Trademark:** no "Nextcloud" in the name, a statement that the app is unofficial [S31], no implied affiliation [S30]: "Not affiliated with Nextcloud GmbH", and not their logo.
 
 ## Sources

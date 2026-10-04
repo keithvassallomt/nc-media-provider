@@ -2,6 +2,7 @@ package com.keithvassallo.ncmediaprovider.data
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -31,22 +32,42 @@ abstract class KeepAliveService : Service() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL, getString(R.string.streaming_channel), NotificationManager.IMPORTANCE_LOW),
         )
+        // Play wants a foreground service the user can stop (docs/play-notes.md).
+        val stop = PendingIntent.getService(this, 0, Intent(this, javaClass).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE)
         val notification = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(getString(title))
             .setContentText(getString(text))
             .setOngoing(true)
             .setSilent(true)
+            .addAction(0, getString(R.string.streaming_stop), stop)
             .build()
         startForeground(notificationId, notification, serviceType)
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_NOT_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            Log.i(TAG, "${javaClass.simpleName} stopped from its notification")
+            stopSelf()
+        }
+        return START_NOT_STICKY
+    }
+
+    /**
+     * Android 15 and later give a dataSync service 6 hours a day; past that it must stop at once,
+     * or the app is crashed. The stream it kept open fails, as it would offline.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "${javaClass.simpleName} ran out of foreground time")
+        stopSelf()
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     private companion object {
+        const val TAG = "KeepAlive"
         const val CHANNEL = "streaming"
+        const val ACTION_STOP = "com.keithvassallo.ncmediaprovider.action.STOP_STREAMING"
     }
 }
 

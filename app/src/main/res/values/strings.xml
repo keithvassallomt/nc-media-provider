@@ -85,6 +85,7 @@
     <string name="streaming_channel">Sending from Nextcloud</string>
     <string name="streaming_title">Sending from Nextcloud</string>
     <string name="streaming_text">An app is reading a video from your Nextcloud.</string>
+    <string name="streaming_stop">Stop</string>
     <string name="precache_explanation">Downloads thumbnails over Wi-Fi, newest first, so the picker and Send from Nextcloud show them at once instead of one by one.</string>
     <string name="precache_switch">Download thumbnails in advance</string>
     <string name="precache_last_month">Last month</string>
