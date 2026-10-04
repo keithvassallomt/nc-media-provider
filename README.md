@@ -4,7 +4,7 @@ Your Nextcloud photos and videos in Android's own photo picker.
 
 <p align="center"><img src="art/icon/nmp_play_rounded.svg" alt="NC Media Provider logo" width="128"></p>
 
-> **Status:** in testing, not released yet. It will be published on Google Play and as GitHub releases. See the [issues](https://github.com/keithvassallomt/nc-media-provider/issues) for progress.
+> **Status:** the first release, [v0.1.0](https://github.com/keithvassallomt/nc-media-provider/releases/tag/v0.1.0), is out on GitHub, and Google Play is coming. See the [issues](https://github.com/keithvassallomt/nc-media-provider/issues) for progress.
 
 > [!NOTE]
 > <img width="200" height="auto" alt="friendly-manifesto-badge" src="https://github.com/user-attachments/assets/cb91210b-0f66-46fe-93a8-a3a67857593c" /> <br>
@@ -32,7 +32,9 @@ Some apps, such as Messenger, use their own photo grid instead of Android's pick
 
 ## Quick start
 
-1. Install NC Media Provider from [Google Play](https://play.google.com/store/apps/details?id=com.keithvassallo.ncmediaprovider), or download the APK from the [latest release](https://github.com/keithvassallomt/nc-media-provider/releases/latest).
+<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/keithvassallomt/nc-media-provider"><img src="docs/images/badge_obtainium.png" alt="Get it on Obtainium" width="161"></a>
+
+1. Install NC Media Provider from [Google Play](https://play.google.com/store/apps/details?id=com.keithvassallo.ncmediaprovider), download the APK from the [latest release](https://github.com/keithvassallomt/nc-media-provider/releases/latest), or add it to [Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/keithvassallomt/nc-media-provider), which keeps it updated from the GitHub releases.
 2. Turn on Developer options: open **Settings > About phone** and tap **Build number** seven times.
 3. Open the app and let Android trust it as a photo source, with Shizuku or with a computer (below). This is the only fiddly part, and you only do it once.
 4. Sign in to your Nextcloud and choose your photo folders. The app walks you through it.
