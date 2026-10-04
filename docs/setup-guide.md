@@ -19,7 +19,7 @@ Android only lets approved apps add photos to its picker. Out of the box that li
 
 Either way, the setting stays after a restart. Only one source can show in the picker at a time. If you keep Google Photos as a choice (the app's default), you can switch between the two in the picker's settings whenever you like.
 
-![The app's first setup step, offering Shizuku or a computer](images/setup/app-picker-step.png)
+<img src="images/setup/app-picker-step.png" alt="The app's first setup step, offering Shizuku or a computer" width="280">
 
 ## First: turn on Developer options
 
@@ -29,7 +29,7 @@ Both ways need Android's Developer options, which are hidden until you ask for t
 2. Tap **Build number** seven times. Android asks for your screen lock, then says you are now a developer.
 3. Developer options now appear under **Settings > System > Developer options**.
 
-![The Build number entry in About phone](images/setup/build-number.png)
+<img src="images/setup/build-number.png" alt="The Build number entry in About phone" width="280">
 
 ## Shizuku
 
@@ -48,9 +48,9 @@ Install it from [Google Play](https://play.google.com/store/apps/details?id=moe.
 5. Type that code into Shizuku's notification (pull down the notification shade and tap **Enter pairing code**).
 6. In Shizuku, tap **Start**. After a few seconds it says Shizuku is running.
 
-![Wireless debugging's pairing code next to Shizuku's notification](images/setup/shizuku-pairing.png)
-
-![Shizuku showing that it is running](images/setup/shizuku-running.png)
+<img src="images/setup/shizuku-pairing-1.png" alt="Wireless debugging showing a pairing code" width="280">
+<img src="images/setup/shizuku-pairing-2.png" alt="Typing the pairing code into Shizuku's notification" width="280">
+<img src="images/setup/shizuku-running.png" alt="Shizuku showing that it is running" width="280">
 
 Shizuku's own guide covers this in more detail, with pictures for each Android version: [shizuku.rikka.app/guide/setup](https://shizuku.rikka.app/guide/setup/).
 
@@ -63,7 +63,7 @@ Shizuku's own guide covers this in more detail, with pictures for each Android v
 
 On most phones the step ticks itself off: the app is approved and selected in the picker. Carry on with signing in.
 
-![Shizuku asking whether to allow NC Media Provider](images/setup/shizuku-allow.png)
+<img src="images/setup/shizuku-allow.png" alt="Shizuku asking whether to allow NC Media Provider" width="280">
 
 **On GrapheneOS and some other phones** the picker's cloud sources only switch on when the phone starts. If the app says **Restart to finish**, restart the phone, start Shizuku again (step 2, without pairing this time), and tap **Turn on with Shizuku** once more.
 
@@ -83,13 +83,14 @@ This way uses `adb`, Android's command-line tool, from a computer with a USB cab
 
 ### 2. Connect the phone
 
-1. In **Developer options**, turn on **USB debugging**.
+1. In **Developer options**, turn on **USB debugging** and confirm.
 2. Plug the phone into the computer.
 3. On the computer, run `adb devices`.
 4. The phone asks **Allow USB debugging?** Tick **Always allow from this computer** and tap **Allow**.
 5. Run `adb devices` again. Your phone is listed, followed by `device`. If it says `unauthorized`, look for the prompt on the phone.
 
-![Android's Allow USB debugging prompt](images/setup/usb-debugging-prompt.png)
+<img src="images/setup/usb-debugging-on.png" alt="Android asking to confirm turning on USB debugging" width="280">
+<img src="images/setup/usb-debugging-prompt.png" alt="Android's Allow USB debugging prompt, with Always allow from this computer" width="280">
 
 ### 3. Run the commands
 
@@ -107,9 +108,9 @@ adb shell content call --uri content://media --method set_cloud_provider --extra
 
 The first four add the app to Android's list of approved photo sources. The last one selects it in the picker; it should print `Result: Bundle[{set_cloud_provider_result=true}]`.
 
-![The app's computer step, with the commands and the Copy button](images/setup/app-computer-step.png)
+<img src="images/setup/app-computer-step.png" alt="The app's computer step, with the commands and the Copy button" width="280">
 
-![A terminal after running the commands](images/setup/terminal-commands.png)
+<img src="images/setup/terminal-commands.png" alt="A terminal after running the commands" width="600">
 
 Then tap **I've run them, check** in the app. The step ticks itself off.
 
@@ -120,6 +121,21 @@ Then tap **I've run them, check** in the app. The step ticks itself off.
 
 You can unplug the phone and turn USB debugging off afterwards.
 
+## The rest of setup
+
+Once the first step is ticked off, the rest takes a minute:
+
+1. **Connect your Nextcloud.** Type your server's address and tap **Continue**. Your browser opens Nextcloud's login page; approve access there and come back to the app.
+2. **Choose your photo folders.** If you use Memories, the app suggests the folders it uses for your timeline. Add or remove any, then confirm.
+3. **A few extras.** Each can be changed later from the home screen.
+   - **Use photos already on this phone** recognises photos that are on the phone too, so they show once and the phone's copy is handed over instead of a download. Android asks for access to your photos: choose **Allow all**. With limited access the app sees only the photos you pick, and the rest show twice.
+   - **Enable notifications**, for example to hear when an update has switched the app off in the picker.
+   - **Photo keyboard**, for apps that have no photo picker. When Android's keyboard settings open, switch on **Nextcloud photos**.
+
+<img src="images/setup/app-folders-step.png" alt="Choosing photo folders" width="280">
+<img src="images/setup/photos-permission.png" alt="Android asking for access to photos: choose Allow all" width="280">
+<img src="images/setup/keyboard-enabled.png" alt="Android's keyboard settings with Nextcloud photos switched on" width="280">
+
 ## Selecting the app in the picker
 
 The steps above select the app for you. You need this only to switch between this app and Google Photos, or after an app update when Shizuku isn't running:
@@ -127,13 +143,13 @@ The steps above select the app for you. You need this only to switch between thi
 1. In NC Media Provider, open **Details and troubleshooting** and tap **Photo picker settings**. You can also tap the notification that appears after an update.
 2. Choose **NC Media Provider**.
 
-![The photo picker's cloud settings with NC Media Provider selected](images/setup/picker-cloud-settings.png)
+<img src="images/setup/picker-cloud-settings.png" alt="The photo picker's cloud settings with NC Media Provider selected" width="280">
 
 ## Checking that it works
 
 Open the app's home screen. The top card says **In the picker** and shows how many photos and videos it found. Tap **Try the picker** to open Android's picker; your Nextcloud photos are mixed in with the phone's own, newest first. The first sync of a large library takes a few minutes.
 
-![The home screen with the In the picker card](images/setup/home.png)
+<img src="images/setup/home.png" alt="The home screen with the In the picker card" width="280">
 
 Some apps, such as Messenger, use their own photo grid instead of Android's picker, so your Nextcloud photos can't appear there. For those, use **Send from Nextcloud**: long-press the app's icon, or add its Quick Settings tile. The optional photo keyboard is another way in.
 
@@ -157,20 +173,3 @@ Sign out in the app first if you also want its password removed from your Nextcl
 - **`adb devices` lists nothing.** Try another USB cable or port (some cables only charge), and check that USB debugging is on.
 - **Photos show twice.** Allow **Use local photos** on the app's home screen, so it can recognise photos that are also on the phone.
 - **Something else.** **Details and troubleshooting** shows the last sync, any error, and whether Android lists and selects the app. Please include what it says when you [open an issue](https://github.com/keithvassallomt/nc-media-provider/issues).
-
-## Screenshots to add
-
-Each goes in `docs/images/setup/`:
-
-| File | Shows |
-|---|---|
-| `app-picker-step.png` | The app's first setup step, with the Shizuku and computer options |
-| `build-number.png` | Settings > About phone, with Build number |
-| `shizuku-pairing.png` | Wireless debugging's pairing code and Shizuku's notification |
-| `shizuku-running.png` | Shizuku's main screen saying it is running |
-| `shizuku-allow.png` | Shizuku's prompt to allow NC Media Provider |
-| `usb-debugging-prompt.png` | Android's Allow USB debugging prompt |
-| `app-computer-step.png` | The app's computer step, with the commands and Copy button |
-| `terminal-commands.png` | A terminal after running the commands |
-| `picker-cloud-settings.png` | The picker's cloud settings with the app selected |
-| `home.png` | The app's home screen, In the picker card at the top |
