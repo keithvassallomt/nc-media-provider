@@ -425,7 +425,7 @@ Built (2026-10-03): each sync reads the face groups from Memories' `clusters/rec
 
 **9.3 Onboarding.** Built (2026-10-03): a four-step checklist (turn it on in the picker, connect, folders, extras) and a home screen of status, tiles and a short list, chosen from three prototypes; colours follow the phone's wallpaper. [docs/setup-guide.md](docs/setup-guide.md) explains Shizuku and adb step by step, and the app links to it; its screenshots were taken on 2026-10-04 from a fresh install of the release build, with the Play listing's ([docs/screenshots.md](docs/screenshots.md)). Explains adb and Shizuku to people who aren't developers.
 
-**9.4 README.** Written (2026-10-04): what the app does, requirements, setup and activation by hand, switching with Google Photos, undoing it, GrapheneOS, troubleshooting with log tags and `dumpsys`, privacy, building, and the credit to the base project. Activation on Android 14 to 16 is untested and says so.
+**9.4 README.** Written (2026-10-04), then made the project's home page: what the app does in plain words, a quick start with Shizuku and with a computer, each linking to its part of the setup guide, and links to the docs. The technical detail moved to [docs/technical.md](docs/technical.md): the activation commands, GrapheneOS, log tags and `dumpsys`, building. [docs/README.md](docs/README.md) lists the docs. Activation on Android 14 to 16 is untested and says so.
 
 - a table of activation commands for each Android version;
 - GrapheneOS notes;

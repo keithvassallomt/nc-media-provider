@@ -155,7 +155,7 @@ Some apps, such as Messenger, use their own photo grid instead of Android's pick
 
 ## Undoing it
 
-Uninstalling NC Media Provider removes it from the picker straight away. To put Android's settings back exactly as they were as well, run these on a computer (the app shows them under **Details and troubleshooting > Undo activation**):
+Uninstalling NC Media Provider removes it from the picker straight away. To put Android's settings back exactly as they were as well, start Shizuku and tap **Details and troubleshooting > Turn off with Shizuku** before you uninstall. Without Shizuku, run these on a computer (the app shows them under **Details and troubleshooting > Undo activation**):
 
 ```sh
 adb shell device_config clear_override mediaprovider allowed_cloud_providers
