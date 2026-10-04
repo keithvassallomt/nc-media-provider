@@ -59,7 +59,10 @@ class LibraryStore(
             ).resolved(memories[row.id])
             item.takeUnless { it.sameContentAs(row) }
         }
-        applyChanges(LibraryChanges(upserts, emptyList()), fullListing = false)
+        val changed = applyChanges(LibraryChanges(upserts, emptyList()), fullListing = false)
+        // A length now known can make a video a live photo's half by its name (PLAN 5.5).
+        if (changed) resolveAll()
+        changed
     }
 
     /** Memories' day counts as last read (PLAN 6.2). */
@@ -142,7 +145,7 @@ class LibraryStore(
             .mapTo(HashSet(), MediaItem::id)
         val wanted = items.values.filterNot { it.id in inFolders }.map { with(Albums) { it.toMediaItem(generation = 0L) } }
         val memories = memoriesFor(wanted)
-        applyChanges(diffLibrary(stored, markLiveVideos(wanted, memories), complete = true, memories::get), fullListing = false)
+        applyChanges(diffLibrary(stored, markLiveVideos(wanted, memories, stored), complete = true, memories::get), fullListing = false)
     }
 
     /** The albums the picker can show: those with a photo or video it can show. */
@@ -266,7 +269,7 @@ class LibraryStore(
         // folders now hold too moves to its folder row.
         val listedIds = listed.mapTo(HashSet(), MediaItem::id)
         val stored = dao.allMedia().filter { !Albums.isAlbumPath(it.href) || it.id in listedIds }
-        applyChanges(diffLibrary(stored, markLiveVideos(listed, memories), complete, memories::get), fullListing = complete)
+        applyChanges(diffLibrary(stored, markLiveVideos(listed, memories, stored), complete, memories::get), fullListing = complete)
     }
 
     /**
@@ -296,7 +299,7 @@ class LibraryStore(
             val kept = copies.map { copy -> copy.filterNot { Albums.isAlbumPath(it.href) }.minByOrNull(MediaItem::href) ?: copy.minBy(MediaItem::href) }
             // A live photo's two halves share a folder, so each folder's listing holds both.
             val memories = memoriesFor(kept)
-            applyChanges(diffLibrary(stored + elsewhere, markLiveVideos(kept, memories), complete = true, memories::get), fullListing = false)
+            applyChanges(diffLibrary(stored + elsewhere, markLiveVideos(kept, memories, stored + elsewhere), complete = true, memories::get), fullListing = false)
         }
 
     /**
@@ -379,9 +382,15 @@ class LibraryStore(
     private fun memoriesFor(items: Collection<MediaItem>): Map<String, MemoriesFile> =
         items.map(MediaItem::id).chunked(SQL_BATCH).flatMap(dao::memoriesWithIds).associateBy(MemoriesFile::id)
 
-    /** [items] with [MediaItem.isLiveVideo] set by Memories' live-photo pairs among them. */
-    private fun markLiveVideos(items: Collection<MediaItem>, memories: Map<String, MemoriesFile>): List<MediaItem> {
-        val halves = MemoriesApi.liveHalves(items, memories::get)
+    /** [items] with [MediaItem.isLiveVideo] set for the live-photo halves among them (PLAN 5.5 and 6.2). */
+    private fun markLiveVideos(items: Collection<MediaItem>, memories: Map<String, MemoriesFile>, stored: Collection<MediaItem>): List<MediaItem> {
+        // Listings carry no video lengths; the stored row has one while the file is unchanged.
+        val lengths = stored.associateBy(MediaItem::id)
+        val measured = items.map { item ->
+            val row = lengths[item.id]
+            if (item.durationMillis == 0L && row != null && row.etag == item.etag) item.copy(durationMillis = row.durationMillis) else item
+        }
+        val halves = LivePhotos.halves(measured, memories::get)
         return items.map { it.copy(isLiveVideo = it.id in halves) }
     }
 
@@ -389,7 +398,7 @@ class LibraryStore(
     private fun resolveAll(): Boolean {
         val memories = dao.memoriesFiles().associateBy(MemoriesFile::id)
         val rows = dao.allMedia()
-        val halves = MemoriesApi.liveHalves(rows, memories::get)
+        val halves = LivePhotos.halves(rows, memories::get)
         val upserts = rows.mapNotNull { row ->
             row.resolved(memories[row.id]).copy(isLiveVideo = row.id in halves).takeUnless { it.sameContentAs(row) }
         }

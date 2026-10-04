@@ -1548,9 +1548,9 @@ class LibraryRepository private constructor(context: Context) {
 
         /**
          * What the listing includes. A change makes the next sync list everything, without
-         * starting a new library: 2 added videos.
+         * starting a new library: 2 added videos, 3 pairs live photos by name.
          */
-        private const val LISTING_VERSION = 2
+        private const val LISTING_VERSION = 3
 
         /** Catches what etags miss: external storage, and metadata Nextcloud fills in later. */
         private const val FULL_LISTING_INTERVAL_MS = 7L * 24L * 60L * 60L * 1_000L

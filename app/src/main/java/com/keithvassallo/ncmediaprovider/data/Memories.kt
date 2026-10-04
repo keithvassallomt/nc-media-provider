@@ -132,5 +132,6 @@ internal object MemoriesApi {
         return items.filter { it.isVideo && memories(it.id) == null && pairKey(it) in livePhotos }.mapTo(HashSet(), MediaItem::id)
     }
 
-    private fun pairKey(item: MediaItem): String = item.folder + LocalMatcher.nameKey(item.fileName.substringBeforeLast('.'))
+    /** A live photo's two halves share a folder and a name, compared without case. */
+    fun pairKey(item: MediaItem): String = item.folder + LocalMatcher.nameKey(item.fileName.substringBeforeLast('.'))
 }
