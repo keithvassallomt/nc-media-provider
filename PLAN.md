@@ -419,13 +419,13 @@ Built (2026-10-03): each sync reads the face groups from Memories' `clusters/rec
 
 ### Phase 9: Release
 
-**9.1 Store listing.** A name without "Nextcloud", plus a "not affiliated with Nextcloud" disclaimer.
+**9.1 Store listing.** Name decided (Keith, 2026-10-04): **NC Media Provider**, the name the app already has, with a "not affiliated with Nextcloud" disclaimer. Still to write: the listing text and its graphics. A name without "Nextcloud", plus a "not affiliated with Nextcloud" disclaimer.
 
-**9.2 Channels.** GitHub releases with Obtainium first, with IzzyOnDroid as a quick extra channel. Every planned library (OkHttp, Room, WorkManager, Media3, the Shizuku API) is open source, so F-Droid with reproducible builds is possible. Google Play is deferred until its policies are checked, since the app needs adb to work at all and duplicate handling needs broad photo-library access.
+**9.2 Channels.** GitHub releases with Obtainium first, with IzzyOnDroid as a quick extra channel. Every planned library (OkHttp, Room, WorkManager, Media3, the Shizuku API) is open source, so F-Droid with reproducible builds is possible. Google Play is a must (Keith, 2026-10-04); its policies are being checked, since the app needs adb to work at all and duplicate handling needs broad photo-library access.
 
 **9.3 Onboarding.** Built (2026-10-03): a four-step checklist (turn it on in the picker, connect, folders, extras) and a home screen of status, tiles and a short list, chosen from three prototypes; colours follow the phone's wallpaper. [docs/setup-guide.md](docs/setup-guide.md) explains Shizuku and adb step by step, and the app links to it; its screenshots are still to add. Explains adb and Shizuku to people who aren't developers.
 
-**9.4 README.**
+**9.4 README.** Written (2026-10-04): what the app does, requirements, setup and activation by hand, switching with Google Photos, undoing it, GrapheneOS, troubleshooting with log tags and `dumpsys`, privacy, building, and the credit to the base project. Activation on Android 14 to 16 is untested and says so.
 
 - a table of activation commands for each Android version;
 - GrapheneOS notes;
