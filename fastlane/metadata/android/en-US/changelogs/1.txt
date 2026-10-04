@@ -1,0 +1,8 @@
+First release.
+
+• Your Nextcloud photos and videos in Android's photo picker, mixed in with the phone's own
+• Albums from Nextcloud Photos and Memories, and the people Memories recognises
+• Photos already on the phone show once
+• Send from Nextcloud and a photo keyboard, for apps without the picker
+• Optional thumbnail pre-cache over Wi-Fi
+• Set up once with Shizuku or a computer. No root needed.
