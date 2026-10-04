@@ -129,6 +129,8 @@ Android Studio, or from the command line with JDK 17 or later:
 ./gradlew testDebugUnitTest    # unit tests
 ```
 
+Signed releases are built and published by GitHub Actions from a version tag: see [docs/releasing.md](docs/releasing.md).
+
 [docs/](docs/) has the notes behind the design: what the two test phones do ([device-notes.md](docs/device-notes.md)), what Nextcloud servers return ([server-notes.md](docs/server-notes.md)) and how the base project maps onto this one ([base-repo-map.md](docs/base-repo-map.md)).
 
 ## Credits
