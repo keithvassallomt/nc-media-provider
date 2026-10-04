@@ -8,6 +8,8 @@ List each change under [Unreleased] as it's made, under one of Added, Changed, D
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-04
+
 ### Added
 
 - Your Nextcloud photos and videos in Android's photo picker, mixed in with the phone's own, newest first.
@@ -19,4 +21,5 @@ List each change under [Unreleased] as it's made, under one of Added, Changed, D
 - A setup checklist that activates the app with Shizuku on the phone or adb from a computer. No root needed.
 - Share for a bug report, which collects diagnostics with the server's address and the user name masked.
 
-[unreleased]: https://github.com/keithvassallomt/nc-media-provider/commits/main
+[unreleased]: https://github.com/keithvassallomt/nc-media-provider/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/keithvassallomt/nc-media-provider/releases/tag/v0.1.0
