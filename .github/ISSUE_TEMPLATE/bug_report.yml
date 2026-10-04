@@ -1,0 +1,63 @@
+name: Bug report
+description: Something doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. The details below make most problems quick to find.
+        Please check that nothing private is left in what you paste: the app masks your server's address and user name, but file names can appear in its log.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: phone
+    attributes:
+      label: Phone and Android version
+      placeholder: Pixel 9, Android 16
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: System
+      options:
+        - Stock Android (Google)
+        - GrapheneOS
+        - Another custom ROM
+        - Another manufacturer's Android (Samsung, OnePlus, ...)
+    validations:
+      required: true
+  - type: dropdown
+    id: activation
+    attributes:
+      label: How you activated the app
+      options:
+        - Shizuku
+        - adb from a computer
+        - Not activated yet
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics from the app
+      description: In the app, open Details and troubleshooting, tap Share for a bug report, and paste the text here. It includes the MediaProvider version, which picker the phone uses, and the app's recent log lines.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: dumpsys
+    attributes:
+      label: The picker's state (optional, needs adb)
+      description: |
+        The cloud picker lines from MediaProvider. On stock Pixels and other Google builds:
+        `adb shell dumpsys activity provider com.google.android.providers.media.module/com.android.providers.media.MediaProvider`
+        On AOSP builds such as GrapheneOS:
+        `adb shell dumpsys activity provider com.android.providers.media.module/com.android.providers.media.MediaProvider`
+        Paste the lines with allowedCloudProviderPackages, isCloudMediaInPhotoPickerEnabled and mCloudProvider.
+      render: text

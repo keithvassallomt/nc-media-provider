@@ -45,6 +45,25 @@ class DeviceConfigUserService() : IActivationService.Stub() {
         return check.output.contains("=${CloudProviderActivation.authority(packageName)}")
     }
 
+    /**
+     * Undoes [activate], which Play wants of any change to system settings (docs/play-notes.md).
+     * Google Photos is selected again first, where it's installed and allowed; then `clear_override`
+     * hands every flag back to the phone's own value, so nothing else of the user's settings changes.
+     */
+    override fun deactivate(): String {
+        val packageName = BuildConfig.APPLICATION_ID
+        // Best effort: on GrapheneOS Google Photos isn't allowed by default, and this just fails.
+        run(CONTENT_BINARY, *CloudProviderActivation.selectAuthorityArguments(CloudProviderActivation.GOOGLE_PHOTOS_AUTHORITY).toTypedArray())
+        apply(CloudProviderActivation.settings(""), "clear_override")?.let { failure ->
+            throw RemoteException("Turning off failed: $failure")
+        }
+        repeat(VERIFY_ATTEMPTS) {
+            if (readPickerState()?.allowedPackages?.contains(packageName) != true) return RESULT_CLEARED
+            Thread.sleep(VERIFY_INTERVAL_MS)
+        }
+        throw RemoteException("MediaProvider still lists this app as allowed after the change")
+    }
+
     private fun readPickerState(): PickerState? = CloudProviderActivation.MEDIA_PROVIDER_COMPONENTS.firstNotNullOfOrNull { component ->
         CloudProviderActivation.parsePickerState(run(DUMPSYS_BINARY, "activity", "provider", component).output)
     }
@@ -55,12 +74,12 @@ class DeviceConfigUserService() : IActivationService.Stub() {
 
     private fun apply(settings: List<DeviceConfigSetting>, operation: String): String? {
         settings.forEach { setting ->
-            val result = runDeviceConfig(
-                operation,
-                setting.namespace,
-                setting.key,
-                setting.value,
-            )
+            // `clear_override` takes no value.
+            val result = if (operation == "override") {
+                runDeviceConfig(operation, setting.namespace, setting.key, setting.value)
+            } else {
+                runDeviceConfig(operation, setting.namespace, setting.key)
+            }
             if (!result.successful) {
                 val detail = result.output.take(180).ifBlank { "exit code ${result.exitCode}" }
                 return "${setting.namespace}/${setting.key}: $detail"
@@ -83,6 +102,7 @@ class DeviceConfigUserService() : IActivationService.Stub() {
 
         const val RESULT_ACTIVE = "active"
         const val RESULT_RESTART = "restart"
+        const val RESULT_CLEARED = "cleared"
         private const val COMMAND_TIMEOUT_SECONDS = 10L
     }
 }

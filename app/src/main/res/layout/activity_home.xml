@@ -254,6 +254,10 @@
                 <include
                     android:id="@+id/rowDetails"
                     layout="@layout/item_home_row" />
+
+                <include
+                    android:id="@+id/rowPrivacy"
+                    layout="@layout/item_home_row" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>

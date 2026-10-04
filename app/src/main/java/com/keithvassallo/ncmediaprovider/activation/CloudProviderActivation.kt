@@ -23,6 +23,7 @@ data class PickerState(
  */
 object CloudProviderActivation {
     const val GOOGLE_PHOTOS_PACKAGE = "com.google.android.apps.photos"
+    const val GOOGLE_PHOTOS_AUTHORITY = "com.google.android.apps.photos.cloudpicker"
 
     // `mediaprovider` applies immediately; `storage_native_boot` is read at boot.
     private val NAMESPACES = listOf("mediaprovider", "storage_native_boot")
@@ -52,8 +53,10 @@ object CloudProviderActivation {
     }
 
     /** Selects this app as the picker's cloud source; the shell may do this (checked in Phase 4). */
-    fun selectArguments(packageName: String) =
-        listOf("call", "--uri", "content://media", "--method", "set_cloud_provider", "--extra", "cloud_provider:s:${authority(packageName)}")
+    fun selectArguments(packageName: String) = selectAuthorityArguments(authority(packageName))
+
+    fun selectAuthorityArguments(authority: String) =
+        listOf("call", "--uri", "content://media", "--method", "set_cloud_provider", "--extra", "cloud_provider:s:$authority")
 
     fun enableCommands(packageName: String, keepGooglePhotos: Boolean): String =
         (settings(allowList(packageName, keepGooglePhotos)).map { "adb shell device_config override ${it.namespace} ${it.key} ${it.value}" } +

@@ -62,6 +62,8 @@ class DetailsActivity : AppCompatActivity() {
         binding.testPickerButton.setOnClickListener { openSystemPicker() }
         binding.setupAgainButton.setOnClickListener { startActivity(android.content.Intent(this, OnboardingActivity::class.java)) }
         binding.shizukuButton.setOnClickListener { shizuku.act() }
+        binding.turnOffButton.setOnClickListener { confirmTurnOff() }
+        binding.shareDiagnosticsButton.setOnClickListener { shareDiagnostics() }
         binding.copyCommandsButton.setOnClickListener { copy(binding.adbCommands.text) }
         binding.copyRestoreButton.setOnClickListener { copy(binding.restoreCommands.text) }
         binding.grantLocalNetworkButton.setOnClickListener { localNetworkRequest.launch(ACCESS_LOCAL_NETWORK) }
@@ -88,6 +90,7 @@ class DetailsActivity : AppCompatActivity() {
 
     private fun renderActivation() {
         val activation = PickerActivation.read(this)
+        binding.turnOffButton.visibility = if (activation.allowed) View.VISIBLE else View.GONE
         binding.activationStatus.setText(
             when {
                 activation.selected -> R.string.activation_status_active
@@ -102,6 +105,7 @@ class DetailsActivity : AppCompatActivity() {
         if (!::binding.isInitialized) return
         binding.shizukuProgress.visibility = if (state == ShizukuActivator.State.ACTIVATING) View.VISIBLE else View.GONE
         binding.shizukuButton.isEnabled = state != ShizukuActivator.State.ACTIVATING
+        binding.turnOffButton.isEnabled = state != ShizukuActivator.State.ACTIVATING
         binding.shizukuButton.setText(
             when (state) {
                 ShizukuActivator.State.NOT_RUNNING, ShizukuActivator.State.UNSUPPORTED, ShizukuActivator.State.DENIED -> R.string.open_shizuku
@@ -126,6 +130,10 @@ class DetailsActivity : AppCompatActivity() {
         result.onSuccess { outcome ->
             val dialog = MaterialAlertDialogBuilder(this)
             when (outcome) {
+                DeviceConfigUserService.RESULT_CLEARED -> dialog
+                    .setTitle(R.string.turned_off_title)
+                    .setMessage(R.string.turned_off_message)
+                    .setPositiveButton(android.R.string.ok, null)
                 ShizukuActivator.RESULT_SELECTED -> dialog
                     .setTitle(R.string.shizuku_activation_saved)
                     .setMessage(R.string.shizuku_activation_selected_message)
@@ -180,6 +188,28 @@ class DetailsActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    /** The diagnostics export for a bug report (PLAN 9.5), shared as text to wherever the user files it. */
+    private fun shareDiagnostics() {
+        lifecycleScope.launch {
+            val report = withContext(Dispatchers.IO) { BugReport.build(applicationContext, repository) }
+            val send = android.content.Intent(android.content.Intent.ACTION_SEND)
+                .setType("text/plain")
+                .putExtra(android.content.Intent.EXTRA_SUBJECT, getString(R.string.share_diagnostics_subject))
+                .putExtra(android.content.Intent.EXTRA_TEXT, report)
+            startActivity(android.content.Intent.createChooser(send, getString(R.string.share_diagnostics)))
+        }
+    }
+
+    /** Undoing activation is a change to system settings, so it says what it does and asks first. */
+    private fun confirmTurnOff() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.turn_off_title)
+            .setMessage(R.string.turn_off_message)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.turn_off_confirm) { _, _ -> shizuku.turnOff() }
+            .show()
     }
 
     private fun renderLocalNetwork() {

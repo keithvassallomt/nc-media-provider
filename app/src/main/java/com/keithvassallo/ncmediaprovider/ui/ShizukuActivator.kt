@@ -23,9 +23,10 @@ import rikka.shizuku.Shizuku
 
 /**
  * Activation through Shizuku (PLAN 4.6), for whichever screen offers it: [act] does what the state
- * calls for next (open Shizuku, ask it for access, or activate), [onChange] reports every state, and
- * [onResult] how an activation went: [RESULT_SELECTED], [DeviceConfigUserService.RESULT_RESTART] or
- * allowed but not selected. Create it in the activity's constructor or onCreate.
+ * calls for next (open Shizuku, ask it for access, or activate), [turnOff] the same towards undoing
+ * it, [onChange] reports every state, and [onResult] how it went: [RESULT_SELECTED],
+ * [DeviceConfigUserService.RESULT_RESTART], allowed but not selected, or
+ * [DeviceConfigUserService.RESULT_CLEARED]. Create it in the activity's constructor or onCreate.
  */
 class ShizukuActivator(
     private val activity: AppCompatActivity,
@@ -39,6 +40,9 @@ class ShizukuActivator(
         private set
 
     private var running = false
+
+    /** Whether the next run undoes activation instead. */
+    private var undoing = false
     private var connected = false
     private var attempt = 0
 
@@ -48,7 +52,7 @@ class ShizukuActivator(
     }
     private val permissionResult = Shizuku.OnRequestPermissionResultListener { requestCode, result ->
         if (requestCode != PERMISSION_REQUEST) return@OnRequestPermissionResultListener
-        if (result == PackageManager.PERMISSION_GRANTED) activate() else refresh()
+        if (result == PackageManager.PERMISSION_GRANTED) start() else refresh()
     }
 
     private val connection = object : ServiceConnection {
@@ -59,8 +63,10 @@ class ShizukuActivator(
             val activation = IActivationService.Stub.asInterface(service)
             activity.lifecycleScope.launch {
                 val keep = keepGooglePhotos()
+                val undo = undoing
                 val result = runCatching {
                     withContext(Dispatchers.IO) {
+                        if (undo) return@withContext activation.deactivate()
                         val outcome = activation.activate(keep)
                         if (outcome == DeviceConfigUserService.RESULT_ACTIVE && activation.selectProvider()) RESULT_SELECTED else outcome
                     }
@@ -110,17 +116,24 @@ class ShizukuActivator(
     }
 
     /** The next step: open Shizuku, ask it for access, or activate. */
-    fun act() {
+    fun act() = next(undo = false)
+
+    /** The next step towards undoing activation: open Shizuku, ask it for access, or turn off. */
+    fun turnOff() = next(undo = true)
+
+    private fun next(undo: Boolean) {
         refresh()
+        if (state == State.ACTIVATING) return
+        undoing = undo
         when (state) {
             State.ACTIVATING -> Unit
             State.NOT_RUNNING, State.UNSUPPORTED, State.DENIED -> openManager()
             State.NEEDS_PERMISSION -> runCatching { Shizuku.requestPermission(PERMISSION_REQUEST) }.onFailure { onResult(Result.failure(it)) }
-            State.READY -> activate()
+            State.READY -> start()
         }
     }
 
-    private fun activate() {
+    private fun start() {
         if (running || !binderAvailable()) return
         running = true
         connected = false

@@ -31,7 +31,7 @@ The declaration is required: since 2025-05-28 every app asking for these permiss
 
 - No policy forbids an app that needs adb or Shizuku [S14]; the malware policy is about abusing privileges and rooting without consent [S11]. Shizuku, aShell, LADB and SystemUI Tuner (whose listing gives `adb shell pm grant` commands) are on Play [S13].
 - Listing: lead with "One-time setup with adb or Shizuku. No root." and describe the step as turning on Android's built-in cloud media setting; never "bypass", "hack" or "unlock".
-- App: a clear disclosure and consent before the commands run, and a way to turn it off that clears the overrides, since such changes must be "easily reversible" [S12]. **To do:** an in-app "Turn off" through Shizuku; today the app only shows the commands to copy.
+- App: a clear disclosure and consent before the commands run, and a way to turn it off that clears the overrides, since such changes must be "easily reversible" [S12]. Done (2026-10-04): the Shizuku step says what it changes and that it can be undone, and **Turn off with Shizuku** under Details and troubleshooting selects Google Photos again where it can and clears the overrides, after asking.
 
 ## The keyboard
 

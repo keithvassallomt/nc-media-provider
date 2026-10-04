@@ -9,4 +9,8 @@ interface IActivationService {
 
     // Selects this app as the picker's cloud source; true when MediaProvider confirms it.
     boolean selectProvider() = 2;
+
+    // Undoes activate(): selects Google Photos again where it can, then clears this app's
+    // overrides. Returns "cleared" once MediaProvider no longer lists this app.
+    String deactivate() = 3;
 }

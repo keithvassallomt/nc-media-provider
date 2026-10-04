@@ -293,6 +293,14 @@
                             android:text="@string/keep_google_photos" />
 
                         <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="@string/activation_consent"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+
+                        <TextView
                             android:id="@+id/shizukuStatus"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"

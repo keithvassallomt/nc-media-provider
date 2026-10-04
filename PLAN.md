@@ -434,7 +434,7 @@ Built (2026-10-03): each sync reads the face groups from Memories' `clusters/rec
 - troubleshooting with logcat tags and the MediaProvider `dumpsys` command;
 - MIT attribution to the base repo.
 
-**9.5 Bug reports.**
+**9.5 Bug reports.** Built (2026-10-04): **Share for a bug report** under Details and troubleshooting collects the app, phone, Android and MediaProvider versions, which picker the phone uses, activation, the library's diagnostics and the app's recent log lines, with the server's address and the user name masked; the app password is never read. `.github/ISSUE_TEMPLATE/bug_report.yml` asks for it, with the phone, the system, how the app was activated and, optionally, MediaProvider's `dumpsys` lines.
 
 - a diagnostics export with credentials removed;
 - an issue template asking for the device, Android version, MediaProvider module version, and the cloud picker lines from MediaProvider's `dumpsys`.
@@ -443,7 +443,7 @@ Built (2026-10-03): each sync reads the face groups from Memories' `clusters/rec
 
 **9.7 CI.** GitHub Actions builds, runs unit tests, and produces signed release APKs.
 
-**9.8 Translations and privacy.** Translatable strings, and a privacy statement saying there is no telemetry.
+**9.8 Translations and privacy.** Done (2026-10-04): [docs/privacy.md](docs/privacy.md) says the app collects no data and what it uses and why, and the home screen links to it, as Play requires. Every string the user sees is in `strings.xml`, and lint finds no hard-coded text. Translatable strings, and a privacy statement saying there is no telemetry.
 
 ## Out of scope
 

@@ -94,6 +94,9 @@ class HomeActivity : AppCompatActivity() {
         row(binding.rowGuide, R.string.row_guide) { openLink(Links.GUIDE) }
         binding.rowGuide.trailing.setImageResource(R.drawable.ic_open_external)
         row(binding.rowDetails, R.string.row_details) { startActivity(Intent(this, DetailsActivity::class.java)) }
+        // Play wants the privacy policy reachable from inside the app (PLAN 9.8).
+        row(binding.rowPrivacy, R.string.row_privacy) { openLink(Links.PRIVACY) }
+        binding.rowPrivacy.trailing.setImageResource(R.drawable.ic_open_external)
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -282,6 +285,7 @@ class HomeActivity : AppCompatActivity() {
         val account = repository.account()
         binding.rowAccount.detail.text = account?.let { getString(R.string.row_account_detail, it.userId, it.baseUrl.toUri().host ?: it.baseUrl) }.orEmpty()
         binding.rowGuide.detail.setText(R.string.row_guide_detail)
+        binding.rowPrivacy.detail.setText(R.string.row_privacy_detail)
         binding.rowDetails.detail.setText(R.string.row_details_detail)
     }
 

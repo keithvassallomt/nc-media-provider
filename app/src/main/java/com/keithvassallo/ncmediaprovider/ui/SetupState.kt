@@ -10,9 +10,10 @@ import com.keithvassallo.ncmediaprovider.BuildConfig
 import com.keithvassallo.ncmediaprovider.R
 import com.keithvassallo.ncmediaprovider.activation.CloudProviderActivation
 
-/** The setup guide on GitHub, linked from onboarding and the home screen. */
+/** The setup guide and the privacy policy on GitHub, linked from onboarding and the home screen. */
 object Links {
     const val GUIDE = "https://github.com/keithvassallomt/nc-media-provider/blob/main/docs/setup-guide.md"
+    const val PRIVACY = "https://github.com/keithvassallomt/nc-media-provider/blob/main/docs/privacy.md"
     const val GUIDE_SHIZUKU = "$GUIDE#shizuku"
     const val GUIDE_COMPUTER = "$GUIDE#computer"
 }
