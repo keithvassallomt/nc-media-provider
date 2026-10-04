@@ -10,7 +10,7 @@ import com.keithvassallo.ncmediaprovider.local.LocalPhoto
 import java.util.UUID
 
 /**
- * The library as the picker sees it (PLAN 2.1 and 2.3). Every change is committed in one
+ * The library as the picker sees it (#12 and #14). Every change is committed in one
  * transaction under the next generation; the picker reads rows by generation, so it can always ask
  * "what changed since N?".
  */
@@ -32,7 +32,7 @@ class LibraryStore(
 
     /**
      * Rows whose MIME type starts with [mimePrefix], newest taken first, after [after] (the last
-     * row of the previous page) for the photo keyboard (PLAN 4.8).
+     * row of the previous page) for the photo keyboard (#60).
      */
     fun newestPage(mimePrefix: String, after: MediaItem?, limit: Int): List<MediaItem> =
         dao.newestPage(mimePrefix, after?.dateTakenMillis ?: Long.MAX_VALUE, after?.id ?: "", limit)
@@ -44,7 +44,7 @@ class LibraryStore(
     fun monthCounts(): List<MonthCount> = dao.monthCounts()
 
     /**
-     * Stores what video headers said (PLAN 5.3 and 6.0), keyed by row ID: a null header couldn't be
+     * Stores what video headers said (#35 and #62), keyed by row ID: a null header couldn't be
      * read. Missing values are stored as [MediaItem.NOT_IN_HEADER], so they aren't read again while
      * the etag is unchanged; values already read are kept. Changed rows move to the next generation.
      */
@@ -60,19 +60,19 @@ class LibraryStore(
             item.takeUnless { it.sameContentAs(row) }
         }
         val changed = applyChanges(LibraryChanges(upserts, emptyList()), fullListing = false)
-        // A length now known can make a video a live photo's half by its name (PLAN 5.5).
+        // A length now known can make a video a live photo's half by its name (#37).
         if (changed) resolveAll()
         changed
     }
 
-    /** Memories' day counts as last read (PLAN 6.2). */
+    /** Memories' day counts as last read (#40). */
     fun memoriesDays(): Map<Int, Int> = dao.memoriesDays().associate { it.dayId to it.count }
 
     /** Days holding a file whose etag moved on since Memories was read. */
     fun staleMemoriesDays(): List<Int> = dao.staleMemoriesDays()
 
     /**
-     * Stores what Memories said of [readDays] (PLAN 6.2), [files] replacing what was stored for them,
+     * Stores what Memories said of [readDays] (#40), [files] replacing what was stored for them,
      * and resolves every row against the result. [days] is Memories' current day list: whatever was
      * stored for a day no longer in it is dropped. Days not read keep their files and counts, so a
      * read cut short carries on at the next sync. Returns true when any row changed.
@@ -89,7 +89,7 @@ class LibraryStore(
 
     /**
      * Forgets everything Memories said, when it's switched off, gone, or untested, so every row goes
-     * back to core and header values (PLAN 6.3). Returns true when any row changed.
+     * back to core and header values (#41). Returns true when any row changed.
      */
     fun clearMemories(): Boolean = database.runInTransaction<Boolean> {
         if (dao.memoriesFileCount() == 0 && dao.memoriesDays().isEmpty()) {
@@ -101,7 +101,7 @@ class LibraryStore(
         }
     }
 
-    // Albums (PLAN 7.1).
+    // Albums (#43).
 
     fun albums(): List<Album> = dao.albums()
 
@@ -132,7 +132,7 @@ class LibraryStore(
     }
 
     /**
-     * Brings the library's album rows in line with the albums (PLAN 7.1). The picker opens an
+     * Brings the library's album rows in line with the albums (#43). The picker opens an
      * album's photo only if the main sync returned it, so a file that only an album holds (in an
      * album someone shared, say) joins the library under its album path, once however many albums
      * hold it. A file the folders hold keeps its folder row. Returns true when anything changed.
@@ -161,7 +161,7 @@ class LibraryStore(
     }
 
     /**
-     * The photo keyboard's grid (PLAN 4.8): items of [mimePrefix] older than the keyset position
+     * The photo keyboard's grid (#60): items of [mimePrefix] older than the keyset position
      * ([date], [id]), newest first, or with [newer] the next newer ones, oldest first.
      */
     fun keyboardPage(source: KeyboardSource, mimePrefix: String, date: Long, id: String, newer: Boolean, limit: Int): List<MediaItem> = when (source) {
@@ -192,7 +192,7 @@ class LibraryStore(
         return Albums.contents(items, rows, state().generation)
     }
 
-    // People (PLAN 7.3).
+    // People (#45).
 
     fun persons(): List<Person> = dao.persons()
 
@@ -231,10 +231,10 @@ class LibraryStore(
         return Page(rows, rows.takeIf { it.size == pageSize }?.last()?.id)
     }
 
-    /** Rows whose values come from Memories, and live-photo videos it paired (PLAN 6.2). */
+    /** Rows whose values come from Memories, and live-photo videos it paired (#40). */
     fun memoriesStats(): Pair<Int, Int> = dao.memoriesMatchedCount() to dao.liveVideoCount()
 
-    /** Rows with a copy on the phone (PLAN 3.2). */
+    /** Rows with a copy on the phone (#23). */
     fun matchedCount(): Int = dao.matchedCount()
 
     fun media(id: String): MediaItem? = dao.media(id)
@@ -274,11 +274,11 @@ class LibraryStore(
 
     /**
      * Commits the direct listings of the folders whose etag changed, and drops what was in folders
-     * that are gone (PLAN 2.4). Only rows in those folders are compared, so a file missing from them
+     * that are gone (#15). Only rows in those folders are compared, so a file missing from them
      * is deleted unless it turned up in another of them, which makes it a move.
      *
      * A listed file whose row is in a folder that wasn't re-listed is still in that folder too, since
-     * that folder's etag didn't move: the file is reachable at two paths (PLAN 2.2). It keeps one row,
+     * that folder's etag didn't move: the file is reachable at two paths (#13). It keeps one row,
      * under the alphabetically first path as in [Listing], and the library is marked as having such
      * files.
      */
@@ -319,8 +319,8 @@ class LibraryStore(
     fun folderEtags(): Map<String, String> = dao.folders().associate { it.path to it.etag }
 
     /**
-     * The rows [LocalMatcher] could pair with any of [local], plus every row matched before (PLAN
-     * 3.2). Every rule needs the same size or the same name, so SQLite skips the rest: reading and
+     * The rows [LocalMatcher] could pair with any of [local], plus every row matched before (#23).
+     * Every rule needs the same size or the same name, so SQLite skips the rest: reading and
      * checking all 16,895 rows of Keith's library took 8 s on a dozing phone.
      */
     fun matchCandidates(local: Collection<LocalPhoto>): List<CloudPhoto> {
@@ -348,7 +348,7 @@ class LibraryStore(
     fun hiddenFolders(): Set<String> = state().hiddenFolders.split('\n').filterTo(HashSet(), String::isNotEmpty)
 
     /**
-     * Saves what the next change check compares against (PLAN 2.4). Only a full listing knows
+     * Saves what the next change check compares against (#15). Only a full listing knows
      * [respectsNoMedia], [duplicatePaths] and [listingVersion]; a change check leaves them as they are.
      */
     fun saveFolderState(
@@ -382,7 +382,7 @@ class LibraryStore(
     private fun memoriesFor(items: Collection<MediaItem>): Map<String, MemoriesFile> =
         items.map(MediaItem::id).chunked(SQL_BATCH).flatMap(dao::memoriesWithIds).associateBy(MemoriesFile::id)
 
-    /** [items] with [MediaItem.isLiveVideo] set for the live-photo halves among them (PLAN 5.5 and 6.2). */
+    /** [items] with [MediaItem.isLiveVideo] set for the live-photo halves among them (#37 and #40). */
     private fun markLiveVideos(items: Collection<MediaItem>, memories: Map<String, MemoriesFile>, stored: Collection<MediaItem>): List<MediaItem> {
         // Listings carry no video lengths; the stored row has one while the file is unchanged.
         val lengths = stored.associateBy(MediaItem::id)
@@ -407,7 +407,7 @@ class LibraryStore(
 
     /**
      * Writes [changes] under the next generation, if there are any. A live-photo video is written
-     * like any row but journalled as deleted, which is how the picker learns to drop it (PLAN 6.2).
+     * like any row but journalled as deleted, which is how the picker learns to drop it (#40).
      * Call inside a transaction.
      */
     private fun applyChanges(changes: LibraryChanges, fullListing: Boolean): Boolean {
@@ -465,7 +465,7 @@ class LibraryStore(
 
     /**
      * Drops journal rows older than [maxAgeMillis] and records the newest dropped generation as the
-     * floor. The base app kept only 8 generations and silently lost older deletions (PLAN 2.3).
+     * floor. The base app kept only 8 generations and silently lost older deletions (#14).
      */
     fun pruneDeletions(maxAgeMillis: Long) = database.runInTransaction(Runnable {
         val through = dao.newestDeletionBefore(nowMillis() - maxAgeMillis) ?: return@Runnable

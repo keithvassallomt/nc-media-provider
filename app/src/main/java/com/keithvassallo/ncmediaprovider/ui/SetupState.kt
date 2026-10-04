@@ -38,7 +38,7 @@ class UiPreferences(context: Context) {
     val googlePhotosInstalled: Boolean
         get() = runCatching { appContext.packageManager.getPackageInfo(CloudProviderActivation.GOOGLE_PHOTOS_PACKAGE, 0) }.isSuccess
 
-    /** Keep Google Photos on the allow-list: on unless turned off, and only when it is installed (PLAN 4.6). */
+    /** Keep Google Photos on the allow-list: on unless turned off, and only when it is installed (#31). */
     var keepGooglePhotos: Boolean
         get() = googlePhotosInstalled && preferences.getBoolean(KEY_KEEP_GOOGLE_PHOTOS, true)
         set(value) = preferences.edit { putBoolean(KEY_KEEP_GOOGLE_PHOTOS, value) }
@@ -54,7 +54,7 @@ class UiPreferences(context: Context) {
     }
 }
 
-/** Whether the photo keyboard (PLAN 4.8) is turned on in Android's keyboard settings. */
+/** Whether the photo keyboard (#60) is turned on in Android's keyboard settings. */
 fun isPhotoKeyboardEnabled(context: Context): Boolean =
     context.getSystemService(InputMethodManager::class.java).enabledInputMethodList.any { it.packageName == context.packageName }
 

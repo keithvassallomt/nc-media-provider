@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Chooses the library folders (PLAN 4.3). Tapping a folder opens it and its checkbox selects it; a
+ * Chooses the library folders (#28). Tapping a folder opens it and its checkbox selects it; a
  * folder inside a selected one is already covered. The first selection comes from Memories'
  * timeline folders and the usual photo folders; changing an existing selection rebuilds the library.
  */

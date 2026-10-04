@@ -5,7 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** People from Recognize, through Memories (PLAN 7.3). */
+/** People from Recognize, through Memories (#45). */
 class PeopleTest {
     @Test
     fun `face groups are read with their key and signature, and broken ones skipped`() {

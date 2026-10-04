@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Gives a test server an album that bob shares with alice (PLAN 7.1): one photo alice can also
+# Gives a test server an album that bob shares with alice (#43): one photo alice can also
 # reach through bob's shared folder, and one she can reach only through the album.
 #   tools/testserver/shared_album.sh <base URL> <password>
 # Called by up.sh; safe to run again on a running server. Photos takes the collaborators as JSON.

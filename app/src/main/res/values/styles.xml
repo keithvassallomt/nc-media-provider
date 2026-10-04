@@ -22,7 +22,7 @@
         <item name="android:textIsSelectable">true</item>
     </style>
 
-    <!-- The photo keyboard's album covers and faces (PLAN 4.8). -->
+    <!-- The photo keyboard's album covers and faces (#60). -->
     <style name="ShapeAppearance.NcMediaProvider.Cover" parent="">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">12dp</item>

@@ -9,7 +9,7 @@ import rikka.shizuku.Shizuku
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
-/** Runs [DeviceConfigUserService] through Shizuku, without root (PLAN 4.6). */
+/** Runs [DeviceConfigUserService] through Shizuku, without root (#31). */
 object ShizukuSession {
     val userServiceArgs: Shizuku.UserServiceArgs by lazy {
         Shizuku.UserServiceArgs(ComponentName(BuildConfig.APPLICATION_ID, DeviceConfigUserService::class.java.name))

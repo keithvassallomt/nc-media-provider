@@ -3,7 +3,7 @@ package com.keithvassallo.ncmediaprovider.provider
 import com.keithvassallo.ncmediaprovider.data.MediaItem
 
 /**
- * The picker's unwritten rules for a media row (PLAN 2.9, from the AOSP source). Rows that break
+ * The picker's unwritten rules for a media row (#20, from the AOSP source). Rows that break
  * them are silently dropped, and a malformed media_store_uri aborts the rest of the sync while its
  * position is still saved, so every row is checked here before it is sent.
  */

@@ -11,7 +11,7 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * Thumbnails made on the phone for files a server can't preview (PLAN 5.1, 5.3), on a real phone's
+ * Thumbnails made on the phone for files a server can't preview (#33, #35), on a real phone's
  * codecs. Needs the default test server (no HEIC or video previews) reachable from the phone:
  *   tools/testserver/up.sh 35 default && adb reverse tcp:8035 tcp:8035
  * then run with `am instrument` (see docs/device-notes.md), which leaves the app installed.

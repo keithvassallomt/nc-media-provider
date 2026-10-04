@@ -73,10 +73,10 @@ internal fun isCancellation(error: Throwable): Boolean =
 
 /**
  * Everything the picker reads goes through here. Picker calls are answered from the Room library
- * (PLAN 2.1) and never wait on the network; listing runs in [LibrarySyncWorker], because Android 17
- * cuts this app's network off once MediaProvider's call returns (PLAN 2.5a).
+ * (#12) and never wait on the network; listing runs in [LibrarySyncWorker], because Android 17
+ * cuts this app's network off once MediaProvider's call returns (#16).
  */
-/** The server refused the app password; the user has to sign in again (PLAN 4.4). */
+/** The server refused the app password; the user has to sign in again (#29). */
 class SignInRequiredException : Exception("The server refused this app's password")
 
 class LibraryRepository private constructor(context: Context) {
@@ -145,7 +145,7 @@ class LibraryRepository private constructor(context: Context) {
     }.getOrDefault(false)
 
     /**
-     * Records whether this app is selected (PLAN 4.6). Being deselected only counts as the user's
+     * Records whether this app is selected (#31). Being deselected only counts as the user's
      * choice if the app hasn't been updated since it was last seen selected: an update deselects it
      * too, and a sync that runs straight after one must not erase what the reselect job
      * needs to know. Writes at most every few minutes, since every picker query calls this.
@@ -161,13 +161,13 @@ class LibraryRepository private constructor(context: Context) {
         }
     }
 
-    /** The account for the preview player, unless signed out or refused (PLAN 5.4). */
+    /** The account for the preview player, unless signed out or refused (#36). */
     fun accountForPlayback(): NextcloudAccount? = if (credentials.signInRequired) null else credentials.load()
 
     fun callFactory(account: NextcloudAccount): okhttp3.Call.Factory = client.callFactory(account)
 
     /**
-     * Where the preview plays [mediaId] from (PLAN 5.4): the phone's own copy when there is one and
+     * Where the preview plays [mediaId] from (#36): the phone's own copy when there is one and
      * the app may read it, otherwise the file on the server. Null for unknown media.
      */
     fun playbackUri(mediaId: String): Uri? {
@@ -177,7 +177,7 @@ class LibraryRepository private constructor(context: Context) {
         return client.fileUrl(account, item.href)?.let { Uri.parse(it.toString()) }
     }
 
-    // The photo keyboard (PLAN 4.8). Call these off the main thread.
+    // The photo keyboard (#60). Call these off the main thread.
 
     /**
      * A page of [source]'s photos older than the keyset position ([date], [id]), newest first; with
@@ -195,10 +195,10 @@ class LibraryRepository private constructor(context: Context) {
 
     fun keyboardAlbums(): List<PickerAlbum> = if (hasAccount) store.pickerAlbums() else emptyList()
 
-    /** People with photos in the library, named first, as the newer picker shows them (PLAN 7.3). */
+    /** People with photos in the library, named first, as the newer picker shows them (#45). */
     fun keyboardPeople(): List<PickerPerson> = if (hasAccount) store.pickerPeople() else emptyList()
 
-    // Thumbnail pre-cache (PLAN 5.6).
+    // Thumbnail pre-cache (#59).
 
     val precacheEnabled: Boolean get() = settings.precacheEnabled
 
@@ -216,7 +216,7 @@ class LibraryRepository private constructor(context: Context) {
     /**
      * Turns the pre-cache on or off, or changes its limit: [months] back (0 for everything), or
      * [bytes] when chosen by size. On, a run starts, which also trims what now falls outside; off,
-     * its thumbnails go too, giving the space back (PLAN 8.2).
+     * its thumbnails go too, giving the space back (#48).
      */
     fun setPrecache(enabled: Boolean, months: Int, bytes: Long = 0L) {
         val wasEnabled = settings.precacheEnabled
@@ -235,7 +235,7 @@ class LibraryRepository private constructor(context: Context) {
         }
     }
 
-    // Storage (PLAN 8.2).
+    // Storage (#48).
 
     val originalsCacheBytes: Long get() = settings.originalsCacheBytes
 
@@ -254,7 +254,7 @@ class LibraryRepository private constructor(context: Context) {
         diskCache.clear(MediaDiskCache.Area.ORIGINAL)
     }
 
-    /** What the Storage screen shows of the pre-cache's limit (PLAN 5.6). Off the main thread. */
+    /** What the Storage screen shows of the pre-cache's limit (#59). Off the main thread. */
     fun precachePlan(): PrecachePlan {
         val sizePx = settings.precacheSizePx
         val perItem = PreviewSizes.typicalBytes(sizePx)
@@ -292,7 +292,7 @@ class LibraryRepository private constructor(context: Context) {
     }
 
     /**
-     * Keeps the pre-cache to its limit, newest first (PLAN 5.6): fetches the grid thumbnails inside
+     * Keeps the pre-cache to its limit, newest first (#59): fetches the grid thumbnails inside
      * the date range and the space budget that aren't cached yet, four at a time, at the size this
      * phone's picker grid asks for, and deletes pre-cached ones outside it, so a smaller limit gives
      * the space back. Thumbnails the server can't make are marked so later runs skip them. Stops
@@ -428,7 +428,7 @@ class LibraryRepository private constructor(context: Context) {
     }
 
     /**
-     * Makes a thumbnail on the phone for a file the server can't preview (PLAN 5.1, 5.3): a video
+     * Makes a thumbnail on the phone for a file the server can't preview (#33, #35): a video
      * frame read through Range requests, or with [imagesToo] an image decoded from the downloaded
      * original (2 to 4 MB for a HEIC, kept in the originals cache). Decoding failures leave a blank
      * tile rather than counting against the server.
@@ -469,7 +469,7 @@ class LibraryRepository private constructor(context: Context) {
     }
 
     /**
-     * The pre-cache follows the size this phone's picker grid asks for (PLAN 5.6): 256 px on Keith's
+     * The pre-cache follows the size this phone's picker grid asks for (#59): 256 px on Keith's
      * fold, 512 on the stock Pixel. The smaller thumbnails it held serve no tile any more, so they
      * go, and a run fetches the new size.
      */
@@ -485,7 +485,7 @@ class LibraryRepository private constructor(context: Context) {
         }.start()
     }
 
-    // The Memories layer (PLAN 6.1 to 6.3).
+    // The Memories layer (#39 to #41).
 
     val useMemories: Boolean get() = settings.useMemories
 
@@ -506,7 +506,7 @@ class LibraryRepository private constructor(context: Context) {
         val supported: Boolean get() = !version.isNullOrEmpty() && MemoriesApi.isSupported(version)
     }
 
-    /** What the diagnostics show (PLAN 4.6). Call off the main thread. */
+    /** What the diagnostics show (#31). Call off the main thread. */
     fun diagnostics(): Diagnostics {
         val state = if (hasAccount) store.state() else null
         return Diagnostics(
@@ -528,7 +528,7 @@ class LibraryRepository private constructor(context: Context) {
         val cache: CacheStats,
     )
 
-    // Signing in (PLAN 4.1) and choosing folders (PLAN 4.3). Network calls: run them off the main thread.
+    // Signing in (#26) and choosing folders (#28). Network calls: run them off the main thread.
 
     fun serverStatus(baseUrl: String): ServerStatus = client.serverStatus(baseUrl)
 
@@ -555,13 +555,13 @@ class LibraryRepository private constructor(context: Context) {
         return account
     }
 
-    /** The folders directly inside [folder], without end-to-end encrypted ones (PLAN 4.3). */
+    /** The folders directly inside [folder], without end-to-end encrypted ones (#28). */
     fun childFolders(folder: String): List<DavEntry> =
         client.listChildFolders(requireAccount(), folder).filterNot(DavEntry::isEncrypted).sortedBy { it.name.lowercase() }
 
     /**
      * A first selection for the folder picker: Memories' timeline folders when it is installed,
-     * plus `/Photos` and `/InstantUpload` where they exist (PLAN 4.3).
+     * plus `/Photos` and `/InstantUpload` where they exist (#28).
      */
     fun suggestedFolders(): List<String> {
         val account = requireAccount()
@@ -570,7 +570,7 @@ class LibraryRepository private constructor(context: Context) {
         return LibrarySettings.normalizeFolders(memories + common).filter { it != "/" }
     }
 
-    /** Saves the folder choice; a different set starts a new library at the next sync (PLAN 2.7). */
+    /** Saves the folder choice; a different set starts a new library at the next sync (#18). */
     fun chooseFolders(folders: List<String>) {
         settings.folders = folders
         schedulePeriodicSync()
@@ -578,7 +578,7 @@ class LibraryRepository private constructor(context: Context) {
     }
 
     /**
-     * Signs out (PLAN 4.5): deletes the app password on the server, then everything on the phone.
+     * Signs out (#30): deletes the app password on the server, then everything on the phone.
      * Returns false when the server couldn't be told; the phone is cleared anyway. Call off the
      * main thread.
      */
@@ -593,7 +593,7 @@ class LibraryRepository private constructor(context: Context) {
     }
 
     /**
-     * Called on any 401 (PLAN 4.4). Stops all requests at once, since Nextcloud counts each refused
+     * Called on any 401 (#29). Stops all requests at once, since Nextcloud counts each refused
      * one towards its brute-force throttling, then checks for a remote wipe in a job (the network
      * may be off on this thread) and asks the user to sign in again.
      */
@@ -619,7 +619,7 @@ class LibraryRepository private constructor(context: Context) {
 
     /**
      * Asks the server whether the user requested a wipe of this device, using the refused app
-     * password as the token, and if so clears everything and confirms (PLAN 4.4).
+     * password as the token, and if so clears everything and confirms (#29).
      */
     @Throws(IOException::class)
     fun checkRemoteWipe() {
@@ -655,7 +655,7 @@ class LibraryRepository private constructor(context: Context) {
 
     /**
      * Changes when the server, user, folder set or database changes, or when [LibraryStore.bumpEpoch]
-     * forces a rebuild (PLAN 2.7). Anything else keeps it, so MediaProvider can sync incrementally.
+     * forces a rebuild (#18). Anything else keeps it, so MediaProvider can sync incrementally.
      */
     fun collectionId(): String {
         val source = sourceKey() ?: return "nc-unconfigured-v1"
@@ -691,7 +691,7 @@ class LibraryRepository private constructor(context: Context) {
     }
 
     /**
-     * The "Refresh now" button (PLAN 2.6): a full listing, queued after any sync already running. The
+     * The "Refresh now" button (#17): a full listing, queued after any sync already running. The
      * picker already runs a change check whenever it opens, so what a person pressing the button
      * needs is what change checks miss, such as files on external storage.
      */
@@ -707,10 +707,10 @@ class LibraryRepository private constructor(context: Context) {
         WorkManager.getInstance(appContext).enqueueUniqueWork(SYNC_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
     }
 
-    /** Every queued, running and finished sync job, for showing progress (PLAN 2.5). */
+    /** Every queued, running and finished sync job, for showing progress (#16). */
     fun syncJobs(): Flow<List<WorkInfo>> = WorkManager.getInstance(appContext).getWorkInfosByTagFlow(SYNC_TAG)
 
-    /** A sync every few hours, whatever the picker does (PLAN 2.6). */
+    /** A sync every few hours, whatever the picker does (#17). */
     fun schedulePeriodicSync() {
         if (!isReady) return
         val request = PeriodicWorkRequestBuilder<LibrarySyncWorker>(PERIODIC_SYNC_HOURS, TimeUnit.HOURS)
@@ -726,7 +726,7 @@ class LibraryRepository private constructor(context: Context) {
 
     /**
      * Brings the library up to date and returns true when anything changed. Runs on a WorkManager
-     * thread, where the network is allowed (PLAN 2.5a). Usually a change check (PLAN 2.4); a full
+     * thread, where the network is allowed (#16). Usually a change check (#15); a full
      * listing when [full] asks for one, on the first import, once a week, whenever there are no
      * folder etags to compare, and when the `.nomedia` setting changed.
      */
@@ -745,7 +745,7 @@ class LibraryRepository private constructor(context: Context) {
                     onUnauthorized()
                     throw SignInRequiredException()
                 }
-                // A 503 is often maintenance mode, which status.php confirms (PLAN 4.4).
+                // A 503 is often maintenance mode, which status.php confirms (#29).
                 error.statusCode == 503 && runCatching { client.serverStatus(requireAccount().baseUrl).maintenance }.getOrDefault(false) ->
                     settings.lastSyncError = "The server is in maintenance mode"
                 else -> settings.lastSyncError = "Server error ${error.statusCode}"
@@ -795,7 +795,7 @@ class LibraryRepository private constructor(context: Context) {
         appContext.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered ?: false
 
     /**
-     * Reads the duration and recording time of videos whose header hasn't been read yet (PLAN 5.3
+     * Reads the duration and recording time of videos whose header hasn't been read yet (#35
      * and 6.0), newest first and a batch per sync. Each video costs one or two 64 KiB Range requests,
      * read four at a time: a request costs Keith's server about 180 ms, and four small requests one
      * after another took 0.7 s a video. Stops as soon as the job is stopped: WorkManager can run a
@@ -851,7 +851,7 @@ class LibraryRepository private constructor(context: Context) {
     }
 
     /**
-     * Brings the Nextcloud Photos albums up to date (PLAN 7.1): the album list at every sync, and an
+     * Brings the Nextcloud Photos albums up to date (#43): the album list at every sync, and an
      * album's files when Photos' count, cover or date range for it changed, or with a full listing.
      * Albums come on top of the library, so an error keeps what was stored (a refused password
      * still stops the sync), and a server without the Photos app has none. Returns true when
@@ -892,7 +892,7 @@ class LibraryRepository private constructor(context: Context) {
     }
 
     /**
-     * Reads the people Recognize found, through Memories (PLAN 7.3): the face groups at every sync,
+     * Reads the people Recognize found, through Memories (#45): the face groups at every sync,
      * and a person's photos when Memories' count or cover for them changed, or with a full listing.
      * People come on top of the library, like albums: an error keeps what was stored, and a server
      * without Memories and Recognize, or Memories switched off here, has none. Listing stops after
@@ -957,7 +957,7 @@ class LibraryRepository private constructor(context: Context) {
     }
 
     /**
-     * Takes dates, sizes and live-photo pairs from Memories (PLAN 6.1 to 6.3). WebDAV still decides
+     * Takes dates, sizes and live-photo pairs from Memories (#39 to #41). WebDAV still decides
      * what is in the library; Memories only overrides values of files it indexed, matched by file ID
      * and etag. Its API is internal and undocumented, so only tested versions are used, and nothing
      * here can fail a sync: a network or server error keeps the values last read, while Memories
@@ -1043,7 +1043,7 @@ class LibraryRepository private constructor(context: Context) {
     }
 
     /**
-     * Brings every row's phone copy up to date (PLAN 3.2) and returns how many rows changed. Without
+     * Brings every row's phone copy up to date (#23) and returns how many rows changed. Without
      * permission to read the phone's media, matches stay as they are: there is nothing to check
      * them against.
      */
@@ -1065,7 +1065,7 @@ class LibraryRepository private constructor(context: Context) {
     /**
      * Lists everything and commits it as complete. The first import commits every [IMPORT_BATCH]
      * files and tells the picker each time, so photos appear long before a large library is fully
-     * listed (PLAN 2.5). Folder etags are read before the listing, so anything that changes while it
+     * listed (#16). Folder etags are read before the listing, so anything that changes while it
      * runs still shows up at the next check.
      */
     private fun fullSync(account: NextcloudAccount, folders: List<String>, onProgress: (SyncProgress) -> Unit): Boolean {
@@ -1110,7 +1110,7 @@ class LibraryRepository private constructor(context: Context) {
     }
 
     /**
-     * Checks for changes without listing everything (PLAN 2.4). Nextcloud changes a folder's etag
+     * Checks for changes without listing everything (#15). Nextcloud changes a folder's etag
      * whenever anything below it changes, so unchanged etags on the library folders mean nothing to
      * do; otherwise one request returns every folder's etag, and only the folders whose etag moved
      * are re-listed, one level each. Favourites are checked apart, since favouriting changes no etag.
@@ -1179,7 +1179,7 @@ class LibraryRepository private constructor(context: Context) {
 
     /**
      * Rows changed after [sinceGeneration]. A picker so far behind that pruned deletions can't be
-     * reported gets an empty page and a new collection ID, which makes it rebuild (PLAN 2.3).
+     * reported gets an empty page and a new collection ID, which makes it rebuild (#14).
      */
     fun queryMedia(pageSize: Int, pageToken: String?, sinceGeneration: Long?): Page<MediaItem> {
         if (sinceGeneration != null && forcedRebuild(sinceGeneration)) return Page(emptyList(), null)
@@ -1187,8 +1187,8 @@ class LibraryRepository private constructor(context: Context) {
     }
 
     /**
-     * The albums the picker can show (PLAN 7.1), from the database. The older picker has no People
-     * section, so there named people are albums too (PLAN 7.3).
+     * The albums the picker can show (#43), from the database. The older picker has no People
+     * section, so there named people are albums too (#45).
      */
     fun queryAlbums(): List<PickerAlbum> {
         if (!hasAccount) return emptyList()
@@ -1205,7 +1205,7 @@ class LibraryRepository private constructor(context: Context) {
         else -> store.albumPage(albumId, pageToken, pageSize)
     }
 
-    // People for the newer picker's categories (PLAN 7.3).
+    // People for the newer picker's categories (#45).
 
     val peopleAvailable: Boolean get() = hasAccount && settings.peopleAvailable
 
@@ -1254,7 +1254,7 @@ class LibraryRepository private constructor(context: Context) {
         diskCache.peek(MediaDiskCache.Area.ORIGINAL, key)?.let {
             return ParcelFileDescriptor.open(it, ParcelFileDescriptor.MODE_READ_ONLY)
         }
-        // The phone's own copy needs no download (PLAN 3.3).
+        // The phone's own copy needs no download (#24).
         item.mediaStoreUri?.let { uri ->
             runCatching { appContext.contentResolver.openFileDescriptor(Uri.parse(uri), "r", cancellationSignal) }
                 .getOrNull()
@@ -1262,7 +1262,7 @@ class LibraryRepository private constructor(context: Context) {
         }
         if (item.isVideo) return openStreamed(item)
         val account = requireAuthorizedAccount()
-        // Before queueing for a download slot: offline, the answer is known at once (PLAN 8.1).
+        // Before queueing for a download slot: offline, the answer is known at once (#47).
         reachability.check()
         val file = withSlot(originalSlots, ORIGINAL_SLOT_WAIT_MS, "original") {
             diskCache.getOrDownload(MediaDiskCache.Area.ORIGINAL, key, cancellationSignal) { target ->
@@ -1273,7 +1273,7 @@ class LibraryRepository private constructor(context: Context) {
     }
 
     /**
-     * A file handle whose reads become HTTP Range requests (PLAN 5.2), for videos: it is returned
+     * A file handle whose reads become HTTP Range requests (#34), for videos: it is returned
      * at once, where downloading a large video first would outlast the picker's time limit. Each
      * stream gets its own thread for the reads and one for reading ahead.
      */
@@ -1289,7 +1289,7 @@ class LibraryRepository private constructor(context: Context) {
         val seconds = { (SystemClock.elapsedRealtime() - opened) / 1_000.0 }
         // The first chunk is read before the stream is handed over, so an unreachable server or a
         // changed file fails the open, where the picker can say so, instead of the app's first
-        // read (PLAN 8.1). The chunk stays in the reader for that read.
+        // read (#47). The chunk stays in the reader for that read.
         try {
             reachability.request { reader.read(0L, ByteArray(1), 0, 1) }
         } catch (error: Exception) {
@@ -1335,8 +1335,8 @@ class LibraryRepository private constructor(context: Context) {
 
     /**
      * Thumbnails come from the server's preview endpoint. A full-size preview gets the original
-     * file, as PLAN 1.4 specifies; whether the picker then rotates it twice is checked on a device
-     * in 5.1. Only the picker's requests ([fromPicker]) teach the pre-cache its size (PLAN 5.6).
+     * file, as issue #9 specifies; whether the picker then rotates it twice is checked on a device
+     * in 5.1. Only the picker's requests ([fromPicker]) teach the pre-cache its size (#59).
      */
     @Throws(FileNotFoundException::class)
     fun openPreview(
@@ -1393,7 +1393,7 @@ class LibraryRepository private constructor(context: Context) {
         return file.asAssetFileDescriptor()
     }
 
-    /** A person's face as Memories crops it, for the picker's covers (PLAN 7.3); the same at every size. */
+    /** A person's face as Memories crops it, for the picker's covers (#45); the same at every size. */
     private fun openFace(faceId: String, cancellationSignal: CancellationSignal?): AssetFileDescriptor {
         val person = store.person(People.personOfFace(faceId)) ?: throw FileNotFoundException("Unknown face $faceId")
         val key = "face:${person.id}:${person.signature}"
@@ -1408,7 +1408,7 @@ class LibraryRepository private constructor(context: Context) {
         return file.asAssetFileDescriptor()
     }
 
-    /** A library row, or a file only an album holds (PLAN 7.1). */
+    /** A library row, or a file only an album holds (#43). */
     private fun findItem(mediaId: String): MediaItem =
         store.media(mediaId) ?: store.albumOnlyItem(mediaId) ?: throw FileNotFoundException("Unknown media $mediaId")
 
@@ -1449,7 +1449,7 @@ class LibraryRepository private constructor(context: Context) {
 
     /**
      * Retries a stream's request after a network error, briefly: the network can be cut for a
-     * moment before the streaming service has started (PLAN 5.2). HTTP errors aren't retried.
+     * moment before the streaming service has started (#34). HTTP errors aren't retried.
      */
     private fun <T> withNetworkRetries(block: () -> T): T {
         var attempt = 0
@@ -1463,7 +1463,7 @@ class LibraryRepository private constructor(context: Context) {
         }
     }
 
-    /** The account, unless the server refused its password: then no request is even tried (PLAN 4.4). */
+    /** The account, unless the server refused its password: then no request is even tried (#29). */
     private fun requireAuthorizedAccount(): NextcloudAccount {
         if (credentials.signInRequired) throw FileNotFoundException("Sign in to Nextcloud again")
         return requireAccount()
@@ -1516,7 +1516,7 @@ class LibraryRepository private constructor(context: Context) {
         private const val WIPE_CHECK_WORK = "remote-wipe-check"
         private const val SYNC_BACKOFF_MINUTES = 1L
 
-        /** Where photos usually live, for the folder picker's first selection (PLAN 4.3). */
+        /** Where photos usually live, for the folder picker's first selection (#28). */
         private val COMMON_PHOTO_FOLDERS = listOf("/Photos", "/InstantUpload")
         private const val SYNC_TAG = "library-sync-job"
         private const val PERIODIC_SYNC_WORK = "library-sync-periodic"
@@ -1531,19 +1531,19 @@ class LibraryRepository private constructor(context: Context) {
         private const val HEADER_PARALLEL = 4
         private const val HEADER_WINDOW_BYTES = 64 * 1024
 
-        /** Memories reading per sync; the rest waits for the next one (PLAN 6.2). */
+        /** Memories reading per sync; the rest waits for the next one (#40). */
         private const val MEMORIES_TIME_BUDGET_MS = 2L * 60L * 1_000L
 
-        /** Listing people's photos per sync, two or more requests each (PLAN 7.3). */
+        /** Listing people's photos per sync, two or more requests each (#45). */
         private const val PEOPLE_TIME_BUDGET_MS = 2L * 60L * 1_000L
 
         private const val LOCAL_MATCH_DELAY_MS = 5_000L
         private const val SELECTED_SEEN_RESOLUTION_MS = 5L * 60L * 1_000L
 
-        /** Photos and videos (PLAN 5.3). Hidden files, such as a live photo's video half, are dropped. */
+        /** Photos and videos (#35). Hidden files, such as a live photo's video half, are dropped. */
         private val MEDIA_PREFIXES = listOf("image/", "video/")
 
-        /** The photo keyboard sends images only: Messenger takes no video from keyboards (PLAN 4.8). */
+        /** The photo keyboard sends images only: Messenger takes no video from keyboards (#60). */
         private const val IMAGE_PREFIX = "image/"
 
         /**

@@ -11,7 +11,7 @@ import java.util.concurrent.Executors
 typealias Row = Map<String, Any?>
 
 /**
- * A library as a user's phone holds it, for the migration tests (PLAN 9.6). Each row has a value for
+ * A library as a user's phone holds it, for the migration tests (#55). Each row has a value for
  * every column its table has had at any version, so it can be stored at any version: [insertRows]
  * keeps the columns that version has. A new table or column needs a value here.
  */

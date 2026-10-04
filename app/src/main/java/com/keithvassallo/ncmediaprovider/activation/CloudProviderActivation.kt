@@ -6,7 +6,7 @@ data class DeviceConfigSetting(
     val value: String,
 )
 
-/** What MediaProvider reports about the cloud picker in `dumpsys` (PLAN 4.6). */
+/** What MediaProvider reports about the cloud picker in `dumpsys` (#31). */
 data class PickerState(
     val allowedPackages: List<String>,
     val cloudMediaEnabled: Boolean,

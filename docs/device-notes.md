@@ -39,7 +39,7 @@ Cloud media is off and the allow-list is empty: Google Photos is not a cloud sou
 
 **Restore:** every flag was unset, so `device_config clear_override <namespace> <flag>` for both flags in both namespaces returns the phone to this state.
 
-**Tooling:** the `media_provider` shell tool referenced in PLAN.md is not usable here (not a `cmd` service, and the `/system/bin` entry doesn't resolve). Use the `dumpsys` command above to read cloud picker state.
+**Tooling:** the `media_provider` shell tool the project plan referred to is not usable here (not a `cmd` service, and the `/system/bin` entry doesn't resolve). Use the `dumpsys` command above to read cloud picker state.
 
 **Picker:** this build uses the older picker inside MediaProvider (`com.android.providers.media.photopicker.PhotoPickerActivity`). The newer `com.android.photopicker` app is installed but its activities are disabled.
 
@@ -174,7 +174,7 @@ Reinstalling the debug APK (`adb install -r`) made MediaProvider log `Cloud prov
 
 - 14,073 images listed in about 7 seconds once the network was allowed; MediaProvider then pulled all rows in 500-row pages in under 5 seconds.
 - Because the first sync started while generation 0 was advertised, MediaProvider immediately asked for changes since 0 and received the whole library again. Per-row generations (Phase 2) avoid this.
-- `Listing stopped early: a full page shared one modification time`: more than 1,000 files on this server share one modification second, so date-window paging alone can't list them all. The listing is incomplete until PLAN 2.2 handles this.
+- `Listing stopped early: a full page shared one modification time`: more than 1,000 files on this server share one modification second, so date-window paging alone can't list them all. The listing is incomplete until [#13](https://github.com/keithvassallomt/nc-media-provider/issues/13) handles this.
 
 ### Thumbnails and originals
 
@@ -203,7 +203,7 @@ Per-request timing (debug build, 1,000-file pages of about 690 KiB):
 | Background job, before the date fix | 230 to 300 ms | 3.5 to 6.7 s |
 
 - Parsing `getlastmodified` through `ZonedDateTime` cost several ms per file on Android (the JVM caches what Android looks up each time); parsing Nextcloud's fixed format by hand fixed that.
-- A background job then still parses about 10 times slower than the foreground, with no growth in work: Android runs background jobs on restricted CPU. A full background listing of this library takes about 1.5 minutes in a debug build. Fine for a first import or a weekly check, too slow for checking changes each time the picker opens: that is what the folder-etag walk (PLAN 2.4) is for.
+- A background job then still parses about 10 times slower than the foreground, with no growth in work: Android runs background jobs on restricted CPU. A full background listing of this library takes about 1.5 minutes in a debug build. Fine for a first import or a weekly check, too slow for checking changes each time the picker opens: that is what the folder-etag walk ([#15](https://github.com/keithvassallomt/nc-media-provider/issues/15)) is for.
 - The commit that compares 16,896 unchanged rows took 11 to 26 s in the background, also CPU-bound.
 
 ### Exit test: changes arrive incrementally
@@ -276,7 +276,7 @@ The picker downloads the originals of the selected items before returning (`Sele
 
 - **Sign-out** revoked the app password and cleared the phone; the picker showed only the phone's photos. Signed out, the provider first still reported an account name ("Not set up"), so the picker announced "photos from Not set up"; it now reports no account, which is the picker's state for "set up an account".
 - **Revoking the app in Nextcloud's "Devices & sessions"**: the next sync's first request was refused (one 401, after about 5 s), the app stopped all requests and cancelled its syncs, the remote-wipe check ran in its own job and found no wipe, and the "Sign in to Nextcloud again" notification appeared. Signing in again as the same user resumed with a change check, without reimporting.
-- **Vanadium wedged twice**, once after each sign-in: neither the sign-in tab nor the full browser would load the server (blank page) while a laptop could, and only a force stop of Vanadium fixed it. The app made no failed requests that could have triggered Nextcloud's throttling. Both times the user left the sign-in tab by going home rather than closing it. Worth checking with other browsers (PLAN 8).
+- **Vanadium wedged twice**, once after each sign-in: neither the sign-in tab nor the full browser would load the server (blank page) while a laptop could, and only a force stop of Vanadium fixed it. The app made no failed requests that could have triggered Nextcloud's throttling. Both times the user left the sign-in tab by going home rather than closing it. Worth checking with other browsers ([#61](https://github.com/keithvassallomt/nc-media-provider/issues/61)).
 
 ## Phase 5 checks (GrapheneOS, 2026-10-02)
 
@@ -351,13 +351,13 @@ Keith opened the picker's Albums tab: `onQueryAlbums` returned the one album, "L
 
 ### People as albums in the older picker
 
-With People built (PLAN 7.3), the sync read 152 face groups from Memories, 133 of them named. The first run listed 151 groups' photos in 134 s and stopped at its 2-minute budget; the next sync listed the last one in 2 s. The older picker has no categories, so `onQueryAlbums` returned 134 albums: "Landscapes" and the 133 named people, with Memories' face crops as covers. A person with 271 photos synced in one page, one with 522 in two (500 and 22), and the photo Keith picked from a person opened (2.4 MB in 0.4 s).
+With People built ([#45](https://github.com/keithvassallomt/nc-media-provider/issues/45)), the sync read 152 face groups from Memories, 133 of them named. The first run listed 151 groups' photos in 134 s and stopped at its 2-minute budget; the next sync listed the last one in 2 s. The older picker has no categories, so `onQueryAlbums` returned 134 albums: "Landscapes" and the 133 named people, with Memories' face crops as covers. A person with 271 photos synced in one page, one with 522 in two (500 and 22), and the photo Keith picked from a person opened (2.4 MB in 0.4 s).
 
 The picker first logged that 271-photo person with an item count of 2,102,161,456. MediaProvider wraps a provider's album cursor (`AlbumsCursorWrapper`) to map its columns to `AlbumColumns.ALL_PROJECTION`, but maps by name only in `getString` and `getType`; `getLong` and `getInt` read by position, so with our columns in another order the count came from the date column. The picker hides album counts, so nothing showed. The app now sends album columns in AOSP's order (f8e7516), and the count reads 271.
 
 ### The newer picker can't be switched on over adb
 
-To try People (PLAN 7.3) on this phone, `adb shell device_config override mediaprovider enable_modern_picker true` was refused: `SecurityException: Permission denial for flag 'mediaprovider/enable_modern_picker'; allowlist permission granted, but must add flag to the allowlist`. The shell can write only allow-listed device_config flags; `allowed_cloud_providers` and `cloud_media_feature_enabled` are on that list, this one isn't. Nothing changed (the flag still reads `null`, and `PICK_IMAGES` still resolves to MediaProvider's `PhotoPickerActivity`). Categories also check this flag inside the picker, so enabling `com.android.photopicker`'s activities with `pm` wouldn't bring them.
+To try People ([#45](https://github.com/keithvassallomt/nc-media-provider/issues/45)) on this phone, `adb shell device_config override mediaprovider enable_modern_picker true` was refused: `SecurityException: Permission denial for flag 'mediaprovider/enable_modern_picker'; allowlist permission granted, but must add flag to the allowlist`. The shell can write only allow-listed device_config flags; `allowed_cloud_providers` and `cloud_media_feature_enabled` are on that list, this one isn't. Nothing changed (the flag still reads `null`, and `PICK_IMAGES` still resolves to MediaProvider's `PhotoPickerActivity`). Categories also check this flag inside the picker, so enabling `com.android.photopicker`'s activities with `pm` wouldn't bring them.
 
 ## Phase 8 checks (GrapheneOS, 2026-10-03)
 

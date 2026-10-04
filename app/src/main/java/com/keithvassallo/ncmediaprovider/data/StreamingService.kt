@@ -101,7 +101,7 @@ class KeepAlive(private val service: Class<out KeepAliveService>, private val li
     }
 }
 
-/** Keeps the network open while another app reads a streamed video (PLAN 5.2). */
+/** Keeps the network open while another app reads a streamed video (#34). */
 class StreamingService : KeepAliveService() {
     override val notificationId = 10
     override val serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC

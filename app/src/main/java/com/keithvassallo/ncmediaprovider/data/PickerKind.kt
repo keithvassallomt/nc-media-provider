@@ -7,7 +7,7 @@ import android.provider.MediaStore
 /**
  * Which photo picker this phone uses. The newer one (a separate app, stock Pixels) has a People
  * section built from categories; the older one inside MediaProvider (GrapheneOS) shows only albums,
- * so there people become albums (PLAN 7.3). Both call onQueryAlbums, which is why it matters.
+ * so there people become albums (#45). Both call onQueryAlbums, which is why it matters.
  */
 internal object PickerKind {
     private val NEWER_PICKERS = setOf("com.google.android.photopicker", "com.android.photopicker")

@@ -11,7 +11,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.keithvassallo.ncmediaprovider.R
 
-/** The few things worth interrupting someone for (PLAN 4.4 and 4.6). */
+/** The few things worth interrupting someone for (#29 and #31). */
 object Notifications {
     private const val CHANNEL = "account"
     private const val SIGN_IN = 1

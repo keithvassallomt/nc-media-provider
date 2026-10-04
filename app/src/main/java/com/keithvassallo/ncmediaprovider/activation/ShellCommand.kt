@@ -4,7 +4,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
 /**
- * Runs a command in the activation service (PLAN 4.6). The output is read while the command runs:
+ * Runs a command in the activation service (#31). The output is read while the command runs:
  * reading it only after it exited deadlocked on MediaProvider's `dumpsys`, 108 KB on a stock Pixel,
  * which filled the pipe and blocked until the timeout killed it (stock Pixel test, 2026-10-03).
  */

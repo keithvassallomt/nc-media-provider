@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Downloaded previews and originals, each area pruned oldest-used first. [limit] gives an area's
- * size limit; the originals' is a setting (PLAN 8.2).
+ * size limit; the originals' is a setting (#48).
  */
 class MediaDiskCache(context: Context, private val limit: (Area) -> Long = Area::maximumBytes) {
     private val root = File(context.applicationContext.cacheDir, "media_cache")
@@ -28,7 +28,7 @@ class MediaDiskCache(context: Context, private val limit: (Area) -> Long = Area:
     /** Whether [key] is cached, without counting it as used. */
     fun contains(area: Area, key: String): Boolean = File(File(root, area.directory), key.sha256()).isUsable()
 
-    /** Remembers that the server has nothing for [key], so the pre-cache doesn't ask again (PLAN 5.6). */
+    /** Remembers that the server has nothing for [key], so the pre-cache doesn't ask again (#59). */
     fun markMissing(area: Area, key: String) {
         File(File(root, area.directory).apply { mkdirs() }, key.sha256() + MISSING_SUFFIX).writeBytes(ByteArray(1))
     }
@@ -38,7 +38,7 @@ class MediaDiskCache(context: Context, private val limit: (Area) -> Long = Area:
     /** The cached file's size, or 0 when [key] isn't cached. */
     fun sizeOf(area: Area, key: String): Long = File(File(root, area.directory), key.sha256()).takeIf { it.isFile }?.length() ?: 0L
 
-    /** Deletes [key] from [area], as the pre-cache does for thumbnails outside its limit (PLAN 5.6). */
+    /** Deletes [key] from [area], as the pre-cache does for thumbnails outside its limit (#59). */
     fun remove(area: Area, key: String) {
         File(File(root, area.directory), key.sha256()).delete()
     }
@@ -84,7 +84,7 @@ class MediaDiskCache(context: Context, private val limit: (Area) -> Long = Area:
         bytesSincePrune.values.forEach { it.set(0L) }
     }
 
-    /** Empties one area, for "Clear downloads" and switching the pre-cache off (PLAN 8.2). */
+    /** Empties one area, for "Clear downloads" and switching the pre-cache off (#48). */
     fun clear(area: Area) {
         File(root, area.directory).deleteRecursively()
         bytesSincePrune[area]?.set(0L)
@@ -159,7 +159,7 @@ class MediaDiskCache(context: Context, private val limit: (Area) -> Long = Area:
         ORIGINAL("originals", 2L * 1024L * 1024L * 1024L),
 
         /**
-         * Thumbnails fetched ahead of time (PLAN 5.6), apart from the on-demand ones. Its real limit is
+         * Thumbnails fetched ahead of time (#59), apart from the on-demand ones. Its real limit is
          * the user's choice, at most half the free space; the run keeps it newest first.
          */
         PRECACHE("precache", 1024L * 1024L * 1024L),

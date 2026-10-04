@@ -33,7 +33,7 @@ f="alice/Photos/2021/Summer/no-exif.jpg"      # no EXIF: date must fall back to 
 img "$f" 800x600 gradient:green-yellow
 mtime "$f" "2021-07-20 18:00:00"
 
-f="alice/Photos/2021/Summer/rotated-exif6.jpg"  # stored landscape, EXIF says rotate 90 (PLAN 5.1)
+f="alice/Photos/2021/Summer/rotated-exif6.jpg"  # stored landscape, EXIF says rotate 90 (#33)
 img "$f" 1200x800 gradient:red-blue
 exif_date "$f" "2021:07:15 08:00:00"
 exiftool -q -overwrite_original -n -Orientation=6 "$f"
@@ -69,7 +69,7 @@ f="alice/Photos/2023/screenshot.png"          # PNG, no EXIF
 img "$f" 1080x2400 xc:slategray
 mtime "$f" "2023-06-02 09:30:00"
 
-f="alice/Photos/2023/Private/.nomedia"        # folder opted out of galleries (PLAN 2.2)
+f="alice/Photos/2023/Private/.nomedia"        # folder opted out of galleries (#13)
 : > "$f"
 mtime "$f" "2023-06-03 09:00:00"
 f="alice/Photos/2023/Private/hidden-by-nomedia.jpg"

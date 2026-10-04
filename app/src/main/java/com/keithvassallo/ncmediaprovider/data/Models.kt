@@ -7,15 +7,15 @@ import androidx.room.PrimaryKey
 
 /**
  * One photo or video in the user's Nextcloud library, keyed by its Nextcloud file ID. Stored as a
- * row of the `media` table with the generation it last changed in (PLAN 2.1).
+ * row of the `media` table with the generation it last changed in (#12).
  *
  * [dateTakenMillis], [width] and [height] are what the picker gets: Memories' values when it has
  * indexed the file, else a video's own recording time, else the listing's (see [resolved]). The
- * listing's are kept beside them, so turning Memories off restores them (PLAN 6.2).
+ * listing's are kept beside them, so turning Memories off restores them (#40).
  */
 @Entity(
     tableName = "media",
-    // The last index serves the photo keyboard's newest-first browsing (PLAN 4.8).
+    // The last index serves the photo keyboard's newest-first browsing (#60).
     indices = [Index(value = ["generation", "id"]), Index(value = ["folder"]), Index(value = ["dateTakenMillis", "id"])],
 )
 data class MediaItem(
@@ -36,7 +36,7 @@ data class MediaItem(
     /** Decoded path of the folder holding the file, ending in '/' (see [parentFolderKey]). */
     val folder: String = "",
     /**
-     * The phone's own copy, which makes the picker show this photo once (PLAN 3.2). Set by
+     * The phone's own copy, which makes the picker show this photo once (#23). Set by
      * [com.keithvassallo.ncmediaprovider.local.LocalMatcher], never by a listing.
      */
     val mediaStoreUri: String? = null,
@@ -48,13 +48,13 @@ data class MediaItem(
     @ColumnInfo(defaultValue = "0")
     val listedHeight: Int = height,
     /**
-     * A video's recording time from its own header (PLAN 6.0): 0 until read, [NOT_IN_HEADER] when
+     * A video's recording time from its own header (#62): 0 until read, [NOT_IN_HEADER] when
      * the header has none. Like [durationMillis], read on the phone and kept while the etag is unchanged.
      */
     @ColumnInfo(defaultValue = "0")
     val recordedMillis: Long = 0L,
     /**
-     * The video half of a live photo by Memories' pairing (PLAN 6.2). The row is kept but reported
+     * The video half of a live photo by Memories' pairing (#40). The row is kept but reported
      * to the picker as deleted, so turning Memories off brings it back without listing again.
      */
     @ColumnInfo(defaultValue = "0")
@@ -69,7 +69,7 @@ data class MediaItem(
 }
 
 /**
- * The values the picker gets (PLAN 6.0 and 6.2): Memories' when it indexed the file as it is now
+ * The values the picker gets (#62 and #40): Memories' when it indexed the file as it is now
  * (same etag), then a video's recording time from its header, then the listing's. Memories reads
  * the camera's time zone, where core Nextcloud reads EXIF times as the server's local time: an hour
  * or two out for most of Keith's JPEGs, and the upload time for nearly every HEIC.

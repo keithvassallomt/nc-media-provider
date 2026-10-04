@@ -11,7 +11,7 @@ import java.text.DateFormat
 import java.util.Date
 
 /**
- * The diagnostics a bug report needs (PLAN 9.5): the app, the phone, the picker and the library,
+ * The diagnostics a bug report needs (#54): the app, the phone, the picker and the library,
  * with the app's own recent log lines. Nothing secret goes in: the app password is never read, and
  * the server's address and the user name are masked wherever they appear.
  */

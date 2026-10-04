@@ -3,7 +3,7 @@ package com.keithvassallo.ncmediaprovider.data
 import java.time.Instant
 import java.time.ZoneId
 
-/** What the photo keyboard's grid shows (PLAN 4.8): the library, favourites, an album or a person. */
+/** What the photo keyboard's grid shows (#60): the library, favourites, an album or a person. */
 sealed interface KeyboardSource {
     data object Library : KeyboardSource
 

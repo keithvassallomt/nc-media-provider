@@ -4,22 +4,22 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Android 17 blocks apps targeting API 37 from LAN addresses without this runtime
-         permission, and self-hosted servers are often on the LAN (PLAN 1.5, docs/device-notes.md). -->
+         permission, and self-hosted servers are often on the LAN (#10, docs/device-notes.md). -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
-    <!-- "Sign in again" and "select the provider again" (PLAN 4.4, 4.6). -->
+    <!-- "Sign in again" and "select the provider again" (#29, #31). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Keeps the network open while another app reads a streamed video (PLAN 5.2). -->
+    <!-- Keeps the network open while another app reads a streamed video (#34). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <queries>
         <package android:name="moe.shizuku.privileged.api" />
-        <!-- Activation keeps Google Photos on the allow-list when it is installed (PLAN 4.6). -->
+        <!-- Activation keeps Google Photos on the allow-list when it is installed (#31). -->
         <package android:name="com.google.android.apps.photos" />
-        <!-- Which photo picker the phone uses decides how people are offered (PLAN 7.3). -->
+        <!-- Which photo picker the phone uses decides how people are offered (#45). -->
         <intent>
             <action android:name="android.provider.action.PICK_IMAGES" />
         </intent>
@@ -57,7 +57,7 @@
             android:name=".ui.DetailsActivity"
             android:exported="false" />
 
-        <!-- "Send from Nextcloud" (PLAN 4.7): opens the system picker, then the share sheet. -->
+        <!-- "Send from Nextcloud" (#58): opens the system picker, then the share sheet. -->
         <activity
             android:name=".share.SendFromNextcloudActivity"
             android:autoRemoveFromRecents="true"
@@ -95,7 +95,7 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- The photo keyboard (PLAN 4.8), for apps with their own photo grid. -->
+        <!-- The photo keyboard (#60), for apps with their own photo grid. -->
         <service
             android:name=".keyboard.PhotoKeyboardService"
             android:exported="true"
@@ -119,7 +119,7 @@
                 android:resource="@xml/keyboard_file_paths" />
         </provider>
 
-        <!-- Reselects the provider after an update deselects it (PLAN 4.6). -->
+        <!-- Reselects the provider after an update deselects it (#31). -->
         <receiver
             android:name=".activation.PackageReplacedReceiver"
             android:exported="false">

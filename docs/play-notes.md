@@ -1,6 +1,6 @@
 # Google Play notes
 
-What publishing on Google Play takes for this app (PLAN 9.2). Researched 2026-10-04 from Google's own policy and developer pages, listed at the end. "Inference" marks a reading of the policy rather than something it states.
+What publishing on Google Play takes for this app ([#51](https://github.com/keithvassallomt/nc-media-provider/issues/51)). Researched 2026-10-04 from Google's own policy and developer pages, listed at the end. "Inference" marks a reading of the policy rather than something it states.
 
 ## Biggest risks
 
@@ -45,7 +45,7 @@ No keyboard-specific policy or declaration [S14]. Inserting a photo the user cho
 
 ## Listing and declarations
 
-- **Privacy policy:** required, linked in the app too; a public web page naming the developer, with contact details and retention [S22] (PLAN 9.8).
+- **Privacy policy:** required, linked in the app too; a public web page naming the developer, with contact details and retention [S22] ([#57](https://github.com/keithvassallomt/nc-media-provider/issues/57)).
 - **Data safety:** "collect" means sending data off the device [S15]. The official Nextcloud app declares no data collected [S35]; inference: credentials sent to the user's own server can be treated the same way. Plain HTTP is allowed only to servers on the local network (NextcloudClient refuses it otherwise), so say so rather than claim everything is encrypted in transit [S22]. Filled in before closed testing [S15].
 - **Content rating:** the IARC questionnaire [S27]. Target audience 18 and over keeps the app outside the Families policy [S28].
 - **App access for reviewers:** reusable credentials in English [S23]: a demo Nextcloud server and app password, the adb steps, and a video. Inference: the keyboard works without adb, so point reviewers to it first. Decision (Keith): set this up only if review asks for it.

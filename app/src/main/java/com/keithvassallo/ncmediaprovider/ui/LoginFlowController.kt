@@ -36,7 +36,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONException
 
 /**
- * Signs in with Nextcloud's Login Flow v2 (PLAN 4.1), for whichever screen hosts it: the user
+ * Signs in with Nextcloud's Login Flow v2 (#26), for whichever screen hosts it: the user
  * approves this app on their server's own page in a browser tab, and the app polls for the app
  * password it is given. Android 17 cuts this app's network while it is in the background, so
  * polling also runs each time the user comes back; [save] and [restore] carry the flow across the

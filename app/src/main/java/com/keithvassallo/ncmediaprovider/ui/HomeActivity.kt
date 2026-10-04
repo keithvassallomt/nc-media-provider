@@ -36,7 +36,7 @@ import androidx.appcompat.R as AppCompatR
 import com.google.android.material.R as MaterialR
 
 /**
- * The home screen (PLAN 9.3): whether the photos are in the picker, the four settings people
+ * The home screen (#52): whether the photos are in the picker, the four settings people
  * change as tiles, and everything else one tap away. A phone that isn't set up yet goes to
  * [OnboardingActivity] instead.
  */
@@ -94,7 +94,7 @@ class HomeActivity : AppCompatActivity() {
         row(binding.rowGuide, R.string.row_guide) { openLink(Links.GUIDE) }
         binding.rowGuide.trailing.setImageResource(R.drawable.ic_open_external)
         row(binding.rowDetails, R.string.row_details) { startActivity(Intent(this, DetailsActivity::class.java)) }
-        // Play wants the privacy policy reachable from inside the app (PLAN 9.8).
+        // Play wants the privacy policy reachable from inside the app (#57).
         row(binding.rowPrivacy, R.string.row_privacy) { openLink(Links.PRIVACY) }
         binding.rowPrivacy.trailing.setImageResource(R.drawable.ic_open_external)
 

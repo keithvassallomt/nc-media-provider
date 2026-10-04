@@ -12,7 +12,7 @@ import android.provider.MediaStore
 import androidx.core.content.ContextCompat
 
 /**
- * The phone's own photos and videos, read from MediaStore for [LocalMatcher] (PLAN 3.1). The list is
+ * The phone's own photos and videos, read from MediaStore for [LocalMatcher] (#22). The list is
  * cached until MediaStore reports a change, which is also passed on to [onChange] so the matches can
  * be brought up to date.
  */

@@ -1,6 +1,6 @@
 package com.keithvassallo.ncmediaprovider.keyboard
 
-/** Which type a photo goes to an app as, from the types its text field accepts (PLAN 4.8). */
+/** Which type a photo goes to an app as, from the types its text field accepts (#60). */
 internal object KeyboardFormats {
     /**
      * The photo's own type when the app accepts it; JPEG for other images when the app takes JPEG

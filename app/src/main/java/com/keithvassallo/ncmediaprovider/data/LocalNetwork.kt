@@ -9,7 +9,7 @@ import java.net.InetAddress
  * Whether [address] is on a local network: private IPv4 ranges, loopback, link-local, IPv6
  * unique-local, and 100.64.0.0/10, which Tailscale and similar VPNs use. Android 17 asks for
  * ACCESS_LOCAL_NETWORK before an app may reach such an address (Phase 1.5), and plain HTTP is
- * allowed only to them (PLAN 4.2).
+ * allowed only to them (#27).
  */
 internal fun isLocalNetworkAddress(address: InetAddress): Boolean {
     if (address.isLoopbackAddress || address.isLinkLocalAddress || address.isSiteLocalAddress) return true

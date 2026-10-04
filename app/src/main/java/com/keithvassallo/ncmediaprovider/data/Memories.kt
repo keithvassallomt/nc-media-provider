@@ -9,7 +9,7 @@ import org.json.JSONException
 import org.json.JSONObject
 
 /**
- * One file as Memories indexed it (PLAN 6.2). The table mirrors Memories' timeline, which is read a
+ * One file as Memories indexed it (#40). The table mirrors Memories' timeline, which is read a
  * day at a time, so a day whose file count hasn't changed needn't be read again.
  */
 @Entity(tableName = "memories_file", indices = [Index(value = ["dayId"])])
@@ -35,7 +35,7 @@ data class MemoriesDay(
 )
 
 /**
- * Parsing and planning for the Memories layer (PLAN 6.1 to 6.3), kept apart from HTTP so it can be
+ * Parsing and planning for the Memories layer (#39 to #41), kept apart from HTTP so it can be
  * tested against saved responses: Memories' API is internal and undocumented, and may change.
  */
 internal object MemoriesApi {

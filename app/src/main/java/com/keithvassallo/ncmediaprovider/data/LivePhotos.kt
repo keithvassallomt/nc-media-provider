@@ -2,7 +2,7 @@ package com.keithvassallo.ncmediaprovider.data
 
 /**
  * The videos that are the moving half of a live photo, which the picker shouldn't show as videos
- * of their own (PLAN 5.5 and 6.2). Memories' pairing is one way to know. The other is the name: an
+ * of their own (#37 and #40). Memories' pairing is one way to know. The other is the name: an
  * iPhone keeps a live photo as a HEIC or JPEG and a MOV of about 3 s with the same name, and numbers
  * photos and videos from one counter, so a video of its own never shares a photo's name. On Keith's
  * server Memories paired 256 and listed 13 more as videos of their own; names catch those, and

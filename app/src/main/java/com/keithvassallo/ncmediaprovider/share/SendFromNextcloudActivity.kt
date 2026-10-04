@@ -11,7 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import com.keithvassallo.ncmediaprovider.R
 
 /**
- * "Send from Nextcloud" (PLAN 4.7). Apps with their own photo grid, such as Messenger, never open
+ * "Send from Nextcloud" (#58). Apps with their own photo grid, such as Messenger, never open
  * the system picker, so cloud photos can't appear in them. This opens the picker itself, then hands
  * the picked items to the share sheet, from where they reach any app that accepts shares. The
  * picker's read grant travels with the share; the receiving app reads the original through the

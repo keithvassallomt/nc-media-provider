@@ -8,8 +8,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Reads a remote file of [size] bytes in chunks that [fetch] gets with HTTP Range requests (PLAN
- * 5.2). While one chunk is read, the next is fetched on [prefetcher], so a reader moving through the
+ * Reads a remote file of [size] bytes in chunks that [fetch] gets with HTTP Range requests (#34).
+ * While one chunk is read, the next is fetched on [prefetcher], so a reader moving through the
  * file rarely waits; a fork of the base project made one request per read, which was slow. Chunks
  * are aligned, so reads that move back and forth a little stay in the same chunk. One reader at a
  * time: calls to [read] must not overlap.

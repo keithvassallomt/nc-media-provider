@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit
 /**
  * Android deselects a cloud provider whenever its app is updated (Phase 1.5). After an update this
  * selects the app again through Shizuku if it can, since the shell may make that call, and
- * otherwise posts a notification that opens the picker's cloud settings (PLAN 4.6).
+ * otherwise posts a notification that opens the picker's cloud settings (#31).
  */
 class PackageReplacedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

@@ -5,7 +5,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.security.MessageDigest
 
-/** An album as Nextcloud Photos lists it (PLAN 7.1): one of the user's own, or one shared with them. */
+/** An album as Nextcloud Photos lists it (#43): one of the user's own, or one shared with them. */
 data class PhotosAlbumEntry(
     /** Percent-encoded collection path ending in '/', e.g. `/remote.php/dav/photos/alice/albums/Holiday/`. */
     val href: String,
@@ -97,7 +97,7 @@ internal object Albums {
         mimeType = file.mimeType,
         sizeBytes = file.sizeBytes,
         lastModifiedMillis = file.lastModifiedMillis,
-        // As the library does: Nextcloud's date taken, else the modification time (PLAN 2.8).
+        // As the library does: Nextcloud's date taken, else the modification time (#19).
         dateTakenMillis = file.originalDateTimeMillis ?: file.lastModifiedMillis,
         width = file.width,
         height = file.height,

@@ -57,7 +57,7 @@ import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
- * A keyboard that inserts Nextcloud photos (PLAN 4.8), for apps with their own photo grid such as
+ * A keyboard that inserts Nextcloud photos (#60), for apps with their own photo grid such as
  * Messenger, which never open the system picker. Tabs show recent photos, albums, people and
  * favourites; photos come by month with a rail of years to jump through, and the tapped one is
  * inserted through the keyboard content API, the way GIF keyboards work. It never handles text.

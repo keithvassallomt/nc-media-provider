@@ -11,7 +11,7 @@ data class MonthCount(
     val count: Int,
 )
 
-/** What the Storage screen needs to show the pre-cache's limit (PLAN 5.6). */
+/** What the Storage screen needs to show the pre-cache's limit (#59). */
 data class PrecachePlan(
     /** The thumbnail size this phone's picker grid asks for. */
     val sizePx: Int,
@@ -32,7 +32,7 @@ data class PrecachePlan(
 }
 
 /**
- * The pre-cache's limit (PLAN 5.6): a date range or a size, kept newest first, and never more than
+ * The pre-cache's limit (#59): a date range or a size, kept newest first, and never more than
  * half the free space. The slider is logarithmic, so the last month (tens of MB) and everything
  * (gigabytes on a large library) both get room on it.
  */

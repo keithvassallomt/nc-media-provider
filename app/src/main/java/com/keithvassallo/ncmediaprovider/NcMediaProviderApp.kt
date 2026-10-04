@@ -19,7 +19,7 @@ class NcMediaProviderApp : Application() {
     }
 
     /**
-     * "Send from Nextcloud" on a long press of the app icon (PLAN 4.7). Dynamic rather than static,
+     * "Send from Nextcloud" on a long press of the app icon (#58). Dynamic rather than static,
      * because a static shortcut has to spell out the package, which differs in debug builds.
      */
     private fun addSendShortcut() {

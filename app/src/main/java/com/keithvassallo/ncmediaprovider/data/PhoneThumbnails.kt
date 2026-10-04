@@ -12,7 +12,7 @@ import java.io.File
 import java.io.IOException
 
 /**
- * Thumbnails made on the phone when the server can't make them (PLAN 5.1 and 5.3): Nextcloud makes
+ * Thumbnails made on the phone when the server can't make them (#33 and #35): Nextcloud makes
  * no HEIC or video previews unless an admin turns them on. All of them are cropped square to fill
  * the tile, as the server's `mode=cover` previews are, and saved as JPEG.
  */

@@ -11,7 +11,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Turning the pre-cache off deletes every thumbnail it downloaded (PLAN 5.6), which can take hours
+ * Turning the pre-cache off deletes every thumbnail it downloaded (#59), which can take hours
  * of Wi-Fi to fetch again, so it asks first; with nothing downloaded it goes ahead. [onDecided]
  * gets whether to turn it off.
  */

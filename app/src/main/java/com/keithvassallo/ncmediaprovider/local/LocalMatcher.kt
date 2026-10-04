@@ -27,7 +27,7 @@ data class CloudPhoto(
 )
 
 /**
- * Pairs library rows with the phone's own copies (PLAN 3.2), so the picker shows each photo once.
+ * Pairs library rows with the phone's own copies (#23), so the picker shows each photo once.
  *
  * Rules, strongest first; among several phone candidates the lowest MediaStore ID wins:
  * 1. Same name (ignoring the case of ASCII letters) and size. The Nextcloud app keeps both when it

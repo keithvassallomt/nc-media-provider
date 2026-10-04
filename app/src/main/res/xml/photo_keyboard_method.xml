@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The photo keyboard (PLAN 4.8). It has no settings and handles no text. -->
+<!-- The photo keyboard (#60). It has no settings and handles no text. -->
 <input-method xmlns:android="http://schemas.android.com/apk/res/android"
     android:supportsSwitchingToNextInputMethod="true" />

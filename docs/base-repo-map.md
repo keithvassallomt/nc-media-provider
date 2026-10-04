@@ -1,6 +1,6 @@
 # Base repo map: 9dc/immich-media-picker v0.4.2
 
-Phase 0.3 (#4). Written 2026-10-02 from a read of the whole base repo at the pinned tag. Only the MIT repo was read. The GPL projects (Dreaming-Codes/immich-cloud-media, 9dc/immich-cloud-media) were not opened.
+Phase 0.3 ([#4](https://github.com/keithvassallomt/nc-media-provider/issues/4)). Written 2026-10-02 from a read of the whole base repo at the pinned tag, and checked against [the project plan as it stood then](https://github.com/keithvassallomt/nc-media-provider/blob/172dee258027c9f8a507a72e56288ef83634111b/PLAN.md). The plan was retired on 2026-10-04 in favour of the GitHub issues, so its numbered items below link to their issues. Only the MIT repo was read. The GPL projects (Dreaming-Codes/immich-cloud-media, 9dc/immich-cloud-media) were not opened.
 
 Kotlin paths below are relative to `app/src/main/java/io/github/immichmediapicker/` unless they start with `app/`. Line numbers are for tag v0.4.2.
 
@@ -14,7 +14,7 @@ Kotlin paths below are relative to `app/src/main/java/io/github/immichmediapicke
 | Repo state | MIT, not archived, 5 stars, 0 open issues |
 | Size | About 3,100 lines of Kotlin in one `:app` module, plus 260 lines of tests |
 
-v0.4.2 matters more than its number suggests. Its single commit ("Stop incremental syncs from wiping the Immich catalog") is what made the base follow two of the rules PLAN.md credits it with:
+v0.4.2 matters more than its number suggests. Its single commit ("Stop incremental syncs from wiping the Immich catalog") is what made the base follow two of the rules the plan credits it with:
 
 - `onQueryMedia` now lists `EXTRA_SYNC_GENERATION` among its honoured args. Before this, any server change made MediaProvider reject the next incremental sync and rebuild the whole cloud catalog.
 - Changes are announced with `MediaStore.notifyCloudMediaChangedEvent`. Before this, the base called `notifyChange` on its own URI, which nobody observes.
@@ -67,7 +67,7 @@ The key fact for us: **the base has no local library database.** Every `onQueryM
 
 ## 3. File-by-file classification
 
-Starting point was PLAN.md 0.3. Corrections are explained in section 3.2.
+Starting point was the plan's 0.3 ([#4](https://github.com/keithvassallomt/nc-media-provider/issues/4)). Corrections are explained in section 3.2.
 
 ### 3.1 Table
 
@@ -82,7 +82,7 @@ Starting point was PLAN.md 0.3. Corrections are explained in section 3.2.
 | `app/build.gradle.kts` | Adapt | New namespace and application ID, SDK levels, new deps (Room, WorkManager, Media3 later), turn off the dependency-info block for F-Droid. Keep the env-var release signing and the `.debug` suffix. |
 | `app/proguard-rules.pro` | Adapt | Only change is the package in the `-keep` rule for the Shizuku user service (line 7). |
 | `.gitignore` | Keep | Merge with ours. Already ignores `local.properties` and keystores. |
-| `.github/workflows/android.yml` | Adapt | Good base for PLAN 9.7: test, lint, assemble. Change JDK and artifact names. |
+| `.github/workflows/android.yml` | Adapt | Good base for [#56](https://github.com/keithvassallomt/nc-media-provider/issues/56): test, lint, assemble. Change JDK and artifact names. |
 | `.github/workflows/release.yml` | Adapt | Signed release from a tag, checks versionName against the tag, attaches APK and sha256. Rename only. |
 | `LICENSE` | Keep | Its copyright notice must be carried into ours (section 10). |
 | `README.md` | Replace | We have our own. Keep the attribution. |
@@ -95,8 +95,8 @@ Starting point was PLAN.md 0.3. Corrections are explained in section 3.2.
 | `res/drawable/ic_launcher_background.xml`, `ic_launcher_foreground.xml`, `ic_launcher_monochrome.xml` | Replace | New icon. |
 | `res/mipmap-anydpi-v26/ic_launcher.xml` | Keep | Adaptive icon wrapper, points at the new drawables. |
 | `res/mipmap-anydpi/ic_launcher.xml` | Drop | Dead with minSdk 34: the `-v26` version always wins. |
-| `res/xml/data_extraction_rules.xml` | Keep | Excludes everything from cloud backup and device transfer, as PLAN 4.2 wants. |
-| `res/xml/network_security_config.xml` | Keep | Trusts system and user CAs (PLAN 4.2). It also allows cleartext; decide whether we want that. |
+| `res/xml/data_extraction_rules.xml` | Keep | Excludes everything from cloud backup and device transfer, as [#27](https://github.com/keithvassallomt/nc-media-provider/issues/27) wants. |
+| `res/xml/network_security_config.xml` | Keep | Trusts system and user CAs ([#27](https://github.com/keithvassallomt/nc-media-provider/issues/27)). It also allows cleartext; decide whether we want that. |
 | **AIDL** | | |
 | `app/src/main/aidl/.../IActivationService.aidl` | Adapt | Needs more than `activate()`: read state, write an explicit list, restore. |
 | **Kotlin** | | |
@@ -104,15 +104,15 @@ Starting point was PLAN.md 0.3. Corrections are explained in section 3.2.
 | `activation/CloudProviderActivation.kt` | Adapt | Writes the wrong values for us (replaces the allow-list, always enables cloud media, always reboots). Section 5. |
 | `activation/DeviceConfigUserService.kt` | Adapt | The Shizuku mechanism is right; the payload and the `put` fallback are not. Section 5. |
 | `data/CredentialStore.kt` | Adapt | Keystore code stays as is. Fields change to base URL, login name, user ID and app password. |
-| `data/ImmichApi.kt` | Replace | Immich REST. Worth copying two patterns: the same-origin auth interceptor (lines 22-31, exactly what PLAN 1.2 needs for Basic auth) and the cancellable download-to-file (311-348). |
+| `data/ImmichApi.kt` | Replace | Immich REST. Worth copying two patterns: the same-origin auth interceptor (lines 22-31, exactly what [#7](https://github.com/keithvassallomt/nc-media-provider/issues/7) needs for Basic auth) and the cancellable download-to-file (311-348). |
 | `data/ImmichJson.kt` | Replace | Immich JSON. Our replacement parses WebDAV multistatus XML. |
 | `data/ImmichRepository.kt` | Replace | Its sync logic is Immich-only. Salvage the media-delivery half: `openOriginal`, `openPreview`, `withSlot` and the semaphores (lines 36-62, 269-366), `notifyPickerOfChanges` (118-129) and `collectionId` (98-106). |
 | `data/ImmichUrl.kt` | Replace | Immich `/api` paths. The normalisation ideas (strip trailing segments, reject credentials in the URL, subpath support) carry over to a Nextcloud base URL. |
 | `data/MediaDiskCache.kt` | Keep | Generic. Callers choose the key, so we key by fileId, etag and size. Rename the `immich_media` directory and one error message. |
 | `data/Models.kt` | Replace | Immich data classes. Keep the generic `Page<T>`. |
 | `data/RemoteQueryGate.kt` | Keep | Generic back-off gate. Only the exception message mentions Immich. |
-| `data/SyncStateStore.kt` | Replace | Time baselines and an 8-generation deletion map in prefs. Replaced by Room tables (PLAN 2.1). |
-| `local/LocalMediaIndex.kt` | Adapt | Matching logic is close to PLAN 3.2, but it is typed to `ImmichAsset` and leans on Immich's `deviceAssetId`. |
+| `data/SyncStateStore.kt` | Replace | Time baselines and an 8-generation deletion map in prefs. Replaced by Room tables ([#12](https://github.com/keithvassallomt/nc-media-provider/issues/12)). |
+| `local/LocalMediaIndex.kt` | Adapt | Matching logic is close to [#23](https://github.com/keithvassallomt/nc-media-provider/issues/23), but it is typed to `ImmichAsset` and leans on Immich's `deviceAssetId`. |
 | `provider/ImmichCloudMediaProvider.kt` | Adapt | Keep the shell: caller check, collection info, honoured args, extras, cursor building, preview and open wrappers, sync scheduling. Rewire queries to Room. Drop lines 143-277 and 465-490 (API 36 methods and projections). |
 | `ui/ActivationCommands.kt` | Adapt | Becomes enable, restore and (maybe) legacy command sets. |
 | `ui/SetupActivity.kt` | Adapt | Keep the Shizuku flow (lines 44-101, 292-425), activation status (267-282), picker settings and test buttons, cache card. Replace the connect flow. |
@@ -126,12 +126,12 @@ Starting point was PLAN.md 0.3. Corrections are explained in section 3.2.
 
 Kotlin and AIDL only (17 main files): Keep 2, Adapt 9, Replace 6, Drop 0. Tests (4): Keep 1, Adapt 1, Replace 2.
 
-### 3.2 Where the code corrects PLAN.md 0.3
+### 3.2 Where the code corrects the plan's 0.3
 
 - **"Keep the provider shell" is really Adapt.** The class imports `ImmichAsset`, `ImmichRepository` and `Page`, serves live network queries, and holds all the API 36 methods. The structure is what we keep.
 - **The network gate lives in two places.** `RemoteQueryGate` is a separate file (Keep), but the download semaphores and `withSlot` are inside `ImmichRepository` (Replace). They must be carried over by hand.
 - **The credential store, local index, setup screen and Shizuku activation are Adapt, not Keep.** Each is tied to Immich types or writes values that are wrong for us.
-- **`ImmichRepository` and `SyncStateStore` are also Replace.** PLAN listed only API, JSON, model and URL classes. The repository's sync half and the whole state store are Immich-shaped.
+- **`ImmichRepository` and `SyncStateStore` are also Replace.** The plan listed only API, JSON, model and URL classes. The repository's sync half and the whole state store are Immich-shaped.
 - **"Drop" has no files of its own.** People, smart search and the API 36 additions are methods inside the provider plus code inside files we replace anyway. Method-level drops:
 
 | Where | What |
@@ -142,11 +142,11 @@ Kotlin and AIDL only (17 main files): Keep 2, Adapt 9, Replace 6, Drop 0. Tests 
 
 Without an `onGetCapabilities` override, all capabilities default to off, which is what we want.
 
-## 4. Where the base does each picker behaviour PLAN relies on
+## 4. Where the base does each picker behaviour the plan relies on
 
 | Behaviour | Where | Notes |
 |---|---|---|
-| Per-account collection ID | `data/ImmichRepository.kt:98-106`; `data/CredentialStore.kt:51-58`; `data/SyncStateStore.kt:13-14, 97-108` | SHA-256 of `serverUrl\|accountId\|provider-v3\|epoch`, first 12 bytes in hex, prefixed `immich-`. Read from plain prefs (`account()`), never the Keystore. Unconfigured: `immich-unconfigured-v1`. Our hash input becomes server, user, folder set and epoch (PLAN 1.4). |
+| Per-account collection ID | `data/ImmichRepository.kt:98-106`; `data/CredentialStore.kt:51-58`; `data/SyncStateStore.kt:13-14, 97-108` | SHA-256 of `serverUrl\|accountId\|provider-v3\|epoch`, first 12 bytes in hex, prefixed `immich-`. Read from plain prefs (`account()`), never the Keystore. Unconfigured: `immich-unconfigured-v1`. Our hash input becomes server, user, folder set and epoch ([#9](https://github.com/keithvassallomt/nc-media-provider/issues/9)). |
 | Collection info | `provider/ImmichCloudMediaProvider.kt:51-78` | Collection ID, `LAST_MEDIA_SYNC_GENERATION`, `ACCOUNT_NAME`, and `ACCOUNT_CONFIGURATION_INTENT` set to the app's launcher intent. |
 | Collection ID on every cursor | `provider/ImmichCloudMediaProvider.kt:344-349, 362-364` | `EXTRA_MEDIA_COLLECTION_ID` plus the next `EXTRA_PAGE_TOKEN`. Cursors reuse the collection captured by the last `onGetMediaCollectionInfo` (`advertisedCollection`, line 31) so one sync pass sees one collection. |
 | Honoured args | `provider/ImmichCloudMediaProvider.kt:98-110` (media), `119-124` (deleted media) | `ContentResolver.EXTRA_HONORED_ARGS` as a string ArrayList. Media: `EXTRA_PAGE_SIZE`, `EXTRA_PAGE_TOKEN`, plus `EXTRA_ALBUM_ID` and `EXTRA_SYNC_GENERATION` when present. Deleted media: `EXTRA_SYNC_GENERATION` only; the page token is ignored, which happens to be robust to Android 17 passing the media token in. Albums: no honoured args. |
@@ -158,13 +158,13 @@ Without an `onGetCapabilities` override, all capabilities default to off, which 
 | Local MediaStore index for dedupe | `local/LocalMediaIndex.kt:33-54, 75-99, 125-194` | Snapshot of images and videos (`_ID`, name, size, date taken, MIME), rebuilt on a low-priority thread, invalidated by a ContentObserver, 30 min TTL. Match order: Immich `deviceAssetId` (corroborated), then exact name and size, then the same name and type within 2 s. Used for `MEDIA_STORE_URI` (`ImmichCloudMediaProvider.kt:319, 333`) and for local delivery (`ImmichRepository.kt:276-283`). Warmed in `onCreate` (`ImmichCloudMediaProvider.kt:36-49`). |
 | Shizuku activation | `ui/SetupActivity.kt:44-101, 292-425`; `activation/DeviceConfigUserService.kt`; `IActivationService.aidl`; `AndroidManifest.xml:11-13, 45-51`; `app/proguard-rules.pro:7` | A Shizuku user service in an `:activation` process runs `/system/bin/device_config` with `ProcessBuilder`, as the shell user when Shizuku was started over wireless debugging. |
 | Caller check | `provider/ImmichCloudMediaProvider.kt:398-406` | Allows its own UID, otherwise requires the caller to hold `MANAGE_CLOUD_MEDIA_PROVIDERS`. Called at the top of every entry point. |
-| Allowed and active status | `ui/SetupActivity.kt:267-282` | `MediaStore.isSupportedCloudMediaProviderAuthority` and `isCurrentCloudMediaProviderAuthority`. Public API, no Shizuku or dumpsys needed. Keep this for PLAN 4.6. |
+| Allowed and active status | `ui/SetupActivity.kt:267-282` | `MediaStore.isSupportedCloudMediaProviderAuthority` and `isCurrentCloudMediaProviderAuthority`. Public API, no Shizuku or dumpsys needed. Keep this for [#31](https://github.com/keithvassallomt/nc-media-provider/issues/31). |
 
 Caveats on the 100 ms path:
 
 - `ImmichCloudMediaProvider.kt:76` calls `repository.isConfigured`, which is `credentials.load()`. On a cold process that is a Keystore decrypt (two binder calls to keystore2 plus an AES-GCM init, per the base's own comment at `CredentialStore.kt:18-21`). It is not network, but it is on the 100 ms path. Our version should check the plain-prefs `account()` there.
 - The first touch of the repository singleton (OkHttp client, two ContentObserver registrations) can also land inside `onGetMediaCollectionInfo`. `onCreate` warms it on the executor, but that is a race, not a guarantee.
-- `onQueryMedia`, `onQueryAlbums`, `onOpenPreview` and `onOpenMedia` all do network on binder threads. PLAN's research summary ("it keeps slow network calls from blocking the picker") is true only in the sense that these calls are bounded. Our Room-backed queries fix listing properly; previews and originals stay on the binder thread by nature, so the slot and timeout scheme is what to carry over.
+- `onQueryMedia`, `onQueryAlbums`, `onOpenPreview` and `onOpenMedia` all do network on binder threads. The plan's research summary ("it keeps slow network calls from blocking the picker") is true only in the sense that these calls are bounded. Our Room-backed queries fix listing properly; previews and originals stay on the binder thread by nature, so the slot and timeout scheme is what to carry over.
 
 ## 5. Activation
 
@@ -204,7 +204,7 @@ Answers to the specific questions:
 
 | Device finding | Base behaviour | Gap |
 |---|---|---|
-| An explicit package list is needed; the stock Pixel's flag holds an authority MediaProvider ignores | Writes only our package | Google Photos disappears as a cloud source. Breaks PLAN's "Google Photos stays selectable". |
+| An explicit package list is needed; the stock Pixel's flag holds an authority MediaProvider ignores | Writes only our package | Google Photos disappears as a cloud source. Breaks the plan's "Google Photos stays selectable". |
 | `mediaprovider` overrides apply live | Always ends with `adb reboot`; dialog always says restart | Reboot is unnecessary on the stock Pixel and on a second activation. |
 | `storage_native_boot` is read at boot | Writes both namespaces | Matches. |
 | GrapheneOS needs `cloud_media_feature_enabled=true` plus a reboot before the cloud settings screen opens | Always writes the flag and always reboots | Works on GrapheneOS by accident. On the stock Pixel it adds a needless override (cloud media is already on through the overlay). |
@@ -235,7 +235,7 @@ Every piece of the base's change tracking leans on Immich answering "what change
 | Hard deletes | `data/ImmichRepository.kt:466-478`, constant at 495 | Assets deleted without the trash are invisible to the poll, so the base bumps the collection epoch weekly. That empties the picker's cloud tab while it rebuilds. |
 | Deletions for the picker | `provider/ImmichCloudMediaProvider.kt:113-126`; `data/SyncStateStore.kt:82-84` | A JSON map of asset ID to generation in prefs. |
 
-What our sync engine (PLAN Phase 2) replaces:
+What our sync engine (Phase 2, [#11](https://github.com/keithvassallomt/nc-media-provider/issues/11)) replaces:
 
 | Base | Ours |
 |---|---|
@@ -246,16 +246,16 @@ What our sync engine (PLAN Phase 2) replaces:
 | Weekly epoch bump to catch hard deletes | Weekly full listing diff that writes journal rows without changing the collection ID (2.2) |
 | Every row reports the current generation | Every row reports the generation it last changed in |
 
-Keep from the base: the 30 s throttled background check triggered from `onGetMediaCollectionInfo` (`ImmichCloudMediaProvider.kt:366-383`, `ImmichRepository.kt:131-136`), which is exactly PLAN 2.6, and the `advertisedCollection` trick that keeps one collection per sync pass.
+Keep from the base: the 30 s throttled background check triggered from `onGetMediaCollectionInfo` (`ImmichCloudMediaProvider.kt:366-383`, `ImmichRepository.kt:131-136`), which is exactly [#17](https://github.com/keithvassallomt/nc-media-provider/issues/17), and the `advertisedCollection` trick that keeps one collection per sync pass.
 
 One latent base bug to design around: `SyncStateStore.record` keeps deletions for only 8 generations (`SyncStateStore.kt:61-62, 146`). A picker that last synced more than 8 generations ago silently misses older deletions, and nothing forces a full sync. Our journal needs a retention floor, and if the picker asks for deletions below it, we must change the collection ID rather than return an incomplete list.
 
 ## 7. Video and streaming
 
-- **No `CloudMediaSurfaceController`.** `onCreateCloudMediaSurfaceController` is not overridden, so the picker gets the default (null). PLAN 5.4 is all new work.
+- **No `CloudMediaSurfaceController`.** `onCreateCloudMediaSurfaceController` is not overridden, so the picker gets the default (null). [#36](https://github.com/keithvassallomt/nc-media-provider/issues/36) is all new work.
 - **No `openProxyFileDescriptor`**, no Range requests, no pipes. `onOpenMedia` downloads the whole original into the 2 GiB originals cache (or hands over a matching local MediaStore file) and returns a plain file descriptor (`ImmichRepository.kt:269-290`). That satisfies "complete, seekable file", but a large video must finish downloading within the 120 s call timeout (`ImmichApi.kt:383`), after waiting up to 60 s for one of 2 slots.
 - **Video preview** (`onOpenPreview` without the thumbnail flag) also downloads the whole original (`ImmichRepository.kt:303-309`), so opening a large video's preview in the picker can take minutes and fill the cache.
-- Duration is reported as null when unknown (`ImmichCloudMediaProvider.kt:327`); PLAN 2.8 plans to report 0.
+- Duration is reported as null when unknown (`ImmichCloudMediaProvider.kt:327`); [#19](https://github.com/keithvassallomt/nc-media-provider/issues/19) plans to report 0.
 
 ## 8. Build setup
 
@@ -295,7 +295,7 @@ The resolved release runtime tree contains only AndroidX, Kotlin, JetBrains anno
 Two F-Droid build points that are not licence issues:
 
 - AGP embeds an encrypted dependency-info block in the APK signing block. F-Droid's scanner rejects it, so set `dependenciesInfo { includeInApk = false; includeInBundle = false }`. The base does not.
-- `androidx.profileinstaller` comes in transitively. Baseline profiles have caused non-reproducible builds before; check this when we set up reproducible builds (PLAN 9.2).
+- `androidx.profileinstaller` comes in transitively. Baseline profiles have caused non-reproducible builds before; check this when we set up reproducible builds ([#51](https://github.com/keithvassallomt/nc-media-provider/issues/51)).
 
 ### 8.3 Tests and CI
 
@@ -324,11 +324,11 @@ AGP 9.3.1 with Gradle 9.6.1 and Kotlin 2.4.10 is the combination Keith's Ari pro
 
 A `javap` diff of the `CloudMediaProvider`, `CloudMediaProviderContract` and `MediaStore` cloud APIs:
 
-- 36 to 36.1 adds `MEDIA_CATEGORY_TYPE_USER_ALBUMS` and `Capabilities.Builder.setAlbumsAsCategoryEnabled`. Relevant to PLAN Phase 7: the newer picker may want albums as a category.
+- 36 to 36.1 adds `MEDIA_CATEGORY_TYPE_USER_ALBUMS` and `Capabilities.Builder.setAlbumsAsCategoryEnabled`. Relevant to Phase 7 ([#42](https://github.com/keithvassallomt/nc-media-provider/issues/42)): the newer picker may want albums as a category.
 - 36.1 to 37 changes nothing in the cloud media API.
 - API 37 adds `android.permission.ACCESS_LOCAL_NETWORK`.
 
-### 9.3 Recommendation for PLAN 0.3
+### 9.3 Recommendation for 0.3
 
 - **compileSdk 37, targetSdk 37, minSdk 34.** Android 17 is released, both test phones run SDK 37, and the platform is installed. There is no cloud-media API reason to prefer 36 or 37, so target the platform our users actually run.
 - **AGP 9.3.1, Gradle 9.6.1, Kotlin 2.4.10** through AGP's built-in Kotlin. Proven on this machine; AGP 8.11 only warns about SDK 37 today and Gradle 8.13 cannot run on the JBR that this machine's Gradle config selects.
@@ -349,26 +349,26 @@ followed by the standard MIT permission and warranty text, identical to ours. Th
 
 Our `LICENSE` currently carries only "Copyright (c) 2026 Keith Vassallo". Once any base code is copied in (Phase 1.1), add the base's copyright line above or below ours in the same file. The permission text is identical, so one notice covers both. Keep the README credit.
 
-## 11. Surprises, risks and contradictions with PLAN.md
+## 11. Surprises, risks and contradictions with the plan
 
-1. **No local database.** PLAN's architecture diagram says the provider is "kept" and only the backend changes. In the base, the provider pages straight through to Immich, so swapping the backend means rewiring every query to Room. This is the main reason the provider is Adapt rather than Keep.
+1. **No local database.** The plan's architecture diagram says the provider is "kept" and only the backend changes. In the base, the provider pages straight through to Immich, so swapping the backend means rewiring every query to Room. This is the main reason the provider is Adapt rather than Keep.
 2. **Network is bounded, not avoided.** Only `onGetMediaCollectionInfo` is network-free. Media, albums, previews and originals all block binder threads on HTTP (section 4).
 3. **Keystore on the 100 ms path.** `isConfigured` decrypts the key on a cold process inside `onGetMediaCollectionInfo` (section 4). Easy to fix, easy to copy by mistake.
-4. **The rules PLAN credits are five days old.** The honoured `EXTRA_SYNC_GENERATION` and `notifyCloudMediaChangedEvent` arrived in v0.4.2 (2026-09-27). The base is young (8 commits, one author, two months), built and tested for an OPPO Find X9 Pro on ColorOS 16, with no mention of Pixels or GrapheneOS.
-5. **The GPL caveat is confirmed by the history.** The very first commit is titled "Initial sanitized Immich media picker". The risk assessment in PLAN stands; nothing in the code needs to change because of it.
-6. **Activation removes Google Photos** and always reboots (section 5). PLAN already knew about the replace; the `put` fallback, the reboot, the `get`-based verification, the missing restore and the missing `<queries>` entry are new findings.
+4. **The rules the plan credits are five days old.** The honoured `EXTRA_SYNC_GENERATION` and `notifyCloudMediaChangedEvent` arrived in v0.4.2 (2026-09-27). The base is young (8 commits, one author, two months), built and tested for an OPPO Find X9 Pro on ColorOS 16, with no mention of Pixels or GrapheneOS.
+5. **The GPL caveat is confirmed by the history.** The very first commit is titled "Initial sanitized Immich media picker". The risk assessment in the plan stands; nothing in the code needs to change because of it.
+6. **Activation removes Google Photos** and always reboots (section 5). The plan already knew about the replace; the `put` fallback, the reboot, the `get`-based verification, the missing restore and the missing `<queries>` entry are new findings.
 7. **Deletions older than 8 generations are lost** (section 6). Our journal must handle a picker that falls far behind.
-8. **Originals cache is keyed by asset ID only** (`ImmichRepository.kt:272`) and holds up to 2 GiB. An edited file on the server would be served stale. Our keys must include the etag. PLAN mentions a 256 MiB thumbnail cache but no originals cache size; 2 GiB of LRU originals sits uneasily with "never keep a full local mirror" on small phones and probably wants a setting (PLAN 8.2).
+8. **Originals cache is keyed by asset ID only** (`ImmichRepository.kt:272`) and holds up to 2 GiB. An edited file on the server would be served stale. Our keys must include the etag. The plan mentions a 256 MiB thumbnail cache but no originals cache size; 2 GiB of LRU originals sits uneasily with "never keep a full local mirror" on small phones and probably wants a setting ([#48](https://github.com/keithvassallomt/nc-media-provider/issues/48)).
 9. **Video goes through full downloads only** (section 7). Large videos in `onOpenMedia` and in video previews depend on finishing within 120 s. Phase 5.2 and 5.4 are all new code.
-10. **Orientation.** The base sets the `ORIENTATION` column from EXIF while serving server-rendered thumbnails. This is the double-rotation question PLAN 5.1 already lists as unverified; the base gives no evidence either way.
-11. **Date taken can be 0.** The base forces size to at least 1 byte but sends a date of 0 when Immich has none, which PLAN's research says makes the picker drop the row. PLAN 2.9's safety net covers this.
-12. **Column order.** The base's projection (`ImmichCloudMediaProvider.kt:442-455`) has all 12 media columns but in its own order. PLAN 1.4 wants AOSP's order; whether order matters is still on PLAN's unverified list.
+10. **Orientation.** The base sets the `ORIENTATION` column from EXIF while serving server-rendered thumbnails. This is the double-rotation question [#33](https://github.com/keithvassallomt/nc-media-provider/issues/33) already lists as unverified; the base gives no evidence either way.
+11. **Date taken can be 0.** The base forces size to at least 1 byte but sends a date of 0 when Immich has none, which the plan's research says makes the picker drop the row. [#20](https://github.com/keithvassallomt/nc-media-provider/issues/20)'s safety net covers this.
+12. **Column order.** The base's projection (`ImmichCloudMediaProvider.kt:442-455`) has all 12 media columns but in its own order. [#9](https://github.com/keithvassallomt/nc-media-provider/issues/9) wants AOSP's order; whether order matters is still on the plan's unverified list.
 13. **Local index timing.** Rows go out without `MEDIA_STORE_URI` if the local snapshot is not ready, and MediaProvider caches them that way (the base's own comment, `ImmichCloudMediaProvider.kt:38-41`). With Room, a local match found later must bump that row's generation so the picker picks it up.
 14. **`uses-permission MANAGE_CLOUD_MEDIA_PROVIDERS`** in the manifest (line 9) is never granted to a user app. Harmless; the provider's `android:permission` is what matters.
-15. **Cleartext is allowed app-wide** (`usesCleartextTraffic="true"` and the network security config) for LAN Immich servers. PLAN doesn't decide this for Nextcloud.
+15. **Cleartext is allowed app-wide** (`usesCleartextTraffic="true"` and the network security config) for LAN Immich servers. The plan doesn't decide this for Nextcloud.
 16. **Build side effects on this machine** from the trial builds: Build-Tools 35.0.0 was installed into `~/Android/Sdk/build-tools/35.0.0`, and the Gradle 8.13 distribution was downloaded into `~/.gradle/wrapper/dists/`. Both can be deleted.
 
-Suggested PLAN.md edits, for whoever updates it:
+Suggested edits to the plan, for whoever updated it:
 
 - Decisions table, Toolchain row: compileSdk and targetSdk 37, AGP 9.3.1, Gradle 9.6.1, Kotlin 2.4.10, JVM target 17, daemon on JDK 21 or 25.
 - 0.3 Keep list: move the provider shell, credential store, local index, setup screen and Shizuku activation to "Adapt", and add `ImmichRepository` and `SyncStateStore` to Replace.

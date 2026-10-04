@@ -14,7 +14,7 @@ class DeviceConfigUserService() : IActivationService.Stub() {
     /**
      * Writes the allow-list and feature flag as local overrides, starting from MediaProvider's
      * effective list so other providers stay allowed, then checks the result through MediaProvider
-     * itself rather than `device_config get` (PLAN 4.6). There is deliberately no fallback to
+     * itself rather than `device_config get` (#31). There is deliberately no fallback to
      * `put`: a `put` value can be overwritten by the server sync, and `clear_override` would not
      * undo it.
      */

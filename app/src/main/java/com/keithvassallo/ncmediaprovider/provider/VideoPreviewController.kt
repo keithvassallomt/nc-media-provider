@@ -25,7 +25,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.keithvassallo.ncmediaprovider.data.LibraryRepository
 
 /**
- * Plays videos in the picker's preview (PLAN 5.4). The picker hands over a surface per previewed
+ * Plays videos in the picker's preview (#36). The picker hands over a surface per previewed
  * item and asks for play, pause and seek; this answers with playback states. One ExoPlayer on its
  * own thread plays whichever surface was created or played last. A video that is also on the phone
  * plays from there; otherwise it streams from the server with the app's sign-in. The network is

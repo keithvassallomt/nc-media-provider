@@ -9,7 +9,7 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Nextcloud Photos albums (PLAN 7.1), against responses saved from the test servers: alice's own
+ * Nextcloud Photos albums (#43), against responses saved from the test servers: alice's own
  * album "Holiday", and "Road trip", which bob shares with her. One of its photos is in bob's
  * folder shared with alice, the other only in the album.
  */

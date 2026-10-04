@@ -39,7 +39,7 @@ import androidx.appcompat.R as AppCompatR
 import com.google.android.material.R as MaterialR
 
 /**
- * Onboarding (PLAN 9.3): four steps as a checklist, in the order that fails fastest. Turning the
+ * Onboarding (#52): four steps as a checklist, in the order that fails fastest. Turning the
  * app on in the picker comes first, since a phone that can't do it needs nothing else; then signing
  * in, the folders and a few extras. Each step's state is read from the app and the phone, not kept
  * here, so leaving halfway and coming back resumes where things stand.

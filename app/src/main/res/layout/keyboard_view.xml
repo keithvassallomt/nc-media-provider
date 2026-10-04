@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The photo keyboard (PLAN 4.8): tabs for recent photos, albums, people and favourites, a grid
+<!-- The photo keyboard (#60): tabs for recent photos, albums, people and favourites, a grid
      by month with a rail of years, and a way back to the usual keyboard. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"

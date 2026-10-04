@@ -3,7 +3,7 @@ package com.keithvassallo.ncmediaprovider.data
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** Live photos paired by name (PLAN 5.5). */
+/** Live photos paired by name (#37). */
 class LivePhotosTest {
     private fun media(id: String, name: String, durationMillis: Long = 0L, folder: String = "/Photos/") = MediaItem(
         id, "/dav$folder$name", "e$id", name,

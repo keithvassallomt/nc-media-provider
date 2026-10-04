@@ -90,7 +90,7 @@ class NcCloudMediaProvider : CloudMediaProvider() {
         return result
     }
 
-    /** Video playback in the picker's preview (PLAN 5.4); none until the library is set up. */
+    /** Video playback in the picker's preview (#36); none until the library is set up. */
     override fun onCreateCloudMediaSurfaceController(
         config: Bundle,
         callback: CloudMediaSurfaceStateChangedCallback,
@@ -103,7 +103,7 @@ class NcCloudMediaProvider : CloudMediaProvider() {
 
     override fun onQueryMedia(extras: Bundle): Cursor {
         enforceSystemCaller()
-        // Only the selected provider is asked for media; an update will deselect it (PLAN 4.6).
+        // Only the selected provider is asked for media; an update will deselect it (#31).
         repository.noteSelectedProvider(true)
         val albumId = extras.getString(CloudMediaProviderContract.EXTRA_ALBUM_ID)
         val pageSize = extras.pageSize(DEFAULT_PAGE_SIZE)
@@ -113,7 +113,7 @@ class NcCloudMediaProvider : CloudMediaProvider() {
         val sinceGeneration = extras.takeIf { it.containsKey(CloudMediaProviderContract.EXTRA_SYNC_GENERATION) }
             ?.getLong(CloudMediaProviderContract.EXTRA_SYNC_GENERATION)
         val collection = queryCollection()
-        // An album's photos and videos come whole each time, a page at a time (PLAN 7.1).
+        // An album's photos and videos come whole each time, a page at a time (#43).
         val page = if (albumId == null) {
             safelyQuery { repository.queryMedia(pageSize, pageToken, sinceGeneration) }
         } else {
@@ -163,7 +163,7 @@ class NcCloudMediaProvider : CloudMediaProvider() {
     }
 
     /**
-     * The user's Nextcloud Photos albums, own and shared (PLAN 7.1), from the database. Only albums
+     * The user's Nextcloud Photos albums, own and shared (#43), from the database. Only albums
      * with something to show are listed, each with a cover, which the newer picker requires.
      */
     override fun onQueryAlbums(extras: Bundle): Cursor {
@@ -180,7 +180,7 @@ class NcCloudMediaProvider : CloudMediaProvider() {
     }
 
     /**
-     * What the newer picker may ask for (PLAN 7.3): categories, for its People section, when the
+     * What the newer picker may ask for (#45): categories, for its People section, when the
      * last sync found people. Called often and on the picker's thread, so it reads a preference.
      */
     override fun onGetCapabilities(): CloudMediaProviderContract.Capabilities =
@@ -290,7 +290,7 @@ class NcCloudMediaProvider : CloudMediaProvider() {
             CloudMediaProviderContract.EXTRA_PREVIEW_THUMBNAIL,
             false,
         ) ?: false
-        // Which sizes the picker asks for decides what the thumbnail pre-cache keeps (PLAN 5.6).
+        // Which sizes the picker asks for decides what the thumbnail pre-cache keeps (#59).
         if (REQUESTED_PREVIEW_SIZES.add("${size.x}x${size.y}/$thumbnailOnly")) {
             Log.i(TAG, "onOpenPreview size ${size.x}x${size.y}, thumbnail=$thumbnailOnly")
         }
@@ -314,7 +314,7 @@ class NcCloudMediaProvider : CloudMediaProvider() {
     private fun mediaCursor(page: Page<MediaItem>): MatrixCursor =
         MatrixCursor(MEDIA_PROJECTION).apply {
             page.items.forEach { item ->
-                // Matched ahead of time and stored with the row (PLAN 3.2): MediaProvider keeps rows
+                // Matched ahead of time and stored with the row (#23): MediaProvider keeps rows
                 // as sent, so a match worked out here, when the picker asks, could never be revised.
                 val localUri = item.mediaStoreUri
                 PickerRowCheck.problem(item, localUri)?.let { problem ->
@@ -326,7 +326,7 @@ class NcCloudMediaProvider : CloudMediaProvider() {
                         item.id,
                         item.dateTakenMillis,
                         // The generation this row last changed in, so an incremental sync only
-                        // receives what changed (PLAN 2.3).
+                        // receives what changed (#14).
                         item.generation,
                         item.mimeType,
                         standardMimeExtension(item.mimeType),
@@ -337,7 +337,7 @@ class NcCloudMediaProvider : CloudMediaProvider() {
                         item.width.takeIf { it > 0 },
                         item.height.takeIf { it > 0 },
                         // Nextcloud previews arrive already rotated, with EXIF stripped, and its
-                        // reported sizes are in display orientation (PLAN 0.2), so nothing to rotate.
+                        // reported sizes are in display orientation (#3), so nothing to rotate.
                         0,
                     ),
                 )
@@ -362,7 +362,7 @@ class NcCloudMediaProvider : CloudMediaProvider() {
 
     /**
      * Asks for a sync at most every [SYNC_CHECK_INTERVAL_MS]. The sync itself runs as a WorkManager
-     * job, which keeps network access after this call returns (PLAN 2.5a), and tells MediaProvider
+     * job, which keeps network access after this call returns (#16), and tells MediaProvider
      * itself when the library changed.
      */
     private fun scheduleSyncCheck() {
@@ -428,7 +428,7 @@ class NcCloudMediaProvider : CloudMediaProvider() {
         /** Keeps a burst of picker callbacks from asking for one sync after another. */
         val LAST_SYNC_REQUEST = AtomicLong(0L)
 
-        // Intended to match the order AOSP's own test providers use (PLAN 1.4). Unverified, and the
+        // Intended to match the order AOSP's own test providers use (#9). Unverified, and the
         // picker is expected to read columns by name, so this is a precaution, not a requirement.
         val MEDIA_PROJECTION = arrayOf(
             CloudMediaProviderContract.MediaColumns.ID,

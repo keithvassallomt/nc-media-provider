@@ -6,7 +6,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 
 /**
- * Downloads grid thumbnails ahead of time (PLAN 5.6), so the picker and Send from Nextcloud show the
+ * Downloads grid thumbnails ahead of time (#59), so the picker and Send from Nextcloud show the
  * library at once instead of tile by tile. WorkManager runs it again when it stopped it early or the
  * network failed; already cached thumbnails are skipped, so a run carries on where the last stopped.
  */

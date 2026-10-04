@@ -17,7 +17,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Runs the real Room store on an in-memory SQLite database (PLAN 2.1 and 2.3). A plain Application
+ * Runs the real Room store on an in-memory SQLite database (#12 and #14). A plain Application
  * keeps the app's own start-up (debug sign-in, Keystore, WorkManager) out of the test.
  */
 @RunWith(RobolectricTestRunner::class)

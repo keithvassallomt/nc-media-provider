@@ -20,7 +20,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 
 /**
- * Every exported schema version migrates to the current one with its rows intact (PLAN 9.6). Room's
+ * Every exported schema version migrates to the current one with its rows intact (#55). Room's
  * MigrationTestHelper builds each old version from its exported schema, runs the app's own
  * auto-migrations and checks the result against the current schema. Version 1 has no path on
  * purpose; [LibraryRebuildTest] covers what happens to it.
@@ -81,7 +81,7 @@ class LibraryMigrationTest {
         assertEquals(1_700_000_000_000L, photo["listedDateMillis"])
         assertEquals(4032L, photo["listedWidth"])
         assertEquals(3024L, photo["listedHeight"])
-        // The app reads these from video headers and Memories at the next sync (PLAN 6.0 and 6.2).
+        // The app reads these from video headers and Memories at the next sync (#62 and #40).
         assertEquals(0L, photo["recordedMillis"])
         assertEquals(0L, photo["isLiveVideo"])
         database.close()
@@ -110,7 +110,7 @@ class LibraryMigrationTest {
      */
     private fun added(table: String, column: String, row: Row): Any? = when ("$table.$column") {
         "media.mediaStoreUri" -> null
-        // ListedValuesMigration: until schema 7 the stored values were the listing's (PLAN 6.0 and 6.2).
+        // ListedValuesMigration: until schema 7 the stored values were the listing's (#62 and #40).
         "media.listedDateMillis" -> row["dateTakenMillis"]
         "media.listedWidth" -> row["width"]
         "media.listedHeight" -> row["height"]

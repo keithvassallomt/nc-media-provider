@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Storage (PLAN 5.6 and 8.2): how much the thumbnail pre-cache keeps, by size on a slider or by date
+ * Storage (#59 and #48): how much the thumbnail pre-cache keeps, by size on a slider or by date
  * with shortcuts, with a live estimate of what fits; and the space for photos and videos opened.
  */
 class StorageActivity : AppCompatActivity() {

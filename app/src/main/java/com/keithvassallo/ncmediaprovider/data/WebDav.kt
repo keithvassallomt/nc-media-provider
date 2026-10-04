@@ -51,7 +51,7 @@ object SearchRequest {
 
     /**
      * Marker files that hide their folder, and everything below it, from Nextcloud Photos and
-     * Memories. The app hides those folders too unless the user turns that off (PLAN 2.2).
+     * Memories. The app hides those folders too unless the user turns that off (#13).
      */
     val HIDING_MARKERS = listOf(".nomedia", ".noimage", ".nomemories")
 
@@ -73,7 +73,7 @@ object SearchRequest {
         return search(FILE_PROPS, userId, folders, where, orderBy, limit)
     }
 
-    /** Every folder under [folders] with its etag, in one request (PLAN 2.4). Not the folders themselves. */
+    /** Every folder under [folders] with its etag, in one request (#15). Not the folders themselves. */
     fun folders(userId: String, folders: List<String>): String = search(
         "<d:getetag/><d:resourcetype/>", userId, folders,
         "<d:eq><d:prop><d:getcontenttype/></d:prop><d:literal>httpd/unix-directory</d:literal></d:eq>",
@@ -141,7 +141,7 @@ object PropfindRequest {
 <d:getlastmodified/><oc:favorite/><nc:hidden/><nc:metadata-photos-original_date_time/>
 <nc:metadata-photos-size/><d:resourcetype/></d:prop></d:propfind>"""
 
-    /** Nextcloud Photos albums: how many files, the cover and the date range (PLAN 7.1). */
+    /** Nextcloud Photos albums: how many files, the cover and the date range (#43). */
     val ALBUMS = """<?xml version="1.0" encoding="UTF-8"?>
 <d:propfind $NAMESPACES><d:prop><nc:nbItems/><nc:last-photo/><nc:dateRange/></d:prop></d:propfind>"""
 
@@ -152,7 +152,7 @@ object PropfindRequest {
 
 private const val NAMESPACES = """xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns""""
 
-/** A folder or file seen in a listing, with just enough to compare it (PLAN 2.4). */
+/** A folder or file seen in a listing, with just enough to compare it (#15). */
 data class DavEntry(
     val href: String,
     val etag: String,
@@ -164,7 +164,7 @@ data class DavEntry(
     val name: String get() = percentDecode(href.trimEnd('/').substringAfterLast('/'))
 }
 
-/** Decoded folder path ending in '/': the key folders and their files are matched on (PLAN 2.4). */
+/** Decoded folder path ending in '/': the key folders and their files are matched on (#15). */
 internal fun folderKey(folderHref: String): String = percentDecode(folderHref).let { if (it.endsWith('/')) it else "$it/" }
 
 /** [folderKey] of the folder holding a file. */
@@ -178,7 +178,7 @@ internal fun isInsideAny(folder: String, folders: Collection<String>): Boolean =
  * A full listing. Each file is in it once, although Nextcloud shows a file at two paths when it is
  * reachable through two mounts (a share and a share of one of its subfolders, say): the
  * alphabetically first path wins, so the choice doesn't flip between listings. [duplicates] counts
- * the files seen at more than one path (PLAN 2.2).
+ * the files seen at more than one path (#13).
  */
 internal class Listing(val files: List<RemoteFile>, val duplicates: Int)
 

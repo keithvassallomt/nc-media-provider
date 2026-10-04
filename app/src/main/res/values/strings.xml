@@ -198,7 +198,7 @@
     <string name="diagnostics_no_error">none</string>
     <string name="cache_loading">Calculating cache usage…</string>
 
-    <!-- Onboarding (PLAN 9.3). -->
+    <!-- Onboarding (#52). -->
     <string name="onboarding_title">Let’s get set up</string>
     <string name="onboarding_subtitle">You only need to do this once.</string>
     <string name="onboarding_progress">%1$d of 4 done</string>
@@ -245,7 +245,7 @@
     <string name="extra_keyboard_title">Photo keyboard</string>
     <string name="extra_keyboard_detail">Insert Nextcloud photos in apps that have no photo picker</string>
 
-    <!-- The home screen (PLAN 9.3). -->
+    <!-- The home screen (#52). -->
     <string name="home_in_picker">In the picker</string>
     <plurals name="home_items">
         <item quantity="one">photo or video</item>

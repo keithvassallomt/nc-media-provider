@@ -10,7 +10,7 @@ import com.google.android.material.color.MaterialColors
 
 /**
  * Labelled marks under a slider, at fractions of its track: where the pre-cache's date shortcuts
- * fall on the size slider (PLAN 5.6). Decorative; the shortcut buttons say the same.
+ * fall on the size slider (#59). Decorative; the shortcut buttons say the same.
  */
 class SliderTicks @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
     private var ticks: List<Pair<Float, String>> = emptyList()

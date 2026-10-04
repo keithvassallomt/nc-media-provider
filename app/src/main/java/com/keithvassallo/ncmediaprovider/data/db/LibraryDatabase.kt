@@ -35,10 +35,10 @@ data class DeletedMedia(
     val deletedAtMillis: Long,
 )
 
-/** A row's match to the phone's own copy (PLAN 3.2). */
+/** A row's match to the phone's own copy (#23). */
 data class LocalMatch(val id: String, val mediaStoreUri: String)
 
-/** The etag a folder had at the last check (PLAN 2.4); keyed by its decoded path ending in '/'. */
+/** The etag a folder had at the last check (#15); keyed by its decoded path ending in '/'. */
 @Entity(tableName = "folder")
 data class FolderEtag(
     @PrimaryKey val path: String,
@@ -56,7 +56,7 @@ data class SyncState(
     val epoch: Long = 0L,
     /** Which server, user and folders this library holds; a change starts a new library. */
     val sourceKey: String = "",
-    /** Journal rows at or below this generation were pruned (PLAN 2.3). */
+    /** Journal rows at or below this generation were pruned (#14). */
     val deletionFloor: Long = 0L,
     val lastFullListingMillis: Long = 0L,
     /** True once one complete listing has been committed. */
@@ -72,7 +72,7 @@ data class SyncState(
     /** Whether the last full listing hid those folders; listings before schema 3 didn't. */
     @ColumnInfo(defaultValue = "0")
     val respectsNoMedia: Boolean = false,
-    /** Some file is reachable at two paths, which makes removed folders need a full listing (PLAN 2.2). */
+    /** Some file is reachable at two paths, which makes removed folders need a full listing (#13). */
     @ColumnInfo(defaultValue = "0")
     val duplicatePaths: Boolean = false,
     /** When the last sync finished, whether or not it found anything. */
@@ -119,25 +119,25 @@ interface LibraryDao {
     @Query("SELECT COUNT(*) FROM media WHERE mediaStoreUri IS NOT NULL")
     fun matchedCount(): Int
 
-    /** Rows taken at or after [since], for the pre-cache's estimate (PLAN 5.6). */
+    /** Rows taken at or after [since], for the pre-cache's estimate (#59). */
     @Query("SELECT COUNT(*) FROM media WHERE dateTakenMillis >= :since AND isLiveVideo = 0")
     fun countTakenSince(since: Long): Int
 
-    /** Photos and videos per month in local time, newest first, for the pre-cache's estimates (PLAN 5.6). */
+    /** Photos and videos per month in local time, newest first, for the pre-cache's estimates (#59). */
     @Query(
         "SELECT strftime('%Y-%m', dateTakenMillis / 1000, 'unixepoch', 'localtime') AS month, COUNT(*) AS count " +
             "FROM media WHERE isLiveVideo = 0 GROUP BY month ORDER BY month DESC",
     )
     fun monthCounts(): List<MonthCount>
 
-    /** Videos whose header hasn't been read yet (a 0 duration or recording time), newest first (PLAN 5.3 and 6.0). */
+    /** Videos whose header hasn't been read yet (a 0 duration or recording time), newest first (#35 and #62). */
     @Query(
         "SELECT * FROM media WHERE mimeType LIKE 'video/%' AND (durationMillis = 0 OR recordedMillis = 0) " +
             "ORDER BY dateTakenMillis DESC LIMIT :limit",
     )
     fun videosWithoutHeader(limit: Int): List<MediaItem>
 
-    /** Newest first by date taken, after the keyset position ([beforeDate], [beforeId]) (PLAN 4.8). */
+    /** Newest first by date taken, after the keyset position ([beforeDate], [beforeId]) (#60). */
     @Query(
         "SELECT * FROM media WHERE mimeType LIKE :mimePrefix || '%' AND isLiveVideo = 0 " +
             "AND (dateTakenMillis < :beforeDate OR (dateTakenMillis = :beforeDate AND id < :beforeId)) " +
@@ -145,7 +145,7 @@ interface LibraryDao {
     )
     fun newestPage(mimePrefix: String, beforeDate: Long, beforeId: String, limit: Int): List<MediaItem>
 
-    /** The photo keyboard's grid (PLAN 4.8): older than the keyset position, newest first; favourites only when asked. */
+    /** The photo keyboard's grid (#60): older than the keyset position, newest first; favourites only when asked. */
     @Query(
         "SELECT * FROM media WHERE mimeType LIKE :mimePrefix || '%' AND isLiveVideo = 0 AND (:favouritesOnly = 0 OR isFavorite = 1) " +
             "AND (dateTakenMillis < :date OR (dateTakenMillis = :date AND id < :id)) " +
@@ -176,14 +176,14 @@ interface LibraryDao {
     @Query("DELETE FROM folder")
     fun clearFolders()
 
-    /** Rows the picker shows: live-photo videos are reported to it as deleted (PLAN 6.2). */
+    /** Rows the picker shows: live-photo videos are reported to it as deleted (#40). */
     @Query("SELECT COUNT(*) FROM media WHERE isLiveVideo = 0")
     fun mediaCount(): Int
 
     @Query("SELECT COUNT(*) FROM media WHERE isLiveVideo = 1")
     fun liveVideoCount(): Int
 
-    /** Rows whose values come from Memories: it indexed the file as it is now (PLAN 6.2). */
+    /** Rows whose values come from Memories: it indexed the file as it is now (#40). */
     @Query("SELECT COUNT(*) FROM media f JOIN memories_file m ON m.id = f.id AND m.etag = f.etag")
     fun memoriesMatchedCount(): Int
 
@@ -336,7 +336,7 @@ interface LibraryDao {
 
     /**
      * Rows changed after [since], up to [top], after the keyset position ([afterGeneration], [afterId]).
-     * Live-photo videos are left out: the deletion journal reports them (PLAN 6.2).
+     * Live-photo videos are left out: the deletion journal reports them (#40).
      */
     @Query(
         "SELECT * FROM media WHERE generation > :since AND generation <= :top AND isLiveVideo = 0 " +
@@ -367,7 +367,7 @@ interface LibraryDao {
 
 /**
  * Rows stored before schema 7 hold the listing's values only, so those become the listed values
- * too; the next sync's header reads and Memories pass add the rest (PLAN 6.0 and 6.2).
+ * too; the next sync's header reads and Memories pass add the rest (#62 and #40).
  */
 class ListedValuesMigration : AutoMigrationSpec {
     override fun onPostMigrate(connection: SQLiteConnection) {
@@ -399,7 +399,7 @@ abstract class LibraryDatabase : RoomDatabase() {
         private const val NAME = "library.db"
 
         /**
-         * Opens the library, rebuilding it when it can't be brought up to this version (PLAN 9.6).
+         * Opens the library, rebuilding it when it can't be brought up to this version (#55).
          * The library is a cache of the server plus sync state, so starting over is always safe:
          * the empty sync state gets a new instance ID and so a new collection ID, and MediaProvider
          * drops what it had and syncs again. A database left at an old version instead would fail
@@ -434,7 +434,7 @@ abstract class LibraryDatabase : RoomDatabase() {
         /** Opening runs any migration now, where a failure can still be handled, not at the first query. */
         private fun LibraryDatabase.opened(): LibraryDatabase = apply { openHelper.writableDatabase }
 
-        /** One warning line when Room's destructive fallback rebuilds the library (PLAN 9.6). */
+        /** One warning line when Room's destructive fallback rebuilds the library (#55). */
         private object RebuildLog : RoomDatabase.Callback() {
             override fun onDestructiveMigration(connection: SQLiteConnection) {
                 // Room writes the new version after this, so the file still says which one it was.

@@ -1,7 +1,7 @@
 package com.keithvassallo.ncmediaprovider.data
 
 /**
- * Which preview to fetch for a tile (PLAN 5.1). The server makes 64, 256 and 1024 px previews
+ * Which preview to fetch for a tile (#33). The server makes 64, 256 and 1024 px previews
  * natively; a tile gets the smallest of 256, 512 and 1024 that serves it with little enlargement.
  */
 internal object PreviewSizes {
@@ -37,7 +37,7 @@ internal object PreviewSizes {
 }
 
 /**
- * Which preview size this phone's picker grid uses, from the thumbnails it asks for (PLAN 5.6).
+ * Which preview size this phone's picker grid uses, from the thumbnails it asks for (#59).
  * After each [window] grid requests the size asked for most wins, but the pre-cache only ever
  * moves up: a larger thumbnail serves a smaller tile, so a foldable whose screens differ settles
  * on the larger instead of fetching everything again each time it is unfolded.

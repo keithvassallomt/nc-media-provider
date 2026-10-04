@@ -3,7 +3,7 @@ package com.keithvassallo.ncmediaprovider.ui
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** The bug report masks the server and the user name (PLAN 9.5). */
+/** The bug report masks the server and the user name (#54). */
 class BugReportTest {
     private val secrets = mapOf(
         "https://cloud.example.org" to "<server>",

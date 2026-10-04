@@ -1,6 +1,6 @@
 # Releasing
 
-GitHub Actions builds and publishes releases (PLAN 9.7). There are two workflows in `.github/workflows/`:
+GitHub Actions builds and publishes releases ([#56](https://github.com/keithvassallomt/nc-media-provider/issues/56)). There are two workflows in `.github/workflows/`:
 
 - `ci.yml` runs on every push and pull request to `main`: unit tests, lint and a debug APK. When a step fails, the test and lint reports are attached to the run as the `reports` artifact.
 - `release.yml` runs when a tag starting with `v` is pushed. It runs the unit tests, builds the signed APK and AAB, checks them, and publishes a GitHub release with both files and a `SHA256SUMS` file.

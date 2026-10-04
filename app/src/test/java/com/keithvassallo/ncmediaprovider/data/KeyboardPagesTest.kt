@@ -5,7 +5,7 @@ import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** An album's photos in the keyboard (PLAN 4.8), paged in memory both ways. */
+/** An album's photos in the keyboard (#60), paged in memory both ways. */
 class KeyboardPagesTest {
     private fun taken(year: Int, month: Int, day: Int) = LocalDate.of(year, month, day).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
 

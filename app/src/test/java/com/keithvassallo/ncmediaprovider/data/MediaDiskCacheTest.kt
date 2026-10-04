@@ -10,7 +10,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** The originals' limit as a setting, "Clear downloads" and the pre-cache switch (PLAN 8.2). */
+/** The originals' limit as a setting, "Clear downloads" and the pre-cache switch (#48). */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
 class MediaDiskCacheTest {

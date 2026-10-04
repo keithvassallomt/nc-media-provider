@@ -9,7 +9,7 @@ class LibrarySettings(context: Context) {
 
     /**
      * The library folders, as [normalizeFolders] returns them. Changing them starts a new library
-     * (PLAN 2.7). Chosen in the folder picker (PLAN 4.3); see [foldersChosen].
+     * (#18). Chosen in the folder picker (#28); see [foldersChosen].
      */
     var folders: List<String>
         get() {
@@ -41,13 +41,13 @@ class LibrarySettings(context: Context) {
 
     /**
      * Take dates, sizes and live-photo pairs from Memories when the server has a tested version
-     * (PLAN 6.1). Turning it off puts back the core values at the next sync.
+     * (#39). Turning it off puts back the core values at the next sync.
      */
     var useMemories: Boolean
         get() = preferences.getBoolean(KEY_USE_MEMORIES, true)
         set(value) = preferences.edit { putBoolean(KEY_USE_MEMORIES, value) }
 
-    /** Whether the last sync found people to show (PLAN 7.3); read on the picker's capabilities call. */
+    /** Whether the last sync found people to show (#45); read on the picker's capabilities call. */
     var peopleAvailable: Boolean
         get() = preferences.getBoolean(KEY_PEOPLE_AVAILABLE, false)
         set(value) = preferences.edit { putBoolean(KEY_PEOPLE_AVAILABLE, value) }
@@ -59,7 +59,7 @@ class LibrarySettings(context: Context) {
 
     /**
      * Whether this app was the picker's selected cloud provider when last seen, so an update that
-     * deselects it can select it again (PLAN 4.6).
+     * deselects it can select it again (#31).
      */
     var wasSelectedProvider: Boolean
         get() = preferences.getBoolean(KEY_WAS_SELECTED, false)
@@ -70,7 +70,7 @@ class LibrarySettings(context: Context) {
         get() = preferences.getLong(KEY_SELECTED_SEEN, 0L)
         set(value) = preferences.edit { putLong(KEY_SELECTED_SEEN, value) }
 
-    /** Download thumbnails ahead of time (PLAN 5.6). */
+    /** Download thumbnails ahead of time (#59). */
     var precacheEnabled: Boolean
         get() = preferences.getBoolean(KEY_PRECACHE, false)
         set(value) = preferences.edit { putBoolean(KEY_PRECACHE, value) }
@@ -85,12 +85,12 @@ class LibrarySettings(context: Context) {
         get() = preferences.getLong(KEY_PRECACHE_BYTES, 0L)
         set(value) = preferences.edit { putLong(KEY_PRECACHE_BYTES, value) }
 
-    /** The thumbnail size the pre-cache stores: what this phone's picker grid asks for (PLAN 5.6). */
+    /** The thumbnail size the pre-cache stores: what this phone's picker grid asks for (#59). */
     var precacheSizePx: Int
         get() = preferences.getInt(KEY_PRECACHE_SIZE, PreviewSizes.SMALL_PX)
         set(value) = preferences.edit { putInt(KEY_PRECACHE_SIZE, value) }
 
-    /** How much space downloaded originals may take (PLAN 8.2); the oldest-used go first. */
+    /** How much space downloaded originals may take (#48); the oldest-used go first. */
     var originalsCacheBytes: Long
         get() = preferences.getLong(KEY_ORIGINALS_CACHE, MediaDiskCache.Area.ORIGINAL.maximumBytes)
         set(value) = preferences.edit { putLong(KEY_ORIGINALS_CACHE, value) }
@@ -103,7 +103,7 @@ class LibrarySettings(context: Context) {
             putInt(KEY_PRECACHE_TOTAL, value.second)
         }
 
-    /** Why the last sync failed, for the diagnostics (PLAN 4.6); null after a sync succeeds. */
+    /** Why the last sync failed, for the diagnostics (#31); null after a sync succeeds. */
     var lastSyncError: String?
         get() = preferences.getString(KEY_LAST_SYNC_ERROR, null)
         set(value) = preferences.edit { putString(KEY_LAST_SYNC_ERROR, value) }

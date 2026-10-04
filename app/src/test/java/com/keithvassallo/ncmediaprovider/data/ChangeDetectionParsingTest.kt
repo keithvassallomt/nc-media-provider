@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** The PLAN 2.4 requests, parsed from real responses saved from the Nextcloud 35 test server. */
+/** The change-detection requests (#15), parsed from real responses saved from the Nextcloud 35 test server. */
 class ChangeDetectionParsingTest {
     private fun fixture(name: String) = File("../testdata/nextcloud/35-full/$name").inputStream()
 

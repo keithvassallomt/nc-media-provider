@@ -13,8 +13,8 @@ internal data class LibraryChanges(
  * Compares a listing with the stored rows. Only a [complete] listing can prove a file is gone: a
  * partial one (a first-import page, say) never deletes anything. Listings know nothing of what the
  * phone works out itself: a row keeps its local match until matching runs again, and a video its
- * header values while its etag is unchanged (PLAN 5.3 and 6.0). Each row's dates and sizes are then
- * resolved against what [memories] says of it (PLAN 6.2).
+ * header values while its etag is unchanged (#35 and #62). Each row's dates and sizes are then
+ * resolved against what [memories] says of it (#40).
  */
 internal fun diffLibrary(
     stored: Collection<MediaItem>,
@@ -55,7 +55,7 @@ internal fun MediaItem.sameContentAs(other: MediaItem): Boolean =
         recordedMillis == other.recordedMillis && isLiveVideo == other.isLiveVideo
 
 /**
- * A position in one sync pass (PLAN 2.3). [pass] says which query issued it: Android 17's picker can
+ * A position in one sync pass (#14). [pass] says which query issued it: Android 17's picker can
  * pass the last media token into the deletions query, so a token from the other pass means "start".
  * [top] pins the newest generation the pass may see, so a commit in the middle of a sync can't mix
  * two versions of the library. The rest is a keyset position: rows sort by (generation, id).

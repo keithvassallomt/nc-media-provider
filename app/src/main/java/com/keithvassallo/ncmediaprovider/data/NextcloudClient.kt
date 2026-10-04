@@ -26,7 +26,7 @@ class NextcloudClient {
         .addNetworkInterceptor { chain ->
             val request = chain.request()
             // The network security config permits cleartext so that LAN servers work; this keeps
-            // it to them (PLAN 4.2). The check runs once connected, before anything is sent.
+            // it to them (#27). The check runs once connected, before anything is sent.
             if (!request.url.isHttps) {
                 val address = chain.connection()?.route()?.socketAddress?.address
                 if (address == null || !isLocalNetworkAddress(address)) throw PlainHttpNotAllowedException()
@@ -113,7 +113,7 @@ class NextcloudClient {
             .filterNot(DavEntry::isFolder)
 
     /**
-     * The user's own Nextcloud Photos albums and those shared with them (PLAN 7.1), or null when
+     * The user's own Nextcloud Photos albums and those shared with them (#43), or null when
      * the Photos app isn't there for this user. An album's files come from [listDirectFiles] on its href.
      */
     fun listAlbums(account: NextcloudAccount): List<PhotosAlbumEntry>? {
@@ -163,7 +163,7 @@ class NextcloudClient {
     }
 
     /**
-     * [length] bytes of a file from [offset], for streaming (PLAN 5.2). [etag] pins the version: a
+     * [length] bytes of a file from [offset], for streaming (#34). [etag] pins the version: a
      * file that changes while it is being read fails with 412 instead of mixing two versions.
      */
     fun fetchRange(account: NextcloudAccount, href: String, etag: String, offset: Long, length: Int): ByteArray {
@@ -172,7 +172,7 @@ class NextcloudClient {
             .url(url)
             .header("Range", "bytes=$offset-${offset + length - 1}")
             // Photos' album files give their etag without quotes, and the server compares the
-            // header with it as it is (PLAN 7.1): quoted, every read through an album failed with 412.
+            // header with it as it is (#43): quoted, every read through an album failed with 412.
             .apply { if (etag.isNotEmpty()) header("If-Match", if (Albums.isAlbumPath(href)) etag else "\"$etag\"") }
         return execute(request, account, RANGE_TIMEOUT_SECONDS).use { response ->
             when (response.code) {
@@ -185,8 +185,8 @@ class NextcloudClient {
     }
 
     /**
-     * Makes calls signed in as [account], for a player that streams through this client (PLAN
-     * 5.4); credentials still go only to the account's server.
+     * Makes calls signed in as [account], for a player that streams through this client (#36);
+     * credentials still go only to the account's server.
      */
     fun callFactory(account: NextcloudAccount): Call.Factory = Call.Factory { request ->
         client.newCall(authenticated(request.newBuilder(), account).build())
@@ -195,7 +195,7 @@ class NextcloudClient {
     /** The full URL of a file the server listed by [href]. */
     fun fileUrl(account: NextcloudAccount, href: String): HttpUrl? = account.server().resolve(href)
 
-    /** The folders directly inside [folder], for the folder picker (PLAN 4.3). */
+    /** The folders directly inside [folder], for the folder picker (#28). */
     fun listChildFolders(account: NextcloudAccount, folder: String): List<DavEntry> {
         val request = Request.Builder()
             .url(account.userFolderUrl(folder))
@@ -218,7 +218,7 @@ class NextcloudClient {
     }
 
     /**
-     * Starts Login Flow v2 (PLAN 4.1). Nextcloud names the new app password after the User-Agent,
+     * Starts Login Flow v2 (#26). Nextcloud names the new app password after the User-Agent,
      * which is what the user later sees in their security settings.
      */
     fun startLogin(baseUrl: String): LoginFlow {
@@ -245,7 +245,7 @@ class NextcloudClient {
         }
     }
 
-    /** The user ID WebDAV paths use; the login name may be an email address (PLAN 4.1). */
+    /** The user ID WebDAV paths use; the login name may be an email address (#26). */
     fun userId(account: NextcloudAccount): String {
         val url = account.server().newBuilder().addPathSegments("ocs/v2.php/cloud/user").addQueryParameter("format", "json").build()
         return execute(Request.Builder().url(url).header("Accept", "application/json"), account, SEARCH_TIMEOUT_SECONDS).use { response ->
@@ -254,7 +254,7 @@ class NextcloudClient {
         }
     }
 
-    /** Memories' timeline folders, or null when Memories isn't installed (PLAN 4.3). */
+    /** Memories' timeline folders, or null when Memories isn't installed (#28). */
     fun memoriesTimelinePaths(account: NextcloudAccount): List<String>? {
         val url = account.server().newBuilder().addPathSegments("index.php/apps/memories/api/config").build()
         return execute(Request.Builder().url(url).header("Accept", "application/json"), account, SEARCH_TIMEOUT_SECONDS).use { response ->
@@ -268,7 +268,7 @@ class NextcloudClient {
 
     /**
      * Memories' version from its `api/describe`, or null when Memories isn't installed or this user
-     * can't use it (PLAN 6.1). Memories adds nothing to the OCS capabilities (Phase 0.2).
+     * can't use it (#39). Memories adds nothing to the OCS capabilities (Phase 0.2).
      */
     fun memoriesVersion(account: NextcloudAccount): String? = memoriesGet(account, "describe") { response ->
         when {
@@ -278,7 +278,7 @@ class NextcloudClient {
         }
     }
 
-    /** The days of the user's Memories timeline and how many files each holds (PLAN 6.2). */
+    /** The days of the user's Memories timeline and how many files each holds (#40). */
     fun memoriesDays(account: NextcloudAccount): Map<Int, Int> = memoriesGet(account, "days") { response ->
         if (!response.isSuccessful) throw response.toException()
         MemoriesApi.parseDays(response.body.string())
@@ -292,7 +292,7 @@ class NextcloudClient {
         }
 
     /**
-     * The user's face groups from Recognize, through Memories (PLAN 7.3), or null when the server
+     * The user's face groups from Recognize, through Memories (#45), or null when the server
      * has no Recognize behind Memories (Memories answers 412) or no Memories at all.
      */
     fun memoriesClusters(account: NextcloudAccount): List<MemoriesCluster>? = memoriesGet(account, "clusters/recognize") { response ->
@@ -335,7 +335,7 @@ class NextcloudClient {
     }
 
     /**
-     * Whether the user asked the server to wipe this device (PLAN 4.4). The app password is the
+     * Whether the user asked the server to wipe this device (#29). The app password is the
      * token; the call needs no other sign-in, so it still works once the password is refused.
      */
     fun wipeRequested(baseUrl: String, appPassword: String): Boolean {
@@ -359,7 +359,7 @@ class NextcloudClient {
         client.newCall(request.header("User-Agent", USER_AGENT).build()).execute().close()
     }
 
-    /** Deletes this app's app password on the server, on sign-out (PLAN 4.5). */
+    /** Deletes this app's app password on the server, on sign-out (#30). */
     fun revokeAppPassword(account: NextcloudAccount) {
         val url = account.server().newBuilder().addPathSegments("ocs/v2.php/core/apppassword").build()
         execute(Request.Builder().url(url).delete(), account, SEARCH_TIMEOUT_SECONDS).use { response ->
@@ -370,7 +370,7 @@ class NextcloudClient {
     /** Server-rendered preview, already rotated, cropped to cover a [sizePx] square. */
     /**
      * A preview of the file with [fileId]. [viaPhotos] uses the Photos app's endpoint, the one that
-     * can see files shared only through an album (PLAN 7.1; core's answers 404). It fits the image
+     * can see files shared only through an album (#43; core's answers 404). It fits the image
      * inside the box, where core's covers it.
      */
     fun downloadPreview(

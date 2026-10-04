@@ -53,7 +53,7 @@ class CredentialStore(context: Context) {
     fun load(): NextcloudAccount? = cached ?: decrypt()?.also { cached = it }
 
     /**
-     * Set when the server refused the app password (PLAN 4.4). Nothing talks to the server until the
+     * Set when the server refused the app password (#29). Nothing talks to the server until the
      * user signs in again: each refused request counts towards Nextcloud's brute-force throttling.
      */
     var signInRequired: Boolean

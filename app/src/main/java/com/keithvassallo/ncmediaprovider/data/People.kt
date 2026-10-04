@@ -7,7 +7,7 @@ import org.json.JSONArray
 import org.json.JSONException
 
 /**
- * A person: a face group from Recognize, read through Memories (PLAN 7.3). Recognize's own WebDAV
+ * A person: a face group from Recognize, read through Memories (#45). Recognize's own WebDAV
  * wants a server-side key, so Memories is the way in; a server without both has no people.
  */
 @Entity(tableName = "person")

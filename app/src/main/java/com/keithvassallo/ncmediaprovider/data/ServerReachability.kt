@@ -4,7 +4,7 @@ import java.io.FileNotFoundException
 
 /**
  * Whether the server can be reached right now, so a file that isn't cached fails at once instead
- * of making the picker, or the app it hands the file to, wait out a timeout (PLAN 8.1). Without a
+ * of making the picker, or the app it hands the file to, wait out a timeout (#47). Without a
  * network nothing is tried. After [failuresBeforeFailFast] requests in a row failed for want of
  * the server, nothing is tried for [failFastMillis]; any answer from the server clears that. One
  * failure isn't enough: a single slow thumbnail blanked whole screens in Phase 5. Thumbnails keep

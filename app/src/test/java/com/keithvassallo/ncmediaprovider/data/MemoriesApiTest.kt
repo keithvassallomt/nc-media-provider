@@ -9,7 +9,7 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Memories' timeline API is internal and undocumented (PLAN 6.3), so its parsing runs against real
+ * Memories' timeline API is internal and undocumented (#41), so its parsing runs against real
  * responses saved from the test servers: Memories 8.1.0 on Nextcloud 33, 9.0.1 on Nextcloud 35.
  */
 class MemoriesApiTest {

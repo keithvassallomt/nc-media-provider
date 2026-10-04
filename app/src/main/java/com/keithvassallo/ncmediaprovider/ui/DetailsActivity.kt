@@ -28,7 +28,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Details and troubleshooting: sync, whether Android lists and selects this app, activation with
- * Shizuku or adb and how to undo it, local network access, and diagnostics (PLAN 4.6). Everything
+ * Shizuku or adb and how to undo it, local network access, and diagnostics (#31). Everything
  * the home screen keeps out of the way.
  */
 class DetailsActivity : AppCompatActivity() {
@@ -152,7 +152,7 @@ class DetailsActivity : AppCompatActivity() {
         }.onFailure { binding.shizukuStatus.text = getString(R.string.shizuku_activation_failed, ShizukuActivator.describe(it)) }
     }
 
-    /** Sync progress and the last check (PLAN 2.5), from the sync jobs' WorkManager state. */
+    /** Sync progress and the last check (#16), from the sync jobs' WorkManager state. */
     private suspend fun renderSync(jobs: List<WorkInfo>) {
         val running = jobs.firstOrNull { it.state == WorkInfo.State.RUNNING }
         binding.syncProgress.visibility = if (running != null) View.VISIBLE else View.GONE
@@ -190,7 +190,7 @@ class DetailsActivity : AppCompatActivity() {
         }
     }
 
-    /** The diagnostics export for a bug report (PLAN 9.5), shared as text to wherever the user files it. */
+    /** The diagnostics export for a bug report (#54), shared as text to wherever the user files it. */
     private fun shareDiagnostics() {
         lifecycleScope.launch {
             val report = withContext(Dispatchers.IO) { BugReport.build(applicationContext, repository) }
@@ -218,7 +218,7 @@ class DetailsActivity : AppCompatActivity() {
         binding.grantLocalNetworkButton.visibility = if (granted) View.GONE else View.VISIBLE
     }
 
-    /** Diagnostics (PLAN 4.6): the library, the last sync, the caches and Memories. */
+    /** Diagnostics (#31): the library, the last sync, the caches and Memories. */
     private fun renderDiagnostics() {
         lifecycleScope.launch {
             val diagnostics = withContext(Dispatchers.IO) { repository.diagnostics() }

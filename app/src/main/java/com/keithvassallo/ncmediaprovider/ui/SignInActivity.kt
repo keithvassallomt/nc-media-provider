@@ -10,7 +10,7 @@ import com.keithvassallo.ncmediaprovider.data.LibraryRepository
 import com.keithvassallo.ncmediaprovider.databinding.ActivitySignInBinding
 
 /**
- * Signing in on its own screen (PLAN 4.1), for signing in again after the server refused the app's
+ * Signing in on its own screen (#26), for signing in again after the server refused the app's
  * password; first sign-in happens in onboarding. The flow itself is [LoginFlowController].
  */
 class SignInActivity : AppCompatActivity() {

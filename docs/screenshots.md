@@ -1,6 +1,6 @@
 # Screenshots
 
-For the setup guide (PLAN 9.3) and the Google Play listing (PLAN 9.1), taken on 2026-10-04 from a fresh install of the release build on the GrapheneOS phone. Server addresses and private photos are censored. Everything here is public.
+For the setup guide ([#52](https://github.com/keithvassallomt/nc-media-provider/issues/52)) and the Google Play listing ([#50](https://github.com/keithvassallomt/nc-media-provider/issues/50)), taken on 2026-10-04 from a fresh install of the release build on the GrapheneOS phone. Server addresses and private photos are censored. Everything here is public.
 
 ## Setup guide
 

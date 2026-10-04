@@ -5,7 +5,7 @@ import android.content.Intent
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 
-/** The Quick Settings tile for "Send from Nextcloud" (PLAN 4.7). A button, not a toggle. */
+/** The Quick Settings tile for "Send from Nextcloud" (#58). A button, not a toggle. */
 class SendFromNextcloudTileService : TileService() {
     override fun onStartListening() {
         qsTile?.apply {

@@ -20,7 +20,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 
 /**
- * A library the app can't bring up to this version is rebuilt through its real open path (PLAN 9.6):
+ * A library the app can't bring up to this version is rebuilt through its real open path (#55):
  * an empty database that works, with a new instance ID so the picker gets a new collection ID, and
  * one warning line saying so.
  */

@@ -14,7 +14,7 @@ data class ServerStatus(
     val majorVersion: Int get() = version.substringBefore('.').toIntOrNull() ?: 0
 }
 
-/** A started Login Flow v2 (PLAN 4.1): the page to open, and where to poll for the result. */
+/** A started Login Flow v2 (#26): the page to open, and where to poll for the result. */
 data class LoginFlow(val loginUrl: String, val pollEndpoint: String, val token: String)
 
 /** What Login Flow v2 hands back once the user approves this app in the browser. */

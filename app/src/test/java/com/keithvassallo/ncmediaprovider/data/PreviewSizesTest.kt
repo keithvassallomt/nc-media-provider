@@ -6,7 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Preview sizes (PLAN 5.1) and the pre-cache following the picker's grid (PLAN 5.6). */
+/** Preview sizes (#33) and the pre-cache following the picker's grid (#59). */
 class PreviewSizesTest {
     @Test
     fun `tiles get the smallest preview that serves them`() {

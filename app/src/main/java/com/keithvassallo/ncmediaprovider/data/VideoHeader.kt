@@ -3,7 +3,7 @@ package com.keithvassallo.ncmediaprovider.data
 import java.io.IOException
 
 /**
- * Reads a video's duration and recording time from its `moov` box (PLAN 5.3 and 6.0). Core
+ * Reads a video's duration and recording time from its `moov` box (#35 and #62). Core
  * Nextcloud keeps no video duration, and dates videos by their file name or upload time, so the app
  * reads both from the file itself: MP4 and QuickTime files are a list of boxes, each starting with
  * its size, so the `moov` box is found by reading box headers alone, a few bytes each, wherever the

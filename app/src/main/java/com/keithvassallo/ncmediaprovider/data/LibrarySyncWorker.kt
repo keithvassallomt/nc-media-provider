@@ -9,7 +9,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import java.io.IOException
 
-/** What a running sync is doing, shown in the app (PLAN 2.5). */
+/** What a running sync is doing, shown in the app (#16). */
 sealed interface SyncProgress {
     /** Comparing folder etags with the last check. */
     data object Checking : SyncProgress
@@ -21,7 +21,7 @@ sealed interface SyncProgress {
 /**
  * Runs [LibraryRepository.syncNow] as a WorkManager job. Jobs with a network constraint keep network
  * access while they run, which this app's own threads lose once MediaProvider's call returns
- * (PLAN 2.5a).
+ * (#16).
  */
 class LibrarySyncWorker(context: Context, parameters: WorkerParameters) : Worker(context, parameters) {
     override fun doWork(): Result = try {
@@ -51,7 +51,7 @@ class LibrarySyncWorker(context: Context, parameters: WorkerParameters) : Worker
         /** Input: true for a full listing rather than a change check. */
         const val KEY_FULL = "full"
 
-        /** Input: true to only check whether the server asked to wipe this device (PLAN 4.4). */
+        /** Input: true to only check whether the server asked to wipe this device (#29). */
         const val KEY_WIPE_CHECK = "wipe_check"
 
         private const val KEY_PHASE = "phase"

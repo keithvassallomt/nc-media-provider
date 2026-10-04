@@ -5,7 +5,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The pre-cache's limit on the Storage screen (PLAN 5.6). */
+/** The pre-cache's limit on the Storage screen (#59). */
 class PrecacheLimitsTest {
     private val mib = 1024L * 1024L
     private val gib = 1024L * mib

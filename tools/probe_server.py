@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Probe a Nextcloud server for the features nc-media-provider depends on (PLAN.md Phase 0.2).
+"""Probe a Nextcloud server for the features nc-media-provider depends on (issue #3).
 
 Reads nextcloud.url, nextcloud.login and nextcloud.appPassword from local.properties by default.
 Raw responses go to --out (default: local/server-probe/<timestamp>/, which is git-ignored because
@@ -174,7 +174,7 @@ def main():
             s["memories"]["config_keys"] = sorted(cfg)[:40]
         st, albums = p.json("memories-albums", "/index.php/apps/memories/api/clusters/albums")
         s["memories"]["albums"] = {"http": st, "count": len(albums) if isinstance(albums, list) else None}
-        # The timeline the app's enrichment reads (PLAN 6.2): the day list, then every day's items.
+        # The timeline the app's enrichment reads (#40): the day list, then every day's items.
         st, days = p.json("memories-days", "/index.php/apps/memories/api/days")
         if isinstance(days, list) and days:
             ids = ",".join(str(d.get("dayid")) for d in days)
@@ -209,7 +209,7 @@ def main():
                                    album_props, {"Depth": "1", "Content-Type": "text/xml", "Accept": "*/*"})
         count = len(ET.fromstring(data).findall("d:response", NS)) - 1 if st == 207 else None
         s["photos_albums"][kind] = {"http": st, "count": count}
-        # Each album's files, with the properties the app's listing asks for (PLAN 7.1).
+        # Each album's files, with the properties the app's listing asks for (#43).
         if st == 207:
             hrefs = [r.findtext("d:href", namespaces=NS) for r in ET.fromstring(data).findall("d:response", NS)][1:]
             file_props = ('<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" '

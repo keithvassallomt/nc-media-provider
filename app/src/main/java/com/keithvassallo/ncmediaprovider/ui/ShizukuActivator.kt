@@ -22,7 +22,7 @@ import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
 
 /**
- * Activation through Shizuku (PLAN 4.6), for whichever screen offers it: [act] does what the state
+ * Activation through Shizuku (#31), for whichever screen offers it: [act] does what the state
  * calls for next (open Shizuku, ask it for access, or activate), [turnOff] the same towards undoing
  * it, [onChange] reports every state, and [onResult] how it went: [RESULT_SELECTED],
  * [DeviceConfigUserService.RESULT_RESTART], allowed but not selected, or
