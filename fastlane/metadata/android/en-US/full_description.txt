@@ -1,0 +1,27 @@
+NC Media Provider puts your own Nextcloud photo library into Android's photo picker, the screen apps open when you attach a photo. Your photos and albums show up next to the ones on your phone, in every app that uses the picker. Nothing is copied to the phone in advance: thumbnails load as you scroll, and the full file is fetched only when you pick it.
+
+One-time setup with adb or Shizuku. No root.
+Android only shows photo sources that are on its list of allowed providers, and apps can't add themselves to it. You turn this built-in setting on once, either on the phone with Shizuku or from a computer with adb. The app walks you through it, and the setup guide explains every step.
+
+What you get
+• Your Nextcloud photos and videos in the system photo picker, newest first, mixed in with the photos on your phone
+• Albums from Nextcloud Photos and Memories, including albums shared with you
+• People found by Memories, as a People section on phones with the newer picker and as albums on older ones
+• Photos that are also on your phone show once, and the phone's copy is used instead of a download
+• Real capture dates and live photos shown as one item, when Memories is installed on your server
+• Large videos stream to the app you're sending them to
+• An optional thumbnail pre-cache over Wi-Fi, with a slider for how much space it may use
+• A photo keyboard and a Send from Nextcloud shortcut for apps with their own photo grid, such as Messenger
+
+What you need
+• Android 14 or later
+• A Nextcloud server. Memories is optional, for better dates, live photos and people.
+• Shizuku, or a computer with adb, for the one-time setup
+
+Privacy
+The app talks only to your own server. There are no ads, no analytics and no tracking. It signs in with Nextcloud's login flow and keeps the resulting app password on your phone. Signing out deletes that password from your server.
+
+Open source
+NC Media Provider is free software under the MIT licence. The code, the setup guide and the issue tracker are on GitHub: https://github.com/keithvassallomt/nc-media-provider
+
+NC Media Provider is an independent app. It is not affiliated with or endorsed by Nextcloud GmbH. Nextcloud is a trademark of Nextcloud GmbH.

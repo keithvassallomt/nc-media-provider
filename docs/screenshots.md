@@ -8,7 +8,7 @@ In `docs/images/setup/`, all in place: the build number, setup step 1 and its co
 
 ## Google Play listing
 
-In `docs/images/play/`: six phone screenshots, 1080×1920 (the 9:16 Google recommends), no transparency. Play allows no side more than twice the other, so each screenshot is shrunk to fit and padded with the app's dark background.
+In `fastlane/metadata/android/en-US/images/phoneScreenshots/`: six phone screenshots, 1080×1920 (the 9:16 Google recommends), no transparency. Play allows no side more than twice the other, so each screenshot is shrunk to fit and padded with the app's dark background.
 
 | File | Shows |
 |---|---|
@@ -19,7 +19,7 @@ In `docs/images/play/`: six phone screenshots, 1080×1920 (the 9:16 Google recom
 | `5-storage.png` | The Storage screen with the pre-cache slider |
 | `6-setup.png` | The setup checklist with the first step done |
 
-Also made: the 512×512 icon ([art/icon/icon-play-512.png](../art/icon/icon-play-512.png)) and the 1024×500 feature graphic ([art/feature/feature-graphic.png](../art/feature/feature-graphic.png)).
+Next to them: the 512×512 icon (`images/icon.png`, rendered from `art/icon/original/nmp_play.svg`) and the 1024×500 feature graphic (`images/featureGraphic.png`, scaled from `art/feature/original/`). The listing's text is in the same folder.
 
 ## Google Play declaration video
 
