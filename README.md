@@ -97,7 +97,7 @@ Most problems show under **Details and troubleshooting** in the app: whether And
 The app's log tags:
 
 ```sh
-adb logcat -s NcCloudMediaProvider LibraryRepository LibrarySyncWorker NextcloudClient VideoPreview PhotoKeyboard ProviderReselect KeepAlive
+adb logcat -s NcCloudMediaProvider LibraryRepository LibraryDatabase LibrarySyncWorker NextcloudClient VideoPreview PhotoKeyboard ProviderReselect KeepAlive
 ```
 
 The picker's side, MediaProvider and the newer picker app, logs under `PickerSyncController`, `PickerDataLayerV2` and `PickerSearchProviderClient`.

@@ -1,6 +1,7 @@
 package com.keithvassallo.ncmediaprovider.data.db
 
 import android.content.Context
+import android.util.Log
 import androidx.room.AutoMigration
 import androidx.room.ColumnInfo
 import androidx.room.Dao
@@ -394,11 +395,52 @@ abstract class LibraryDatabase : RoomDatabase() {
     abstract fun dao(): LibraryDao
 
     companion object {
-        fun open(context: Context): LibraryDatabase =
-            Room.databaseBuilder(context.applicationContext, LibraryDatabase::class.java, "library.db")
-                // Version 1 only ever existed on the development phone. Dropping it gives a new
-                // instance ID and so a new collection ID, which makes MediaProvider rebuild.
-                .fallbackToDestructiveMigrationFrom(dropAllTables = true, 1)
+        private const val TAG = "LibraryDatabase"
+        private const val NAME = "library.db"
+
+        /**
+         * Opens the library, rebuilding it when it can't be brought up to this version (PLAN 9.6).
+         * The library is a cache of the server plus sync state, so starting over is always safe:
+         * the empty sync state gets a new instance ID and so a new collection ID, and MediaProvider
+         * drops what it had and syncs again. A database left at an old version instead would fail
+         * the same way at every start.
+         */
+        fun open(context: Context): LibraryDatabase {
+            val appContext = context.applicationContext
+            val database = build(appContext)
+            try {
+                return database.opened()
+            } catch (error: RuntimeException) {
+                // A migration threw, or Room's schema check refused its result. Either way SQLite
+                // rolled it back, so the file still holds the old version.
+                database.close()
+                val reason = "${error.javaClass.simpleName}: ${error.message.orEmpty()}"
+                Log.w(TAG, "Couldn't migrate the library database ($reason): rebuilding it as a new library")
+            }
+            appContext.deleteDatabase(NAME)
+            // A new file has nothing to migrate: if this fails too, the caller sees it as before.
+            return build(appContext).opened()
+        }
+
+        private fun build(context: Context): LibraryDatabase =
+            Room.databaseBuilder(context, LibraryDatabase::class.java, NAME)
+                // No migration path drops every table: version 1, which only ever existed on the
+                // development phone, or a downgrade to an older build. The migration tests check
+                // that every other exported version has a path.
+                .fallbackToDestructiveMigration(dropAllTables = true)
+                .addCallback(RebuildLog)
                 .build()
+
+        /** Opening runs any migration now, where a failure can still be handled, not at the first query. */
+        private fun LibraryDatabase.opened(): LibraryDatabase = apply { openHelper.writableDatabase }
+
+        /** One warning line when Room's destructive fallback rebuilds the library (PLAN 9.6). */
+        private object RebuildLog : RoomDatabase.Callback() {
+            override fun onDestructiveMigration(connection: SQLiteConnection) {
+                // Room writes the new version after this, so the file still says which one it was.
+                val from = connection.prepare("PRAGMA user_version").use { if (it.step()) it.getLong(0) else -1L }
+                Log.w(TAG, "No migration from library database version $from: rebuilding it as a new library")
+            }
+        }
     }
 }

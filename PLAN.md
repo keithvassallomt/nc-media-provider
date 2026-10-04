@@ -439,7 +439,7 @@ Built (2026-10-03): each sync reads the face groups from Memories' `clusters/rec
 - a diagnostics export with credentials removed;
 - an issue template asking for the device, Android version, MediaProvider module version, and the cloud picker lines from MediaProvider's `dumpsys`.
 
-**9.6 Upgrades.** Database migrations are tested. If a migration ever fails, the app rebuilds the library instead of silently losing state.
+**9.6 Upgrades.** Database migrations are tested. If a migration ever fails, the app rebuilds the library instead of silently losing state. Built (2026-10-04): JVM tests create every exported schema from version 2 up with a library's rows, migrate it with the app's own migrations, and check the rows and the schema; a version without a path fails them. A version with no path (1, or a downgrade) and a migration that throws both rebuild the library: empty, with a new instance ID and so a new collection ID, and one warning under the `LibraryDatabase` log tag. The debug build carries the schemas as assets for the tests.
 
 **9.7 CI.** Built (2026-10-04): `.github/workflows/ci.yml` runs the unit tests, lint and the debug build on every push and pull request to main; `release.yml` builds the signed APK and AAB from a `v*` tag, refuses any other signing key or a tag that doesn't match `versionName`, and publishes a GitHub release with SHA256SUMS. [docs/releasing.md](docs/releasing.md) covers the four secrets it needs and cutting a release. The secrets were set on 2026-10-04; the first release is the first test of the release workflow. GitHub Actions builds, runs unit tests, and produces signed release APKs.
 
