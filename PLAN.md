@@ -441,7 +441,7 @@ Built (2026-10-03): each sync reads the face groups from Memories' `clusters/rec
 
 **9.6 Upgrades.** Database migrations are tested. If a migration ever fails, the app rebuilds the library instead of silently losing state.
 
-**9.7 CI.** GitHub Actions builds, runs unit tests, and produces signed release APKs.
+**9.7 CI.** Built (2026-10-04): `.github/workflows/ci.yml` runs the unit tests, lint and the debug build on every push and pull request to main; `release.yml` builds the signed APK and AAB from a `v*` tag, refuses any other signing key or a tag that doesn't match `versionName`, and publishes a GitHub release with SHA256SUMS. [docs/releasing.md](docs/releasing.md) covers the four secrets it needs and cutting a release. Still to do: add the secrets. GitHub Actions builds, runs unit tests, and produces signed release APKs.
 
 **9.8 Translations and privacy.** Done (2026-10-04): [docs/privacy.md](docs/privacy.md) says the app collects no data and what it uses and why, and the home screen links to it, as Play requires. Every string the user sees is in `strings.xml`, and lint finds no hard-coded text. Translatable strings, and a privacy statement saying there is no telemetry.
 
