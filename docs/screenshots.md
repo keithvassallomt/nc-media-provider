@@ -19,7 +19,7 @@ In `docs/images/play/`: six phone screenshots, 1080×1920 (the 9:16 Google recom
 | `5-storage.png` | The Storage screen with the pre-cache slider |
 | `6-setup.png` | The setup checklist with the first step done |
 
-Still to make: the 512×512 icon and the 1024×500 feature graphic.
+Also made: the 512×512 icon ([art/icon/icon-play-512.png](../art/icon/icon-play-512.png)) and the 1024×500 feature graphic ([art/feature/feature-graphic.png](../art/feature/feature-graphic.png)).
 
 ## Google Play declaration video
 
