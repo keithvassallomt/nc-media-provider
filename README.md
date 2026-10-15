@@ -4,7 +4,7 @@ Your Nextcloud photos and videos in Android's own photo picker.
 
 <p align="center"><img src="art/icon/nmp_play_rounded.svg" alt="NC Media Provider logo" width="128"></p>
 
-> **Status:** the first release, [v0.1.0](https://github.com/keithvassallomt/nc-media-provider/releases/tag/v0.1.0), is out on GitHub, and Google Play is coming. See the [issues](https://github.com/keithvassallomt/nc-media-provider/issues) for progress.
+> **Status:** the first release, [v0.1.0](https://github.com/keithvassallomt/nc-media-provider/releases/tag/v0.1.0), is out on [Google Play](https://play.google.com/store/apps/details?id=com.keithvassallo.ncmediaprovider) and GitHub. See the [issues](https://github.com/keithvassallomt/nc-media-provider/issues) for progress.
 
 > [!NOTE]
 > <img width="200" height="auto" alt="friendly-manifesto-badge" src="https://github.com/user-attachments/assets/cb91210b-0f66-46fe-93a8-a3a67857593c" /> <br>
@@ -32,7 +32,7 @@ Some apps, such as Messenger, use their own photo grid instead of Android's pick
 
 ## Quick start
 
-<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/keithvassallomt/nc-media-provider"><img src="docs/images/badge_obtainium.png" alt="Get it on Obtainium" width="161"></a>
+<a href="https://play.google.com/store/apps/details?id=com.keithvassallo.ncmediaprovider"><img src="docs/images/badge_google_play.png" alt="Get it on Google Play" width="161"></a> <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/keithvassallomt/nc-media-provider"><img src="docs/images/badge_obtainium.png" alt="Get it on Obtainium" width="161"></a>
 
 1. Install NC Media Provider from [Google Play](https://play.google.com/store/apps/details?id=com.keithvassallo.ncmediaprovider), download the APK from the [latest release](https://github.com/keithvassallomt/nc-media-provider/releases/latest), or add it to [Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/keithvassallomt/nc-media-provider), which keeps it updated from the GitHub releases.
 2. Turn on Developer options: open **Settings > About phone** and tap **Build number** seven times.
