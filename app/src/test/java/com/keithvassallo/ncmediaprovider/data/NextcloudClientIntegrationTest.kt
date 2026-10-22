@@ -172,6 +172,27 @@ class NextcloudClientIntegrationTest {
     }
 
     @Test
+    fun `people, when Recognize is behind Memories, list with their photos and face crops`() {
+        // Read-only, so it is also safe against a real server. The test servers have no Recognize.
+        assumeTrue("Memories not installed", client.memoriesVersion(account) != null)
+        val clusters = client.memoriesClusters(account)
+        assumeTrue("no Recognize behind Memories", clusters != null)
+        val people = clusters!!.filter { it.count > 0 }
+        assertTrue("no face groups", people.isNotEmpty())
+        val userId = client.userId(account)
+        assertTrue(people.all { it.user == userId })
+        // The smallest group keeps the reads short on a large library.
+        val person = people.minBy(MemoriesCluster::count)
+        val days = client.memoriesPersonDays(account, person.memoriesKey)
+        val files = MemoriesApi.requestBatches(days.keys, days).flatMap { client.memoriesPersonFiles(account, person.memoriesKey, it) }
+        assertTrue(person.memoriesKey, files.isNotEmpty())
+        assertTrue(files.all { it.dayId in days })
+        val face = File.createTempFile("face", ".jpg").apply { deleteOnExit() }
+        client.downloadFacePreview(account, person.memoriesKey, face, null)
+        assertEquals(0xFF.toByte(), face.readBytes()[0]) // JPEG
+    }
+
+    @Test
     fun `albums list, and their files open through the album, previews through Photos`() {
         // Read-only, so it is also safe against a real server.
         val albums = client.listAlbums(account)
