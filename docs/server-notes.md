@@ -75,6 +75,8 @@ Built and probed 2026-10-02 with [tools/testserver/](../tools/testserver/). Each
 
 "Full" means the HEIC and Movie preview providers enabled, ffmpeg installed and Memories installed and indexed. "Default" is the stock image.
 
+**Memories 10** (probed 2026-10-22): rebuilding the 35 full server installed Memories 10.1.0, which needs Nextcloud 34 or 35. Its `describe`, `config`, `days` and `days/<ids>` responses are under [testdata/nextcloud/35-full-memories10/](../testdata/nextcloud/35-full-memories10/). The day list and the day files have the same fields and values as 9.0.1, apart from etags (the library was uploaded again); a day file may now also carry `pano`. `config` only gains keys, and `timeline_path` is unchanged. The test servers have no Recognize, so `clusters/recognize` was checked in Memories' source instead (v9.0.1 to v10.1.0): it was refactored but returns the same fields.
+
 Findings that hold on every server:
 
 - **Dates.** JPEG EXIF dates are read. HEIC and video dates come from the file name when it contains one, otherwise the modification time. Tested with copies named `PXL_20190102_030405123.mp4`, `VID_20190102_030405.mp4` and `IMG_20190102_030405.heic` uploaded with a 2024 modification time: all three got 2019-01-02 03:04:05, interpreted in the server's timezone. A video's own creation-time metadata is ignored, even with ffmpeg installed.

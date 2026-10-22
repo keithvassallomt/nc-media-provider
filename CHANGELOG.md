@@ -8,6 +8,10 @@ List each change under [Unreleased] as it's made, under one of Added, Changed, D
 
 ## [Unreleased]
 
+### Fixed
+
+- Memories 10 is supported. Until now the app said "Memories 10.1.0 isn't supported yet" and fell back to Nextcloud's own dates, without Memories' live photos or people.
+
 ## [0.1.0] - 2026-10-04
 
 ### Added

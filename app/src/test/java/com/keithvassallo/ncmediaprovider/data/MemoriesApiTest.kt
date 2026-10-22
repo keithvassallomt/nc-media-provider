@@ -10,7 +10,8 @@ import java.io.File
 
 /**
  * Memories' timeline API is internal and undocumented (#41), so its parsing runs against real
- * responses saved from the test servers: Memories 8.1.0 on Nextcloud 33, 9.0.1 on Nextcloud 35.
+ * responses saved from the test servers: Memories 8.1.0 on Nextcloud 33, 9.0.1 and 10.1.0 on
+ * Nextcloud 35.
  */
 class MemoriesApiTest {
     private fun fixture(server: String, name: String) = File("../testdata/nextcloud/$server/$name").readText()
@@ -19,17 +20,19 @@ class MemoriesApiTest {
     fun `reads the version, and only tested versions are used`() {
         assertEquals("8.1.0", MemoriesApi.parseVersion(fixture("33-full", "memories-describe.json")))
         assertEquals("9.0.1", MemoriesApi.parseVersion(fixture("35-full", "memories-describe.json")))
+        assertEquals("10.1.0", MemoriesApi.parseVersion(fixture("35-full-memories10", "memories-describe.json")))
         assertNull(MemoriesApi.parseVersion("<html>Not found</html>"))
         assertTrue(MemoriesApi.isSupported("8.1.0"))
         assertTrue(MemoriesApi.isSupported("9.0.1"))
+        assertTrue(MemoriesApi.isSupported("10.1.0"))
         assertFalse(MemoriesApi.isSupported("7.3.1"))
-        assertFalse(MemoriesApi.isSupported("10.0.0"))
+        assertFalse(MemoriesApi.isSupported("11.0.0"))
         assertFalse(MemoriesApi.isSupported("dev"))
     }
 
     @Test
-    fun `reads the day list and the files of both tested versions`() {
-        for (server in listOf("33-full", "35-full")) {
+    fun `reads the day list and the files of every tested version`() {
+        for (server in listOf("33-full", "35-full", "35-full-memories10")) {
             val days = MemoriesApi.parseDays(fixture(server, "memories-days.json"))
             assertEquals(server, 8, days.size)
             assertTrue(server, days.values.all { it == 1 })

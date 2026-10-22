@@ -39,9 +39,9 @@ data class MemoriesDay(
  * tested against saved responses: Memories' API is internal and undocumented, and may change.
  */
 internal object MemoriesApi {
-    /** The Memories versions this layer was tested against (8.1 and 9.0, Phase 6); others are left alone. */
+    /** The Memories versions this layer was tested against (8.1 and 9.0 in Phase 6, 10.1 since); others are left alone. */
     private const val MIN_MAJOR = 8
-    private const val MAX_MAJOR = 9
+    private const val MAX_MAJOR = 10
 
     /** Memories marks a photo with its motion inside (a Pixel motion photo, say) with this prefix. */
     private const val SELF_CONTAINED_LIVE_PREFIX = "self__"

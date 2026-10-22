@@ -13,7 +13,7 @@ Android's photo picker, the screen many apps open when you attach a photo, can s
 - thumbnails are cached, with an optional pre-cache that downloads them ahead of time on Wi-Fi; the full file is fetched only when you pick it, and large videos are streamed;
 - nothing is mirrored to the phone, and nothing on the server changes.
 
-It works with plain Nextcloud over WebDAV. If [Memories](https://github.com/pulsejet/memories) is installed, the app uses it for real capture dates, live photos and people; [Nextcloud Photos](https://github.com/nextcloud/photos) provides albums. Tested with Nextcloud 33 and 35, and Memories 8 and 9.
+It works with plain Nextcloud over WebDAV. If [Memories](https://github.com/pulsejet/memories) is installed, the app uses it for real capture dates, live photos and people; [Nextcloud Photos](https://github.com/nextcloud/photos) provides albums. Tested with Nextcloud 33 and 35, and Memories 8, 9 and 10.
 
 There are two pickers. Stock Pixels and other Google-signed builds use the newer photo picker app (`com.google.android.photopicker`); AOSP builds such as GrapheneOS use the older picker built into MediaProvider. The app serves both. [device-notes.md](device-notes.md) has what each one did in testing.
 
