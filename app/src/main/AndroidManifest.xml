@@ -57,6 +57,10 @@
             android:name=".ui.DetailsActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".ui.OtherAppsActivity"
+            android:exported="false" />
+
         <!-- "Send from Nextcloud" (#58): opens the system picker, then the share sheet. -->
         <activity
             android:name=".share.SendFromNextcloudActivity"

@@ -8,6 +8,10 @@ List each change under [Unreleased] as it's made, under one of Added, Changed, D
 
 ## [Unreleased]
 
+### Changed
+
+- Apps with their own photo grid opens a screen of its own instead of a short popup. It shows, step by step, how to add the Quick Settings tile, how to use the app icon's shortcut and how to use the photo keyboard, with buttons to add the tile, pin the shortcut to the home screen and turn on the keyboard.
+
 ### Fixed
 
 - Memories 10 is supported. Until now the app said "Memories 10.1.0 isn't supported yet" and fell back to Nextcloud's own dates, without Memories' live photos or people.

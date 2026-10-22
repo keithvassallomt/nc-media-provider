@@ -88,7 +88,7 @@ class HomeActivity : AppCompatActivity() {
         }
 
         row(binding.rowFolders, R.string.row_folders) { startActivity(Intent(this, FolderPickerActivity::class.java)) }
-        row(binding.rowOtherApps, R.string.row_other_apps) { showOtherApps() }
+        row(binding.rowOtherApps, R.string.row_other_apps) { startActivity(Intent(this, OtherAppsActivity::class.java)) }
         row(binding.rowStorage, R.string.row_storage) { startActivity(Intent(this, StorageActivity::class.java)) }
         row(binding.rowAccount, R.string.row_account) { showAccount() }
         row(binding.rowGuide, R.string.row_guide) { openLink(Links.GUIDE) }
@@ -287,15 +287,6 @@ class HomeActivity : AppCompatActivity() {
         binding.rowGuide.detail.setText(R.string.row_guide_detail)
         binding.rowPrivacy.detail.setText(R.string.row_privacy_detail)
         binding.rowDetails.detail.setText(R.string.row_details_detail)
-    }
-
-    private fun showOtherApps() {
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.send_title)
-            .setMessage(R.string.send_explanation)
-            .setPositiveButton(R.string.send_now) { _, _ -> startActivity(Intent(this, SendFromNextcloudActivity::class.java)) }
-            .setNegativeButton(R.string.close, null)
-            .show()
     }
 
     private fun showAccount() {

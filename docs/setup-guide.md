@@ -151,7 +151,7 @@ Open the app's home screen. The top card says **In the picker** and shows how ma
 
 <img src="images/setup/home.png" alt="The home screen with the In the picker card" width="280">
 
-Some apps, such as Messenger, use their own photo grid instead of Android's picker, so your Nextcloud photos can't appear there. For those, use **Send from Nextcloud**: long-press the app's icon, or add its Quick Settings tile. The optional photo keyboard is another way in.
+Some apps, such as Messenger, use their own photo grid instead of Android's picker, so your Nextcloud photos can't appear there. For those, use **Send from Nextcloud**: long-press the app's icon, or add its Quick Settings tile. The optional photo keyboard is another way in. Tap **Apps with their own photo grid** on the home screen for the steps for each, with buttons to add the tile, put the shortcut on your home screen and turn on the keyboard.
 
 ## Undoing it
 
