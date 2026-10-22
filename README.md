@@ -4,7 +4,7 @@ Your Nextcloud photos and videos in Android's own photo picker.
 
 <p align="center"><img src="art/icon/nmp_play_rounded.svg" alt="NC Media Provider logo" width="128"></p>
 
-> **Status:** the first release, [v0.1.0](https://github.com/keithvassallomt/nc-media-provider/releases/tag/v0.1.0), is out on [Google Play](https://play.google.com/store/apps/details?id=com.keithvassallo.ncmediaprovider) and GitHub. See the [issues](https://github.com/keithvassallomt/nc-media-provider/issues) for progress.
+> **Status:** out on [Google Play](https://play.google.com/store/apps/details?id=com.keithvassallo.ncmediaprovider) and [GitHub](https://github.com/keithvassallomt/nc-media-provider/releases/latest). F-Droid is [pending](https://gitlab.com/fdroid/fdroiddata/-/merge_requests/51186).
 
 > [!NOTE]
 > <img width="200" height="auto" alt="friendly-manifesto-badge" src="https://github.com/user-attachments/assets/cb91210b-0f66-46fe-93a8-a3a67857593c" /> <br>
