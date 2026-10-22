@@ -8,6 +8,8 @@ List each change under [Unreleased] as it's made, under one of Added, Changed, D
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-22
+
 ### Changed
 
 - Apps with their own photo grid opens a screen of its own instead of a short popup. It shows, step by step, how to add the Quick Settings tile, how to use the app icon's shortcut and how to use the photo keyboard, with buttons to add the tile, pin the shortcut to the home screen and turn on the keyboard.
@@ -29,5 +31,6 @@ List each change under [Unreleased] as it's made, under one of Added, Changed, D
 - A setup checklist that activates the app with Shizuku on the phone or adb from a computer. No root needed.
 - Share for a bug report, which collects diagnostics with the server's address and the user name masked.
 
-[unreleased]: https://github.com/keithvassallomt/nc-media-provider/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/keithvassallomt/nc-media-provider/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/keithvassallomt/nc-media-provider/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/keithvassallomt/nc-media-provider/releases/tag/v0.1.0

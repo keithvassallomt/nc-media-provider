@@ -1,0 +1,2 @@
+• Memories 10 is supported. On it, the app used Nextcloud's own dates, without Memories' live photos or people
+• Apps with their own photo grid now opens a screen with the steps for the Quick Settings tile, the app icon's shortcut and the photo keyboard, and buttons to add the tile, pin the shortcut and turn on the keyboard
